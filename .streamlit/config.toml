@@ -1,0 +1,10 @@
+[theme]
+# แก้ตรงนี้เพื่อเปลี่ยน theme ทั้งแอป
+base              = "dark"
+primaryColor      = "#5865f2"   # สี accent (ปุ่ม, highlight)
+backgroundColor   = "#0f0f17"   # พื้นหลัง
+secondaryBackgroundColor = "#1a1a2e"  # sidebar, cards
+textColor         = "#e2e8f0"
+
+[server]
+headless = true

@@ -1,0 +1,14 @@
+# ข้อมูล trade (เก็บไว้ใน Supabase ตอน deploy, ไม่ push ขึ้น GitHub)
+trades.json
+
+# Streamlit secrets (มี API key — ห้าม push เด็ดขาด)
+.streamlit/secrets.toml
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.env
+
+# macOS
+.DS_Store
