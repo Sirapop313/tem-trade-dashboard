@@ -58,12 +58,13 @@ def _json_save(trades: list) -> None:
 @st.cache_resource
 def _get_supabase():
     from supabase import create_client  # type: ignore
-    return create_client(st.secrets["SUPABASE_URL"], st.secrets["SUPABASE_KEY"])
+    url = st.secrets["SUPABASE_URL"].rstrip("/")  # กัน trailing slash
+    return create_client(url, st.secrets["SUPABASE_KEY"])
 
 
 def _sb_load() -> list:
     sb = _get_supabase()
-    rows = sb.table("trades").select("data").order("row_id").execute().data
+    rows = sb.table("trades").select("data").execute().data
     return [r["data"] for r in rows]
 
 
