@@ -47,7 +47,7 @@ def _json_save(trades: list) -> None:
         json.dump(trades, f, ensure_ascii=False, indent=2)
 
 
-# ── Supabase backend ──────────────────────────────────────────────────────────
+# ── Supabase backend (REST API โดยตรง ไม่ขึ้นกับ library version) ────────────
 # Table schema (รันใน Supabase SQL editor ครั้งแรก):
 #
 #   create table trades (
@@ -55,24 +55,32 @@ def _json_save(trades: list) -> None:
 #     data    jsonb  not null
 #   );
 
-@st.cache_resource
-def _get_supabase():
-    from supabase import create_client  # type: ignore
-    url = st.secrets["SUPABASE_URL"].rstrip("/")  # กัน trailing slash
-    return create_client(url, st.secrets["SUPABASE_KEY"])
+import requests as _requests
 
+def _sb_base() -> str:
+    return st.secrets["SUPABASE_URL"].rstrip("/") + "/rest/v1"
+
+def _sb_headers() -> dict:
+    key = st.secrets["SUPABASE_KEY"]
+    return {
+        "apikey": key,
+        "Authorization": f"Bearer {key}",
+        "Content-Type": "application/json",
+        "Prefer": "return=minimal",
+    }
 
 def _sb_load() -> list:
-    sb = _get_supabase()
-    rows = sb.table("trades").select("data").execute().data
-    return [r["data"] for r in rows]
-
+    r = _requests.get(f"{_sb_base()}/trades?select=data", headers=_sb_headers())
+    r.raise_for_status()
+    return [row["data"] for row in r.json()]
 
 def _sb_save(trades: list) -> None:
-    sb = _get_supabase()
-    sb.table("trades").delete().neq("row_id", 0).execute()
-    for t in trades:
-        sb.table("trades").insert({"data": t}).execute()
+    base, h = _sb_base(), _sb_headers()
+    _requests.delete(f"{base}/trades", headers=h)
+    if trades:
+        _requests.post(f"{base}/trades",
+                       headers={**h, "Prefer": "return=minimal"},
+                       json=[{"data": t} for t in trades])
 
 
 # ── Public API ────────────────────────────────────────────────────────────────
