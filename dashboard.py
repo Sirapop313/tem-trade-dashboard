@@ -1,10 +1,12 @@
 """
-Tim.fin Personal OS — Trade & Investment Dashboard
+Tim.fin Personal OS — Investment & Trade Dashboard
 """
+import io
 import json
 import os
 from datetime import date
 
+import pandas as pd
 import streamlit as st
 import plotly.graph_objects as go
 
@@ -16,19 +18,42 @@ TRADES_FILE      = os.path.join(DIR, "trades.json")
 INVESTMENTS_FILE = os.path.join(DIR, "investments.json")
 STRATEGY_PRESETS = ["Breakout", "Swing", "Buy on dip", "Others"]
 
-# ── Theme ─────────────────────────────────────────────────────────────────────
+# ── CSS ───────────────────────────────────────────────────────────────────────
 st.markdown("""<style>
 [data-testid="stMetric"] {
-    background: rgba(255,255,255,0.04);
-    border: 1px solid rgba(255,255,255,0.08);
-    border-radius: 12px; padding: 16px 20px;
+    background: rgba(255,255,255,0.03);
+    border: 1px solid rgba(255,255,255,0.07);
+    border-radius: 10px;
+    padding: 18px 20px;
+}
+[data-testid="stMetricValue"] { font-size: 1.5rem !important; font-weight: 700; }
+[data-testid="stMetricLabel"] {
+    font-size: 0.72rem !important;
+    color: #64748b !important;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
 }
 [data-testid="stFormSubmitButton"] button {
     background: #5865f2; color: white;
     border-radius: 8px; font-weight: 600; width: 100%;
 }
 [data-testid="stFormSubmitButton"] button:hover { background: #4752c4; }
+.section-label {
+    font-size: 0.68rem;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: #475569;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+    margin-bottom: 0.75rem;
+}
+.page-title   { font-size: 1.6rem; font-weight: 700; margin: 0; line-height: 1.2; }
+.page-sub     { font-size: 0.82rem; color: #64748b; margin-top: 2px; }
+#MainMenu, footer { visibility: hidden; }
+.main .block-container { max-width: 1400px; padding-top: 1.5rem; }
 </style>""", unsafe_allow_html=True)
+
 
 # ── Data Layer ────────────────────────────────────────────────────────────────
 def _load(path: str) -> list:
@@ -43,6 +68,7 @@ def load_trades() -> list:       return _load(TRADES_FILE)
 def save_trades(d: list):        _save(TRADES_FILE, d)
 def load_investments() -> list:  return _load(INVESTMENTS_FILE)
 def save_investments(d: list):   _save(INVESTMENTS_FILE, d)
+
 
 # ── Live Prices ───────────────────────────────────────────────────────────────
 @st.cache_data(ttl=300)
@@ -62,21 +88,18 @@ def get_usd_thb() -> float:
     except Exception:
         return 35.0
 
+
 # ── Math Helpers ──────────────────────────────────────────────────────────────
 def parse(val) -> float | None:
     try: return float(str(val).replace(",", "").strip())
     except Exception: return None
 
 def get_shares(item: dict) -> str:
-    """รองรับทั้ง field ใหม่ (shares) และเก่า (size)"""
     return item.get("shares") or item.get("size") or "1"
 
 def get_currency(item: dict) -> str:
-    """ถ้าไม่มี currency field ให้ guess จาก ticker"""
-    if item.get("currency"):
-        return item["currency"]
-    ticker = item.get("ticker", "")
-    return "THB" if ticker.endswith(".BK") else "USD"
+    if item.get("currency"): return item["currency"]
+    return "THB" if item.get("ticker","").endswith(".BK") else "USD"
 
 def calc_position_thb(entry, shares, currency: str, rate: float) -> float | None:
     e, s = parse(entry), parse(shares)
@@ -94,8 +117,7 @@ def calc_pnl_thb(entry, current: float, shares, trade_currency: str,
     e, s = parse(entry), parse(shares)
     if e is None or s is None: return None
     diff = (current - e) * (-1 if direction == "Short" else 1)
-    thb  = diff * s * (rate if trade_currency == "USD" else 1)
-    return round(thb, 2)
+    return round(diff * s * (rate if trade_currency == "USD" else 1), 2)
 
 def auto_rr(entry, sl, tp) -> str:
     e, s, t = parse(entry), parse(sl), parse(tp)
@@ -107,7 +129,6 @@ def fmt_pct(val) -> str:
     return f"{'+' if val>=0 else ''}{val:.2f}%"
 
 def fmt_money(val_thb: float | None, disp: str, rate: float, sign: bool = True) -> str:
-    """sign=True → +/- prefix (P&L)  |  sign=False → ไม่มี prefix (Amount, Position size)"""
     if val_thb is None: return "—"
     if disp == "USD":
         v = val_thb / rate
@@ -120,46 +141,45 @@ def to_display(val_thb: float | None, disp: str, rate: float) -> float | None:
     if val_thb is None: return None
     return val_thb / rate if disp == "USD" else val_thb
 
+
+# ── Chart Helpers ─────────────────────────────────────────────────────────────
 CHART_LAYOUT = dict(
     plot_bgcolor="rgba(0,0,0,0)",
     paper_bgcolor="rgba(0,0,0,0)",
     font=dict(color="#e2e8f0", size=13),
     showlegend=False,
-    margin=dict(t=16, b=8, l=8, r=8),
+    margin=dict(t=32, b=8, l=8, r=8),
     xaxis=dict(showgrid=False, tickfont=dict(size=12, color="#94a3b8")),
     yaxis=dict(showgrid=True, gridcolor="rgba(255,255,255,0.06)",
                tickfont=dict(size=11, color="#64748b"), zeroline=True,
                zerolinecolor="rgba(255,255,255,0.15)"),
 )
 
-def pnl_bar_chart(labels: list, vals_thb: list, disp: str, rate: float,
-                  title: str, height: int = 280) -> go.Figure:
-    vals = [to_display(v, disp, rate) for v in vals_thb]
-    texts = [fmt_money(v, disp, rate) for v in vals_thb]
+def pnl_bar_chart(labels, vals_thb, disp, rate, title, height=280):
+    vals   = [to_display(v, disp, rate) for v in vals_thb]
+    texts  = [fmt_money(v, disp, rate) for v in vals_thb]
     colors = ["#22c55e" if (v or 0) >= 0 else "#ef4444" for v in vals_thb]
-
     fig = go.Figure(go.Bar(
         x=labels, y=vals,
         marker=dict(color=colors, opacity=0.85,
                     line=dict(color="rgba(255,255,255,0.1)", width=1)),
-        text=texts,
-        textposition="outside",
-        textfont=dict(size=13, color="#e2e8f0"),
-        cliponaxis=False,
+        text=texts, textposition="outside",
+        textfont=dict(size=13, color="#e2e8f0"), cliponaxis=False,
     ))
     sym = "฿" if disp == "THB" else "$"
-    layout = {**CHART_LAYOUT,
-              "title": dict(text=title, font=dict(size=15, color="#cbd5e1"), x=0),
-              "yaxis_title": f"P&L ({sym})",
-              "height": height,
-              "yaxis_tickformat": ",.0f",
-              }
-    fig.update_layout(**layout)
-    # padding ด้านบน/ล่างให้ text ไม่ถูกตัด
+    fig.update_layout(**{**CHART_LAYOUT,
+        "title": dict(text=title, font=dict(size=14, color="#94a3b8"), x=0),
+        "yaxis_title": f"P&L ({sym})", "height": height, "yaxis_tickformat": ",.0f",
+    })
     if vals:
         maxv = max(abs(v) for v in vals if v is not None) or 1
-        fig.update_yaxes(range=[-maxv*1.35, maxv*1.35])
+        fig.update_yaxes(range=[-maxv * 1.35, maxv * 1.35])
     return fig
+
+
+# ── UI Helpers ────────────────────────────────────────────────────────────────
+def section(title: str):
+    st.markdown(f'<div class="section-label">{title}</div>', unsafe_allow_html=True)
 
 def strategy_input(key: str, default: str = "") -> str:
     preset = default if default in STRATEGY_PRESETS else STRATEGY_PRESETS[0]
@@ -174,91 +194,267 @@ def strategy_input(key: str, default: str = "") -> str:
 def next_id(items: list) -> int:
     return max((i["id"] for i in items), default=0) + 1
 
-def currency_badge(disp: str) -> str:
-    return "฿ THB" if disp == "THB" else "$ USD"
+def page_header(title: str, subtitle: str = "") -> tuple[str, float]:
+    """Page title (left) + currency toggle (right). Returns (disp, rate)."""
+    rate = get_usd_thb()
+    col_t, _, col_c = st.columns([6, 2, 2])
+    with col_t:
+        st.markdown(f'<div class="page-title">{title}</div>', unsafe_allow_html=True)
+        if subtitle:
+            st.markdown(f'<div class="page-sub">{subtitle}</div>', unsafe_allow_html=True)
+    with col_c:
+        disp = st.radio("", ["THB", "USD"], horizontal=True,
+                        key="display_currency", label_visibility="collapsed")
+        st.caption(f"1 USD = ฿{rate:.2f}")
+    st.markdown("<div style='height:1.25rem'></div>", unsafe_allow_html=True)
+    return disp, rate
 
-# ── Sidebar ───────────────────────────────────────────────────────────────────
-def render_sidebar() -> tuple[str, str, float]:
+
+# ── Sidebar — navigation only ─────────────────────────────────────────────────
+def render_sidebar() -> str:
     with st.sidebar:
-        st.title("📊 Tim.fin OS")
+        st.markdown("### 📊 Tim.fin OS")
         st.markdown("---")
-        page = st.radio("เมนู", ["📊 Overview", "💼 Investment", "📈 Trade", "📓 Log"],
+        page = st.radio("", ["📊 Overview", "💼 Investment", "📈 Trade", "📓 Log"],
                         label_visibility="collapsed")
-        st.markdown("---")
-        st.caption("แสดงมูลค่าเป็น")
-        disp = st.radio("Currency", ["THB", "USD"], horizontal=True,
-                        key="display_currency",
-                        label_visibility="collapsed")
-        rate = get_usd_thb()
-        st.caption(f"อัตราแลกเปลี่ยน: 1 USD = ฿{rate:.2f}")
         st.markdown("---")
         st.caption("Tim.fin Personal OS")
-    return page, disp, rate
+    return page
 
-# ── Pages ─────────────────────────────────────────────────────────────────────
 
+# ── Page 1: Overview ──────────────────────────────────────────────────────────
 def page_overview(trades: list, investments: list, disp: str, rate: float):
-    st.title("📊 Overview")
-    sym = "฿" if disp == "THB" else "$"
-
     open_trades   = [t for t in trades      if t.get("status") == "open"]
     closed_trades = [t for t in trades      if t.get("status") == "closed"]
     open_inv      = [i for i in investments if i.get("status") == "open"]
-    wins      = [t for t in closed_trades if t.get("win_loss") == "Win"]
-    win_rate  = len(wins) / len(closed_trades) * 100 if closed_trades else None
+    wins          = [t for t in closed_trades if t.get("win_loss") == "Win"]
 
-    # realized P&L in THB (stored in trade)
+    # Portfolio Value = sum ของ market value ทุก position ที่เปิดอยู่
+    port_thb = 0.0
+    for item in open_trades + open_inv:
+        price = get_price(item.get("ticker",""))
+        ref   = str(price) if price else item.get("entry_price")
+        p     = calc_position_thb(ref, get_shares(item), get_currency(item), rate)
+        if p: port_thb += p
+
+    # Unrealized P&L
+    unreal_thb  = 0.0
+    unreal_items = []
+    for item in open_trades + open_inv:
+        price = get_price(item.get("ticker",""))
+        if price is None: continue
+        direction = item.get("direction", "Long")
+        pnl = calc_pnl_thb(item.get("entry_price"), price, get_shares(item),
+                            get_currency(item), rate, direction)
+        if pnl is not None:
+            unreal_thb += pnl
+            label = f"{item['ticker']} ({'Trade' if item.get('type')=='trade' else 'Hold'})"
+            unreal_items.append({"label": label, "pnl_thb": pnl})
+
     realized_thb = sum(t.get("pnl_thb", 0) or 0 for t in closed_trades)
+    win_rate     = len(wins) / len(closed_trades) * 100 if closed_trades else None
 
-    c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Open Positions", len(open_trades) + len(open_inv))
-    c2.metric("Closed Trades",  len(closed_trades))
-    c3.metric("Win Rate",       f"{win_rate:.1f}%" if win_rate is not None else "—")
-    c4.metric(f"Realized P&L ({disp})",
-              fmt_money(realized_thb if realized_thb else None, disp, rate))
+    # ── KPI Row ───────────────────────────────────────────────────────────────
+    section("Portfolio Summary")
+    k1, k2, k3, k4 = st.columns(4)
+    k1.metric("Portfolio Value",
+              fmt_money(port_thb, disp, rate, sign=False) if port_thb else "No data yet")
+    k2.metric("Unrealized P&L",
+              fmt_money(unreal_thb if unreal_items else None, disp, rate),
+              delta=fmt_pct(unreal_thb / port_thb * 100 if port_thb and unreal_items else None))
+    k3.metric("Realized P&L",
+              fmt_money(realized_thb if closed_trades else None, disp, rate)
+              if closed_trades else "No closed trades yet")
+    k4.metric("Win Rate",
+              f"{win_rate:.1f}%" if win_rate is not None else "No closed trades yet")
 
-    st.markdown("---")
+    st.markdown("<div style='height:1.5rem'></div>", unsafe_allow_html=True)
 
-    # ── Unrealized P&L chart ──────────────────────────────────────────────────
-    unreal = []
-    for t in open_trades:
-        price = get_price(t.get("ticker",""))
-        if price is None: continue
-        pnl_thb = calc_pnl_thb(t.get("entry_price"), price, get_shares(t),
-                                get_currency(t), rate, t.get("direction","Long"))
-        if pnl_thb is not None:
-            unreal.append({"label": f"{t['ticker']} (Trade)", "pnl_thb": pnl_thb})
-    for inv in open_inv:
-        price = get_price(inv.get("ticker",""))
-        if price is None: continue
-        pnl_thb = calc_pnl_thb(inv.get("entry_price"), price,
-                                get_shares(inv), get_currency(inv), rate)
-        if pnl_thb is not None:
-            unreal.append({"label": f"{inv['ticker']} (Hold)", "pnl_thb": pnl_thb})
+    # ── Chart + Snapshot ──────────────────────────────────────────────────────
+    section("Performance")
+    col_chart, col_snap = st.columns([7, 3])
 
-    if unreal:
-        st.plotly_chart(
-            pnl_bar_chart([d["label"] for d in unreal],
-                          [d["pnl_thb"] for d in unreal],
-                          disp, rate, "Unrealized P&L", height=300),
-            use_container_width=True)
+    with col_chart:
+        if unreal_items:
+            st.plotly_chart(
+                pnl_bar_chart([d["label"] for d in unreal_items],
+                              [d["pnl_thb"] for d in unreal_items],
+                              disp, rate, "Unrealized P&L by Position", height=300),
+                use_container_width=True)
+        closed_with_pnl = [t for t in closed_trades if t.get("pnl_thb") is not None]
+        if closed_with_pnl:
+            st.plotly_chart(
+                pnl_bar_chart([t["ticker"] for t in closed_with_pnl],
+                              [t["pnl_thb"] for t in closed_with_pnl],
+                              disp, rate, "Realized P&L — Trade History", height=260),
+                use_container_width=True)
+        if not unreal_items and not closed_with_pnl:
+            st.info("เพิ่ม Trade หรือ Investment เพื่อดู chart")
 
-    # ── Closed trade history chart ────────────────────────────────────────────
+    with col_snap:
+        st.markdown("**Portfolio Snapshot**")
+        for label, val in [
+            ("Investment Positions", len(open_inv)),
+            ("Open Trades",          len(open_trades)),
+            ("Closed Trades",        len(closed_trades)),
+            ("Total Positions",      len(open_inv) + len(open_trades)),
+        ]:
+            a, b = st.columns([3, 1])
+            a.caption(label)
+            b.markdown(f"**{val}**")
+
+        if open_inv + open_trades:
+            st.divider()
+            st.caption("Active Tickers")
+            tickers = [i.get("ticker","") for i in open_inv + open_trades]
+            st.markdown("  ·  ".join(tickers))
+
+    # ── Recent Activity ───────────────────────────────────────────────────────
+    all_items = []
+    for t in trades:
+        icon  = "🔒" if t.get("status") == "closed" else "📈"
+        label = f"{icon} **{t.get('ticker')}** — Trade {'ปิด' if t.get('status')=='closed' else 'เปิด'}"
+        all_items.append({"date": t.get("open_date",""), "label": label})
+    for inv in investments:
+        all_items.append({
+            "date":  inv.get("entry_date",""),
+            "label": f"💼 **{inv.get('ticker')}** — Investment เพิ่ม",
+        })
+    all_items.sort(key=lambda x: x["date"], reverse=True)
+
+    if all_items:
+        section("Recent Activity")
+        for item in all_items[:5]:
+            st.caption(f"{item['date']}  ·  {item['label']}")
+
+    # ── Winners & Losers ──────────────────────────────────────────────────────
     closed_with_pnl = [t for t in closed_trades if t.get("pnl_thb") is not None]
     if closed_with_pnl:
-        st.plotly_chart(
-            pnl_bar_chart([f"#{t['id']} {t['ticker']}" for t in closed_with_pnl],
-                          [t["pnl_thb"] for t in closed_with_pnl],
-                          disp, rate, "Trade History P&L", height=300),
-            use_container_width=True)
+        section("Winners & Losers")
+        sorted_pnl = sorted(closed_with_pnl, key=lambda x: x.get("pnl_thb", 0), reverse=True)
+        winners = [t for t in sorted_pnl if (t.get("pnl_thb", 0) or 0) > 0][:3]
+        losers  = [t for t in sorted_pnl if (t.get("pnl_thb", 0) or 0) < 0][-3:]
 
-    if not unreal and not closed_with_pnl:
-        st.info("เพิ่ม Trade หรือ Investment ก่อนเพื่อดู chart นะ")
+        w_col, l_col = st.columns(2)
+        with w_col:
+            st.markdown("**🏆 Top Winners**")
+            if winners:
+                for t in winners:
+                    st.caption(f"{t['ticker']}  ·  {fmt_pct(t.get('pnl_pct'))}  ·  {fmt_money(t.get('pnl_thb'), disp, rate)}")
+            else:
+                st.caption("No winners yet")
+        with l_col:
+            st.markdown("**📉 Top Losers**")
+            if losers:
+                for t in reversed(losers):
+                    st.caption(f"{t['ticker']}  ·  {fmt_pct(t.get('pnl_pct'))}  ·  {fmt_money(t.get('pnl_thb'), disp, rate)}")
+            else:
+                st.caption("No losses yet")
 
 
+# ── Page 2: Investment ────────────────────────────────────────────────────────
 def page_investment(investments: list, disp: str, rate: float):
-    st.title("💼 Investment")
+    open_inv   = [i for i in investments if i.get("status") == "open"]
+    closed_inv = [i for i in investments if i.get("status") == "closed"]
+    sym = "฿" if disp == "THB" else "$"
 
+    # ── Summary ───────────────────────────────────────────────────────────────
+    section("Summary")
+    total_val_thb, total_pnl_thb = 0.0, 0.0
+    best_ticker, best_pct = "—", None
+
+    for inv in open_inv:
+        price = get_price(inv.get("ticker",""))
+        ref   = str(price) if price else inv.get("entry_price")
+        pos   = calc_position_thb(ref, get_shares(inv), get_currency(inv), rate)
+        if pos: total_val_thb += pos
+        if price:
+            pnl = calc_pnl_thb(inv.get("entry_price"), price, get_shares(inv), get_currency(inv), rate)
+            pct = calc_pnl_pct(inv.get("entry_price"), price)
+            if pnl: total_pnl_thb += pnl
+            if pct is not None and (best_pct is None or pct > best_pct):
+                best_pct, best_ticker = pct, inv.get("ticker","—")
+
+    s1, s2, s3, s4 = st.columns(4)
+    s1.metric("Total Value",    fmt_money(total_val_thb or None, disp, rate, sign=False) if total_val_thb else "No data yet")
+    s2.metric("Total P&L",     fmt_money(total_pnl_thb or None, disp, rate) if open_inv else "No holdings yet")
+    s3.metric("Holdings",      len(open_inv))
+    s4.metric("Best Performer", f"{best_ticker}  {fmt_pct(best_pct)}" if best_pct is not None else "—")
+
+    st.markdown("<div style='height:1rem'></div>", unsafe_allow_html=True)
+
+    # ── Holdings Table ────────────────────────────────────────────────────────
+    if not open_inv:
+        st.info("ยังไม่มี Investment — เพิ่มได้ด้านล่าง")
+    else:
+        section(f"Current Holdings ({len(open_inv)})")
+        rows = []
+        for inv in open_inv:
+            price   = get_price(inv.get("ticker",""))
+            pnl_thb = calc_pnl_thb(inv.get("entry_price"), price, get_shares(inv),
+                                    get_currency(inv), rate) if price else None
+            pnl_pct = calc_pnl_pct(inv.get("entry_price"), price) if price else None
+            ref     = str(price) if price else inv.get("entry_price")
+            pos_thb = calc_position_thb(ref, get_shares(inv), get_currency(inv), rate)
+            rows.append({
+                "Ticker":        inv.get("ticker","—"),
+                "Shares":        get_shares(inv),
+                "Avg Cost":      inv.get("entry_price","—"),
+                "Current Price": f"{price:.2f}" if price else "—",
+                "Market Value":  fmt_money(pos_thb, disp, rate, sign=False),
+                "P&L %":         fmt_pct(pnl_pct),
+                f"P&L ({sym})":  fmt_money(pnl_thb, disp, rate),
+                "Thesis":        inv.get("thesis","—"),
+            })
+        st.dataframe(rows, use_container_width=True, hide_index=True)
+
+        # Position actions (ปิด/ลบ)
+        section("Position Actions")
+        for inv in open_inv:
+            price   = get_price(inv.get("ticker",""))
+            pnl_thb = calc_pnl_thb(inv.get("entry_price"), price, get_shares(inv),
+                                    get_currency(inv), rate) if price else None
+            pnl_pct = calc_pnl_pct(inv.get("entry_price"), price) if price else None
+            icon    = "🟢" if (pnl_thb or 0) >= 0 else "🔴"
+
+            with st.expander(f"{icon} {inv['ticker']} · {fmt_pct(pnl_pct)} · {fmt_money(pnl_thb, disp, rate)}"):
+                ca, _, cc = st.columns([2, 3, 1])
+                if ca.button("🔒 ปิด Position", key=f"ci_{inv['id']}"):
+                    st.session_state[f"close_inv_{inv['id']}"] = True
+                if cc.button("🗑️", key=f"di_{inv['id']}"):
+                    investments[:] = [x for x in investments if x["id"] != inv["id"]]
+                    save_investments(investments)
+                    st.rerun()
+
+                if st.session_state.get(f"close_inv_{inv['id']}"):
+                    with st.form(f"clf_inv_{inv['id']}"):
+                        cc1, cc2 = st.columns(2)
+                        exit_p = cc1.text_input("Exit Price *")
+                        exit_d = cc2.date_input("วันที่ขาย", value=date.today())
+                        if st.form_submit_button("ยืนยันปิด"):
+                            ep        = parse(exit_p)
+                            pnl_pct_v = calc_pnl_pct(inv["entry_price"], ep) if ep else None
+                            pnl_thb_v = calc_pnl_thb(inv["entry_price"], ep, get_shares(inv),
+                                                      get_currency(inv), rate) if ep else None
+                            inv.update({"status": "closed", "exit_price": exit_p,
+                                        "exit_date": str(exit_d),
+                                        "pnl_pct": pnl_pct_v, "pnl_thb": pnl_thb_v})
+                            save_investments(investments)
+                            st.success("ปิด Position เรียบร้อย!")
+                            st.rerun()
+
+    # ── Closed ────────────────────────────────────────────────────────────────
+    if closed_inv:
+        section(f"Closed ({len(closed_inv)})")
+        st.dataframe([{
+            "Ticker": i.get("ticker","—"), "Entry": i.get("entry_price","—"),
+            "Exit":   i.get("exit_price","—"), "P&L %": fmt_pct(i.get("pnl_pct")),
+            f"P&L ({sym})": fmt_money(i.get("pnl_thb"), disp, rate),
+            "ซื้อ": i.get("entry_date","—"), "ขาย": i.get("exit_date","—"),
+        } for i in closed_inv], use_container_width=True, hide_index=True)
+
+    # ── Add Investment (collapsed) ────────────────────────────────────────────
+    st.markdown("<div style='height:1rem'></div>", unsafe_allow_html=True)
     with st.expander("➕ เพิ่ม Investment ใหม่"):
         with st.form("new_inv"):
             c1, c2, c3 = st.columns(3)
@@ -284,206 +480,68 @@ def page_investment(investments: list, disp: str, rate: float):
                         "position_thb": round(pos_thb, 2),
                     })
                     save_investments(investments)
-                    st.success(f"✅ บันทึก {ticker.upper()} | "
-                               f"Position: {fmt_money(pos_thb, disp, rate, sign=False)}")
+                    st.success(f"✅ บันทึก {ticker.upper()}")
                     st.rerun()
 
-    open_inv   = [i for i in investments if i.get("status") == "open"]
-    closed_inv = [i for i in investments if i.get("status") == "closed"]
 
-    # ── Unrealized P&L bar chart ──────────────────────────────────────────────
-    chart_data = []
-    for inv in open_inv:
-        price = get_price(inv.get("ticker",""))
-        if price is None: continue
-        pnl_thb = calc_pnl_thb(inv.get("entry_price"), price,
-                                get_shares(inv), get_currency(inv), rate)
-        if pnl_thb is not None:
-            chart_data.append({"ticker": inv["ticker"], "pnl_thb": pnl_thb})
-
-    if chart_data:
-        st.plotly_chart(
-            pnl_bar_chart([d["ticker"] for d in chart_data],
-                          [d["pnl_thb"] for d in chart_data],
-                          disp, rate, "Unrealized P&L", height=280),
-            use_container_width=True)
-
-    # ── Holdings list ─────────────────────────────────────────────────────────
-    if not open_inv:
-        st.info("ยังไม่มี Investment ที่เปิดอยู่")
-    else:
-        st.subheader(f"Holdings ({len(open_inv)})")
-        for inv in open_inv:
-            price   = get_price(inv.get("ticker",""))
-            pnl_thb = calc_pnl_thb(inv.get("entry_price"), price,
-                                    get_shares(inv), get_currency(inv), rate) if price else None
-            pnl_pct = calc_pnl_pct(inv.get("entry_price"), price) if price else None
-            pos_thb = calc_position_thb(inv.get("entry_price"), get_shares(inv),
-                                        get_currency(inv), rate)
-            icon      = "🟢" if (pnl_thb or 0) >= 0 else "🔴"
-            money_str = fmt_money(pnl_thb, disp, rate)
-            pct_str   = fmt_pct(pnl_pct)
-
-            with st.expander(f"{icon} **{inv['ticker']}** ({get_currency(inv)}) "
-                             f"| Entry: {inv['entry_price']} | {pct_str} | {money_str}"):
-                c1, c2, c3, c4 = st.columns(4)
-                c1.metric("Entry",         inv.get("entry_price","—"))
-                c2.metric("ราคาปัจจุบัน", f"{price:.2f}" if price else "—")
-                c3.metric("P&L %",         pct_str)
-                c4.metric("P&L",           money_str)
-                st.caption(f"จำนวน: {get_shares(inv)} หุ้น | "
-                           f"Position size: {fmt_money(pos_thb, disp, rate, sign=False)} | "
-                           f"ซื้อ: {inv.get('entry_date','—')}")
-                if inv.get("thesis"):
-                    st.caption(f"เหตุผล: {inv['thesis']}")
-
-                ca, _, cc = st.columns([2, 3, 1])
-                if ca.button("🔒 ปิด Position", key=f"ci_{inv['id']}"):
-                    st.session_state[f"close_inv_{inv['id']}"] = True
-                if cc.button("🗑️", key=f"di_{inv['id']}"):
-                    investments[:] = [x for x in investments if x["id"] != inv["id"]]
-                    save_investments(investments)
-                    st.rerun()
-
-                if st.session_state.get(f"close_inv_{inv['id']}"):
-                    with st.form(f"clf_inv_{inv['id']}"):
-                        cc1, cc2 = st.columns(2)
-                        exit_p = cc1.text_input("Exit Price *")
-                        exit_d = cc2.date_input("วันที่ขาย", value=date.today())
-                        if st.form_submit_button("ยืนยันปิด"):
-                            ep = parse(exit_p)
-                            pnl_pct_v = calc_pnl_pct(inv["entry_price"], ep) if ep else None
-                            pnl_thb_v = calc_pnl_thb(inv["entry_price"], ep,
-                                                      get_shares(inv),
-                                                      get_currency(inv), rate) if ep else None
-                            inv.update({"status": "closed", "exit_price": exit_p,
-                                        "exit_date": str(exit_d),
-                                        "pnl_pct": pnl_pct_v, "pnl_thb": pnl_thb_v})
-                            save_investments(investments)
-                            st.success("ปิด Position เรียบร้อย!")
-                            st.rerun()
-
-    if closed_inv:
-        st.markdown("---")
-        st.subheader(f"Closed ({len(closed_inv)})")
-        closed_with_pnl = [i for i in closed_inv if i.get("pnl_thb") is not None]
-        if closed_with_pnl:
-            st.plotly_chart(
-                pnl_bar_chart([i["ticker"] for i in closed_with_pnl],
-                              [i["pnl_thb"] for i in closed_with_pnl],
-                              disp, rate, "Realized P&L", height=240),
-                use_container_width=True)
-        for inv in closed_inv:
-            icon = "✅" if (inv.get("pnl_thb") or 0) >= 0 else "❌"
-            st.caption(f"{icon} **{inv['ticker']}** | Entry: {inv.get('entry_price')} → "
-                       f"Exit: {inv.get('exit_price','—')} | "
-                       f"{fmt_pct(inv.get('pnl_pct'))} | {fmt_money(inv.get('pnl_thb'), disp, rate)}")
-
-
+# ── Page 3: Trade ─────────────────────────────────────────────────────────────
 def page_trade(trades: list, disp: str, rate: float):
-    st.title("📈 Trade")
+    open_trades   = [t for t in trades if t.get("status") == "open"]
+    closed_trades = [t for t in trades if t.get("status") == "closed"]
+    wins   = [t for t in closed_trades if t.get("win_loss") == "Win"]
+    losses = [t for t in closed_trades if t.get("win_loss") == "Loss"]
+    sym    = "฿" if disp == "THB" else "$"
 
-    with st.expander("➕ เปิด Trade ใหม่"):
-        strategy = strategy_input("nt")
-        with st.form("new_trade"):
-            c1, c2, c3, c4 = st.columns(4)
-            ticker    = c1.text_input("Ticker *", placeholder="เช่น AAPL, AOT.BK")
-            direction = c2.selectbox("Direction", ["Long", "Short"])
-            currency  = c3.selectbox("ราคาเป็น", ["THB", "USD"])
-            shares    = c4.text_input("จำนวนหุ้น *", placeholder="เช่น 100")
-            c5, c6, c7 = st.columns(3)
-            entry     = c5.text_input("Entry Price *")
-            sl        = c6.text_input("Stop Loss")
-            tp        = c7.text_input("Take Profit")
-            thesis    = st.text_area("Thesis — ทำไมถึงซื้อ *", height=80,
-                                     placeholder="เหตุผลสั้นๆ ที่ชัดเจน")
-            open_date = st.date_input("วันที่เปิด", value=date.today())
+    realized_thb   = sum(t.get("pnl_thb", 0) or 0 for t in closed_trades)
+    win_rate       = len(wins) / len(closed_trades) * 100 if closed_trades else None
+    total_win_thb  = sum(t.get("pnl_thb", 0) or 0 for t in wins)
+    total_loss_thb = abs(sum(t.get("pnl_thb", 0) or 0 for t in losses))
+    profit_factor  = round(total_win_thb / total_loss_thb, 2) if total_loss_thb > 0 else None
 
-            if st.form_submit_button("✅ บันทึก Trade"):
-                e, s = parse(entry), parse(shares)
-                if not ticker or e is None or not thesis:
-                    st.error("กรุณากรอก Ticker, Entry Price และ Thesis")
-                elif not strategy:
-                    st.error("กรุณาเลือก Strategy")
-                else:
-                    rr      = auto_rr(entry, sl, tp)
-                    pos_thb = (s or 0) * e * (rate if currency == "USD" else 1)
-                    trades.append({
-                        "id": next_id(trades), "type": "trade", "status": "open",
-                        "ticker": ticker.upper().strip(), "direction": direction,
-                        "strategy": strategy, "currency": currency,
-                        "entry_price": entry, "shares": shares,
-                        "stop_loss": sl, "take_profit": tp, "rr": rr,
-                        "thesis": thesis, "open_date": str(open_date),
-                        "position_thb": round(pos_thb, 2),
-                    })
-                    save_trades(trades)
-                    st.success(f"✅ บันทึกแล้ว! R:R = {rr} | "
-                               f"Position size: {fmt_money(pos_thb, disp, rate, sign=False)}")
-                    st.rerun()
+    # ── Performance KPIs ──────────────────────────────────────────────────────
+    section("Performance")
+    k1, k2, k3, k4, k5 = st.columns(5)
+    k1.metric("Open Trades",   len(open_trades))
+    k2.metric("Win Rate",      f"{win_rate:.1f}%" if win_rate is not None else "—")
+    k3.metric("Profit Factor", f"{profit_factor:.2f}" if profit_factor else "—")
+    k4.metric("Realized P&L",  fmt_money(realized_thb if closed_trades else None, disp, rate))
+    k5.metric("Closed Trades", len(closed_trades))
 
-    open_trades = [t for t in trades if t.get("status") == "open"]
+    st.markdown("<div style='height:1rem'></div>", unsafe_allow_html=True)
 
-    # ── Unrealized P&L chart ──────────────────────────────────────────────────
-    chart_data = []
-    for t in open_trades:
-        price = get_price(t.get("ticker",""))
-        if price is None: continue
-        pnl_thb = calc_pnl_thb(t.get("entry_price"), price, get_shares(t),
-                                get_currency(t), rate, t.get("direction","Long"))
-        if pnl_thb is not None:
-            chart_data.append({"ticker": t["ticker"], "pnl_thb": pnl_thb})
-
-    if chart_data:
-        st.plotly_chart(
-            pnl_bar_chart([d["ticker"] for d in chart_data],
-                          [d["pnl_thb"] for d in chart_data],
-                          disp, rate, "Unrealized P&L", height=280),
-            use_container_width=True)
-
-    # ── Open trades list ──────────────────────────────────────────────────────
+    # ── Open Trades ───────────────────────────────────────────────────────────
     if not open_trades:
-        st.info("ยังไม่มี Trade ที่เปิดอยู่")
+        st.info("ไม่มี Open Trade ในขณะนี้")
     else:
-        st.subheader(f"Open Trades ({len(open_trades)})")
+        section(f"Open Trades ({len(open_trades)})")
         for t in open_trades:
             price   = get_price(t.get("ticker",""))
             pnl_thb = calc_pnl_thb(t.get("entry_price"), price, get_shares(t),
                                     get_currency(t), rate, t.get("direction","Long")) if price else None
             pnl_pct = calc_pnl_pct(t.get("entry_price"), price, t.get("direction","Long")) if price else None
-            icon    = "🟢" if (pnl_thb or 0) >= 0 else "🔴"
-            arrow   = "↑" if t.get("direction") == "Long" else "↓"
+            pos_thb = calc_position_thb(t.get("entry_price"), get_shares(t), get_currency(t), rate)
+            tp_thb  = calc_pnl_thb(t.get("entry_price"), parse(t.get("take_profit","")) or 0,
+                                    get_shares(t), get_currency(t), rate, t.get("direction","Long"))
+            sl_thb  = calc_pnl_thb(t.get("entry_price"), parse(t.get("stop_loss","")) or 0,
+                                    get_shares(t), get_currency(t), rate, t.get("direction","Long"))
+            icon  = "🟢" if (pnl_thb or 0) >= 0 else "🔴"
+            arrow = "↑" if t.get("direction") == "Long" else "↓"
 
-            pos_thb = calc_position_thb(t.get("entry_price"), get_shares(t),
-                                        get_currency(t), rate)
-
-            # คำนวณ profit/loss ถ้าโดน TP หรือ SL
-            tp_thb = calc_pnl_thb(t.get("entry_price"), parse(t.get("take_profit","")) or 0,
-                                  get_shares(t), get_currency(t), rate, t.get("direction","Long"))
-            sl_thb = calc_pnl_thb(t.get("entry_price"), parse(t.get("stop_loss","")) or 0,
-                                  get_shares(t), get_currency(t), rate, t.get("direction","Long"))
-
-            # header โชว์ข้อมูลสำคัญก่อน expand
-            amount_str = fmt_money(pos_thb, disp, rate, sign=False)
-            pnl_str    = f"{fmt_pct(pnl_pct)}  {fmt_money(pnl_thb, disp, rate)}"
             header = (f"{icon} **{t['ticker']}** {arrow}  ·  "
                       f"AVG {t.get('entry_price','—')}  ·  "
-                      f"{get_shares(t)} shares  ·  {amount_str}  |  {pnl_str}")
+                      f"{get_shares(t)} shares  ·  {fmt_money(pos_thb, disp, rate, sign=False)}"
+                      f"  |  {fmt_pct(pnl_pct)}  {fmt_money(pnl_thb, disp, rate)}")
 
             with st.expander(header):
-
-                # ── Row 1: ข้อมูลหลัก ─────────────────────────────────────
                 r1c1, r1c2, r1c3, r1c4 = st.columns(4)
-                r1c1.metric("AVG Price",      t.get("entry_price","—"))
-                r1c2.metric("Shares",         get_shares(t))
-                r1c3.metric("Amount",         fmt_money(pos_thb, disp, rate, sign=False))
-                r1c4.metric("Current Price",
-                            f"{price:.2f}" if price else "—",
+                r1c1.metric("AVG Price",     t.get("entry_price","—"))
+                r1c2.metric("Shares",        get_shares(t))
+                r1c3.metric("Amount",        fmt_money(pos_thb, disp, rate, sign=False))
+                r1c4.metric("Current Price", f"{price:.2f}" if price else "—",
                             delta=fmt_pct(pnl_pct) if pnl_pct else None)
 
                 st.markdown("<div style='height:4px'></div>", unsafe_allow_html=True)
 
-                # ── Row 2: TP / P&L / SL ─────────────────────────────────
                 r2c1, r2c2, r2c3 = st.columns(3)
                 with r2c1:
                     st.markdown(
@@ -509,12 +567,10 @@ def page_trade(trades: list, disp: str, rate: float):
                         unsafe_allow_html=True)
 
                 st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
-                st.caption(f"R:R {t.get('rr','—')}  ·  {get_currency(t)}  ·  "
-                           f"เปิด {t.get('open_date','—')}")
+                st.caption(f"R:R {t.get('rr','—')}  ·  {get_currency(t)}  ·  เปิด {t.get('open_date','—')}")
                 st.caption(f"Thesis: {t.get('thesis','—')}")
                 st.divider()
 
-                # ── Buttons ───────────────────────────────────────────────
                 ca, cb, _ = st.columns([2, 2, 3])
                 if ca.button("🔒 ปิด Trade", key=f"btn_close_{t['id']}"):
                     st.session_state[f"show_close_{t['id']}"] = True
@@ -523,7 +579,6 @@ def page_trade(trades: list, disp: str, rate: float):
                     st.session_state[f"show_edit_{t['id']}"] = True
                     st.session_state.pop(f"show_close_{t['id']}", None)
 
-                # ── Edit form ─────────────────────────────────────────────
                 if st.session_state.get(f"show_edit_{t['id']}"):
                     st.markdown("**แก้ไข Trade**")
                     with st.form(f"form_edit_{t['id']}"):
@@ -532,9 +587,8 @@ def page_trade(trades: list, disp: str, rate: float):
                         new_sl     = ec2.text_input("Stop Loss",   value=t.get("stop_loss",""))
                         new_tp     = ec3.text_input("Take Profit", value=t.get("take_profit",""))
                         ec4, ec5   = st.columns(2)
-                        new_entry  = ec4.text_input("AVG Price (ถ้า avg down/up)",
-                                                    value=t.get("entry_price",""))
-                        new_thesis = ec5.text_input("Thesis", value=t.get("thesis",""))
+                        new_entry  = ec4.text_input("AVG Price",   value=t.get("entry_price",""))
+                        new_thesis = ec5.text_input("Thesis",      value=t.get("thesis",""))
                         if st.form_submit_button("💾 บันทึก"):
                             t.update({
                                 "shares": new_shares, "stop_loss": new_sl,
@@ -547,7 +601,6 @@ def page_trade(trades: list, disp: str, rate: float):
                             st.success("แก้ไขเรียบร้อย!")
                             st.rerun()
 
-                # ── Close form ────────────────────────────────────────────
                 if st.session_state.get(f"show_close_{t['id']}"):
                     st.markdown("**ปิด Trade**")
                     with st.form(f"form_close_{t['id']}"):
@@ -557,8 +610,7 @@ def page_trade(trades: list, disp: str, rate: float):
                         cc3, cc4  = st.columns(2)
                         thesis_ok = cc3.selectbox("Thesis ถูกไหม",
                                                   ["✅ ถูก", "❌ ผิด", "⚠️ บางส่วน"])
-                        emotion   = cc4.selectbox("Emotion",
-                                                  ["ปกติ", "กลัว", "โลภ", "FOMO"])
+                        emotion   = cc4.selectbox("Emotion", ["ปกติ", "กลัว", "โลภ", "FOMO"])
                         lesson    = st.text_input("Lesson ที่ได้")
                         if st.form_submit_button("ยืนยันปิด"):
                             ep        = parse(exit_p)
@@ -576,53 +628,168 @@ def page_trade(trades: list, disp: str, rate: float):
                             st.success(f"ปิด Trade! P&L = {fmt_money(pnl_thb_v, disp, rate)}")
                             st.rerun()
 
+    # ── Analytics ─────────────────────────────────────────────────────────────
+    closed_with_pnl = [t for t in closed_trades if t.get("pnl_thb") is not None]
+    if closed_with_pnl:
+        section("Analytics")
+        col_wl, col_strat = st.columns(2)
 
+        with col_wl:
+            win_count, loss_count = len(wins), len(losses)
+            if win_count + loss_count > 0:
+                fig_pie = go.Figure(go.Pie(
+                    labels=["Win", "Loss"], values=[win_count, loss_count],
+                    marker=dict(colors=["#22c55e", "#ef4444"]),
+                    hole=0.5, textinfo="percent+value",
+                    textfont=dict(size=13, color="#e2e8f0"),
+                ))
+                fig_pie.update_layout(**{**CHART_LAYOUT, "height": 240,
+                    "title": dict(text="Win / Loss Distribution",
+                                  font=dict(size=14, color="#94a3b8"), x=0),
+                    "showlegend": True, "legend": dict(font=dict(color="#94a3b8")),
+                })
+                st.plotly_chart(fig_pie, use_container_width=True)
+
+        with col_strat:
+            strat_pnl: dict[str, float] = {}
+            for t in closed_with_pnl:
+                s = t.get("strategy", "—")
+                strat_pnl[s] = strat_pnl.get(s, 0) + (t.get("pnl_thb") or 0)
+            if strat_pnl:
+                st.plotly_chart(
+                    pnl_bar_chart(list(strat_pnl.keys()), list(strat_pnl.values()),
+                                  disp, rate, "P&L by Strategy", height=240),
+                    use_container_width=True)
+
+    # ── Closed Trades Table ───────────────────────────────────────────────────
+    if closed_trades:
+        section(f"Closed Trades ({len(closed_trades)})")
+        st.dataframe([{
+            "Ticker":       t.get("ticker","—"),
+            "Strategy":     t.get("strategy","—"),
+            "Entry":        t.get("entry_price","—"),
+            "Exit":         t.get("exit_price","—"),
+            "P&L %":        fmt_pct(t.get("pnl_pct")),
+            f"P&L ({sym})": fmt_money(t.get("pnl_thb"), disp, rate),
+            "W/L":          t.get("win_loss","—"),
+            "Lesson":       t.get("lesson","—"),
+        } for t in sorted(closed_trades, key=lambda x: x.get("close_date",""), reverse=True)],
+        use_container_width=True, hide_index=True)
+
+    # ── New Trade Form (collapsed) ────────────────────────────────────────────
+    st.markdown("<div style='height:1rem'></div>", unsafe_allow_html=True)
+    with st.expander("➕ เปิด Trade ใหม่"):
+        strategy = strategy_input("nt")
+        with st.form("new_trade"):
+            c1, c2, c3, c4 = st.columns(4)
+            ticker    = c1.text_input("Ticker *", placeholder="เช่น AAPL, AOT.BK")
+            direction = c2.selectbox("Direction", ["Long", "Short"])
+            currency  = c3.selectbox("ราคาเป็น", ["THB", "USD"])
+            shares    = c4.text_input("จำนวนหุ้น *", placeholder="เช่น 100")
+            c5, c6, c7 = st.columns(3)
+            entry     = c5.text_input("Entry Price *")
+            sl        = c6.text_input("Stop Loss")
+            tp        = c7.text_input("Take Profit")
+            thesis    = st.text_area("Thesis *", height=80,
+                                     placeholder="เหตุผลสั้นๆ ที่ชัดเจน")
+            open_date = st.date_input("วันที่เปิด", value=date.today())
+            if st.form_submit_button("✅ บันทึก Trade"):
+                e, s = parse(entry), parse(shares)
+                if not ticker or e is None or not thesis:
+                    st.error("กรุณากรอก Ticker, Entry Price และ Thesis")
+                elif not strategy:
+                    st.error("กรุณาเลือก Strategy")
+                else:
+                    rr      = auto_rr(entry, sl, tp)
+                    pos_thb = (s or 0) * e * (rate if currency == "USD" else 1)
+                    trades.append({
+                        "id": next_id(trades), "type": "trade", "status": "open",
+                        "ticker": ticker.upper().strip(), "direction": direction,
+                        "strategy": strategy, "currency": currency,
+                        "entry_price": entry, "shares": shares,
+                        "stop_loss": sl, "take_profit": tp, "rr": rr,
+                        "thesis": thesis, "open_date": str(open_date),
+                        "position_thb": round(pos_thb, 2),
+                    })
+                    save_trades(trades)
+                    st.success(f"✅ บันทึก! R:R = {rr} · Position: {fmt_money(pos_thb, disp, rate, sign=False)}")
+                    st.rerun()
+
+
+# ── Page 4: Log ───────────────────────────────────────────────────────────────
 def page_log(trades: list, investments: list, disp: str, rate: float):
-    st.title("📓 Log")
     sym = "฿" if disp == "THB" else "$"
 
     rows = []
     for t in trades:
-        pnl_thb = t.get("pnl_thb")
         rows.append({
             "Type": "Trade", "Ticker": t.get("ticker","—"),
             "Dir": t.get("direction","—"), "Strategy": t.get("strategy","—"),
             "Entry": t.get("entry_price","—"), "Exit": t.get("exit_price","—"),
             "P&L %": fmt_pct(t.get("pnl_pct")),
-            f"P&L ({sym})": fmt_money(pnl_thb, disp, rate),
-            "W/L": t.get("win_loss","open" if t.get("status")=="open" else "—"),
+            f"P&L ({sym})": fmt_money(t.get("pnl_thb"), disp, rate),
+            "W/L": t.get("win_loss", "open" if t.get("status")=="open" else "—"),
             "วันที่": t.get("open_date","—"), "Status": t.get("status","—"),
+            "Lesson": t.get("lesson","—"),
         })
     for inv in investments:
-        pnl_thb = inv.get("pnl_thb")
         rows.append({
             "Type": "Investment", "Ticker": inv.get("ticker","—"),
             "Dir": "Long", "Strategy": "—",
             "Entry": inv.get("entry_price","—"), "Exit": inv.get("exit_price","—"),
             "P&L %": fmt_pct(inv.get("pnl_pct")),
-            f"P&L ({sym})": fmt_money(pnl_thb, disp, rate),
+            f"P&L ({sym})": fmt_money(inv.get("pnl_thb"), disp, rate),
             "W/L": "open" if inv.get("status")=="open" else fmt_pct(inv.get("pnl_pct")),
             "วันที่": inv.get("entry_date","—"), "Status": inv.get("status","—"),
+            "Lesson": "—",
         })
 
     if not rows:
         st.info("ยังไม่มีข้อมูล")
         return
 
-    c1, c2 = st.columns(2)
-    tf = c1.selectbox("ประเภท", ["ทั้งหมด", "Trade", "Investment"])
-    sf = c2.selectbox("Status",  ["ทั้งหมด", "open", "closed"])
-    if tf != "ทั้งหมด": rows = [r for r in rows if r["Type"] == tf]
-    if sf != "ทั้งหมด": rows = [r for r in rows if r["Status"] == sf]
+    # ── Filters ───────────────────────────────────────────────────────────────
+    section("Filters")
+    f1, f2, f3 = st.columns(3)
+    tf = f1.selectbox("ประเภท", ["ทั้งหมด", "Trade", "Investment"])
+    sf = f2.selectbox("Status",  ["ทั้งหมด", "open", "closed"])
+    wf = f3.selectbox("W/L",     ["ทั้งหมด", "Win", "Loss", "open"])
 
-    st.dataframe(rows, use_container_width=True, hide_index=True)
+    filtered = rows
+    if tf != "ทั้งหมด": filtered = [r for r in filtered if r["Type"]   == tf]
+    if sf != "ทั้งหมด": filtered = [r for r in filtered if r["Status"] == sf]
+    if wf != "ทั้งหมด": filtered = [r for r in filtered if r["W/L"]    == wf]
+
+    # ── Table ─────────────────────────────────────────────────────────────────
+    section(f"History ({len(filtered)} entries)")
+    st.dataframe(filtered, use_container_width=True, hide_index=True)
+
+    # ── Export CSV ────────────────────────────────────────────────────────────
+    if filtered:
+        csv = pd.DataFrame(filtered).to_csv(index=False).encode("utf-8-sig")
+        st.download_button(
+            "⬇️ Export CSV", data=csv,
+            file_name=f"timfin_log_{date.today()}.csv",
+            mime="text/csv",
+        )
 
 
 # ── Main ──────────────────────────────────────────────────────────────────────
 def main():
     trades      = load_trades()
     investments = load_investments()
-    page, disp, rate = render_sidebar()
+    page        = render_sidebar()
+
+    subtitles = {
+        "📊 Overview":   "How is my portfolio doing?",
+        "💼 Investment": "What do I currently own?",
+        "📈 Trade":      "How am I performing as a trader?",
+        "📓 Log":        "What happened historically?",
+    }
+    disp, rate = page_header(
+        title    = page.split(" ", 1)[1] if " " in page else page,
+        subtitle = subtitles.get(page, ""),
+    )
 
     if   page == "📊 Overview":   page_overview(trades, investments, disp, rate)
     elif page == "💼 Investment": page_investment(investments, disp, rate)
