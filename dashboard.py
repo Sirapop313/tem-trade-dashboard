@@ -66,7 +66,13 @@ def _save(path: str, data: list) -> None:
         json.dump(data, f, ensure_ascii=False, indent=2)
 
 def load_trades() -> list:       return _load(TRADES_FILE)
-def save_trades(d: list):        _save(TRADES_FILE, d)
+def save_trades(d: list):
+    _save(TRADES_FILE, d)
+    try:
+        from journal import regenerate
+        regenerate(d)
+    except Exception:
+        pass
 def load_investments() -> list:  return _load(INVESTMENTS_FILE)
 def save_investments(d: list):   _save(INVESTMENTS_FILE, d)
 
