@@ -676,6 +676,7 @@ def page_investment(investments: list, trades: list, cash: list, disp: str, rate
                                        placeholder="เช่น พื้นฐานดี dividend สม่ำเสมอ...")
             st.markdown("---")
             src_id, other_name, other_curr = source_selector(cash, "inv")
+            is_import = st.checkbox("📥 Import position เก่า (ไม่หักเงินจาก Cash)", key="import_inv")
             if st.form_submit_button("✅ บันทึก"):
                 e, s = parse(entry), parse(shares)
                 if not ticker or e is None or s is None:
@@ -683,8 +684,9 @@ def page_investment(investments: list, trades: list, cash: list, disp: str, rate
                 else:
                     pos_thb = s * e * (rate if currency == "USD" else 1)
                     resolved = resolve_source(cash, src_id, other_name, other_curr)
-                    cash_deduct(cash, resolved, pos_thb, rate)
-                    save_cash(cash)
+                    if not is_import:
+                        cash_deduct(cash, resolved, pos_thb, rate)
+                        save_cash(cash)
                     investments.append({
                         "id": next_id(investments), "type": "investment", "status": "open",
                         "ticker": ticker.upper().strip(), "shares": shares,
@@ -927,6 +929,7 @@ def page_trade(trades: list, cash: list, disp: str, rate: float):
             open_date = st.date_input("วันที่เปิด", value=date.today())
             st.markdown("---")
             src_id, other_name, other_curr = source_selector(cash, "trade")
+            is_import = st.checkbox("📥 Import position เก่า (ไม่หักเงินจาก Cash)", key="import_trade")
             if st.form_submit_button("✅ บันทึก Trade"):
                 e, s = parse(entry), parse(shares)
                 if not ticker or e is None or not thesis:
@@ -937,8 +940,9 @@ def page_trade(trades: list, cash: list, disp: str, rate: float):
                     rr       = auto_rr(entry, sl, tp)
                     pos_thb  = (s or 0) * e * (rate if currency == "USD" else 1)
                     resolved = resolve_source(cash, src_id, other_name, other_curr)
-                    cash_deduct(cash, resolved, pos_thb, rate)
-                    save_cash(cash)
+                    if not is_import:
+                        cash_deduct(cash, resolved, pos_thb, rate)
+                        save_cash(cash)
                     trades.append({
                         "id": next_id(trades), "type": "trade", "status": "open",
                         "ticker": ticker.upper().strip(), "direction": direction,
