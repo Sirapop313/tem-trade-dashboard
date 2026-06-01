@@ -7,6 +7,7 @@ import os
 from datetime import date
 
 import pandas as pd
+import requests as _req
 import streamlit as st
 import plotly.graph_objects as go
 
@@ -65,25 +66,62 @@ def _save(path: str, data: list) -> None:
     with open(path, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
 
-def load_trades() -> list:       return _load(TRADES_FILE)
+# ── Supabase helpers ──────────────────────────────────────────────────────────
+def _use_sb() -> bool:
+    try: return bool(st.secrets.get("SUPABASE_URL"))
+    except Exception: return False
+
+def _sb_headers() -> dict:
+    key = st.secrets["SUPABASE_KEY"]
+    return {
+        "apikey": key, "Authorization": f"Bearer {key}",
+        "Content-Type": "application/json", "Prefer": "return=minimal",
+    }
+
+def _sb_base(table: str) -> str:
+    return st.secrets["SUPABASE_URL"].rstrip("/") + f"/rest/v1/{table}"
+
+def _sb_load(table: str) -> list:
+    r = _req.get(f"{_sb_base(table)}?select=data", headers=_sb_headers())
+    r.raise_for_status()
+    return [row["data"] for row in r.json()]
+
+def _sb_save(table: str, items: list) -> None:
+    base, h = _sb_base(table), _sb_headers()
+    _req.delete(base, headers=h)
+    if items:
+        _req.post(base, headers={**h, "Prefer": "return=minimal"},
+                  json=[{"data": item} for item in items])
+
+# ── Public load/save ──────────────────────────────────────────────────────────
+def load_trades() -> list:
+    return _sb_load("trades") if _use_sb() else _load(TRADES_FILE)
+
 def save_trades(d: list):
-    _save(TRADES_FILE, d)
+    if _use_sb(): _sb_save("trades", d)
+    else: _save(TRADES_FILE, d)
     try:
         from journal import regenerate
         regenerate(d)
     except Exception:
         pass
-def load_investments() -> list:  return _load(INVESTMENTS_FILE)
-def save_investments(d: list):   _save(INVESTMENTS_FILE, d)
+
+def load_investments() -> list:
+    return _sb_load("investments") if _use_sb() else _load(INVESTMENTS_FILE)
+
+def save_investments(d: list):
+    if _use_sb(): _sb_save("investments", d)
+    else: _save(INVESTMENTS_FILE, d)
 
 CASH_PRESETS = ["Dime", "Webull", "Binance", "Bitkub", "SCB", "KBank", "Others"]
 
 def load_cash() -> list:
+    if _use_sb():
+        return _sb_load("cash_accounts")
     if not os.path.exists(CASH_FILE):
         return []
     with open(CASH_FILE, encoding="utf-8") as f:
         data = json.load(f)
-    # migrate old format {"usd": ..., "thb": ...} → list
     if isinstance(data, dict):
         accounts = []
         if data.get("usd", 0): accounts.append({"id": 1, "name": "USD Cash", "currency": "USD", "amount": data["usd"]})
@@ -92,8 +130,10 @@ def load_cash() -> list:
     return data
 
 def save_cash(cash: list) -> None:
-    with open(CASH_FILE, "w", encoding="utf-8") as f:
-        json.dump(cash, f, ensure_ascii=False, indent=2)
+    if _use_sb(): _sb_save("cash_accounts", cash)
+    else:
+        with open(CASH_FILE, "w", encoding="utf-8") as f:
+            json.dump(cash, f, ensure_ascii=False, indent=2)
 
 
 # ── Live Prices ───────────────────────────────────────────────────────────────
