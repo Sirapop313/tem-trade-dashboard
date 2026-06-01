@@ -105,11 +105,14 @@ def sb_signin(email: str, password: str) -> dict | None:
                   json={"email": email, "password": password})
     return r.json() if r.status_code == 200 else None
 
-def sb_signup(email: str, password: str) -> dict | None:
+def sb_signup(email: str, password: str) -> tuple[dict | None, str]:
     r = _req.post(f"{_sb_url()}/auth/v1/signup",
                   headers={"apikey": st.secrets["SUPABASE_KEY"], "Content-Type": "application/json"},
                   json={"email": email, "password": password})
-    return r.json() if r.status_code in (200, 201) else None
+    data = r.json()
+    if r.status_code in (200, 201):
+        return data, ""
+    return None, data.get("msg") or data.get("message") or str(data)
 
 def is_logged_in() -> bool:
     return "sb_session" in st.session_state
@@ -330,11 +333,11 @@ def page_login():
                     if not email or len(password) < 6:
                         st.error("กรุณากรอก Email และ Password อย่างน้อย 6 ตัว")
                     else:
-                        result = sb_signup(email.strip(), password)
-                        if result and ("id" in result.get("user", {}) or result.get("user") is None):
+                        result, err = sb_signup(email.strip(), password)
+                        if result is not None:
                             st.success("✅ สมัครสมาชิกสำเร็จ! กรุณาตรวจสอบ Email เพื่อยืนยันตัวตน แล้วกลับมา Login")
                         else:
-                            st.error("สมัครไม่สำเร็จ — Email อาจถูกใช้ไปแล้ว")
+                            st.error(f"สมัครไม่สำเร็จ: {err}")
 
 
 # ── Sidebar ───────────────────────────────────────────────────────────────────
