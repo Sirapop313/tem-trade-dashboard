@@ -70,13 +70,22 @@ def save_trades(d: list):        _save(TRADES_FILE, d)
 def load_investments() -> list:  return _load(INVESTMENTS_FILE)
 def save_investments(d: list):   _save(INVESTMENTS_FILE, d)
 
-def load_cash() -> dict:
-    if not os.path.exists(CASH_FILE):
-        return {"usd": 0.0, "thb": 0.0}
-    with open(CASH_FILE, encoding="utf-8") as f:
-        return json.load(f)
+CASH_PRESETS = ["Dime", "Webull", "Binance", "Bitkub", "SCB", "KBank", "Others"]
 
-def save_cash(cash: dict) -> None:
+def load_cash() -> list:
+    if not os.path.exists(CASH_FILE):
+        return []
+    with open(CASH_FILE, encoding="utf-8") as f:
+        data = json.load(f)
+    # migrate old format {"usd": ..., "thb": ...} → list
+    if isinstance(data, dict):
+        accounts = []
+        if data.get("usd", 0): accounts.append({"id": 1, "name": "USD Cash", "currency": "USD", "amount": data["usd"]})
+        if data.get("thb", 0): accounts.append({"id": 2, "name": "THB Cash", "currency": "THB", "amount": data["thb"]})
+        return accounts
+    return data
+
+def save_cash(cash: list) -> None:
     with open(CASH_FILE, "w", encoding="utf-8") as f:
         json.dump(cash, f, ensure_ascii=False, indent=2)
 
@@ -241,7 +250,7 @@ def page_overview(trades: list, investments: list, cash: dict, disp: str, rate: 
     wins          = [t for t in closed_trades if t.get("win_loss") == "Win"]
 
     # Portfolio Value = positions + cash
-    cash_thb = (cash.get("usd", 0.0) * rate) + cash.get("thb", 0.0)
+    cash_thb = sum(a["amount"] * rate if a["currency"] == "USD" else a["amount"] for a in cash)
     port_thb = cash_thb
     for item in open_trades + open_inv:
         price = get_price(item.get("ticker",""))
@@ -375,9 +384,9 @@ def page_investment(investments: list, cash: dict, disp: str, rate: float):
     total_val_thb, total_pnl_thb = 0.0, 0.0
     best_ticker, best_pct = "—", None
 
-    cash_usd = cash.get("usd", 0.0)
-    cash_thb = cash.get("thb", 0.0)
-    cash_total_thb = (cash_usd * rate) + cash_thb
+    cash_usd_total = sum(a["amount"] for a in cash if a["currency"] == "USD")
+    cash_thb_total = sum(a["amount"] for a in cash if a["currency"] == "THB")
+    cash_total_thb = (cash_usd_total * rate) + cash_thb_total
 
     for inv in open_inv:
         price = get_price(inv.get("ticker",""))
@@ -403,25 +412,48 @@ def page_investment(investments: list, cash: dict, disp: str, rate: float):
 
     # ── Cash ──────────────────────────────────────────────────────────────────
     section("Cash")
-    cash_display_thb = fmt_money(cash_thb or None, "THB", rate, sign=False) if cash_thb else "฿0"
-    cash_display_usd = fmt_money(cash_usd * rate or None, "USD", rate, sign=False) if cash_usd else "$0"
-    cash_display_total = fmt_money(cash_total_thb or None, disp, rate, sign=False) if cash_total_thb else ("฿0" if disp == "THB" else "$0")
+    mc1, mc2, mc3 = st.columns(3)
+    mc1.metric("Cash THB รวม", f"฿{cash_thb_total:,.0f}" if cash_thb_total else "฿0")
+    mc2.metric("Cash USD รวม", f"${cash_usd_total:,.2f}" if cash_usd_total else "$0")
+    mc3.metric(f"Total Cash ({disp})", fmt_money(cash_total_thb or None, disp, rate, sign=False) if cash_total_thb else ("฿0" if disp == "THB" else "$0"))
 
-    cc1, cc2, cc3, cc4 = st.columns([2, 2, 2, 3])
-    cc1.metric("Cash (THB)", f"฿{cash_thb:,.0f}" if cash_thb else "฿0")
-    cc2.metric("Cash (USD)", f"${cash_usd:,.2f}" if cash_usd else "$0")
-    cc3.metric(f"Total Cash ({disp})", cash_display_total)
+    st.markdown("<div style='height:0.5rem'></div>", unsafe_allow_html=True)
 
-    with cc4:
-        with st.expander("✏️ แก้ไข Cash"):
-            with st.form("edit_cash"):
-                ec1, ec2 = st.columns(2)
-                new_thb = ec1.number_input("THB (บาท)", min_value=0.0, value=float(cash_thb), step=1000.0, format="%.0f")
-                new_usd = ec2.number_input("USD (ดอลลาร์)", min_value=0.0, value=float(cash_usd), step=100.0, format="%.2f")
-                if st.form_submit_button("💾 บันทึก"):
-                    save_cash({"usd": new_usd, "thb": new_thb})
-                    st.success("อัปเดต Cash เรียบร้อย!")
-                    st.rerun()
+    # แสดง accounts
+    if cash:
+        for acc in cash:
+            val_thb = acc["amount"] * rate if acc["currency"] == "USD" else acc["amount"]
+            ac1, ac2, ac3, ac4 = st.columns([3, 2, 3, 1])
+            ac1.markdown(f"**{acc['name']}**")
+            ac2.caption(acc["currency"])
+            amount_str = f"${acc['amount']:,.2f}" if acc["currency"] == "USD" else f"฿{acc['amount']:,.0f}"
+            ac3.markdown(amount_str)
+            if ac4.button("🗑️", key=f"del_cash_{acc['id']}"):
+                cash[:] = [a for a in cash if a["id"] != acc["id"]]
+                save_cash(cash)
+                st.rerun()
+    else:
+        st.caption("ยังไม่มี Cash — เพิ่มได้ด้านล่าง")
+
+    st.markdown("<div style='height:0.5rem'></div>", unsafe_allow_html=True)
+
+    with st.expander("➕ เพิ่ม Cash Account"):
+        with st.form("add_cash"):
+            fc1, fc2, fc3 = st.columns(3)
+            preset = fc1.selectbox("แหล่ง Cash", CASH_PRESETS)
+            custom_name = fc1.text_input("หรือพิมพ์ชื่อเอง", placeholder="เช่น Binance Thai")
+            currency = fc2.selectbox("สกุลเงิน", ["THB", "USD"])
+            amount = fc3.number_input(
+                "จำนวน", min_value=0.0, step=1000.0 if currency == "THB" else 100.0,
+                format="%.0f" if currency == "THB" else "%.2f"
+            )
+            if st.form_submit_button("💾 บันทึก"):
+                name = custom_name.strip() if custom_name.strip() else preset
+                new_id = max((a["id"] for a in cash), default=0) + 1
+                cash.append({"id": new_id, "name": name, "currency": currency, "amount": float(amount)})
+                save_cash(cash)
+                st.success(f"เพิ่ม {name} เรียบร้อย!")
+                st.rerun()
 
     st.markdown("<div style='height:1rem'></div>", unsafe_allow_html=True)
 
