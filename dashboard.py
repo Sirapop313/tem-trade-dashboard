@@ -786,14 +786,16 @@ def page_trade(trades: list, disp: str, rate: float):
                     st.markdown("**แก้ไข Trade**")
                     with st.form(f"form_edit_{t['id']}"):
                         ec1, ec2, ec3 = st.columns(3)
-                        new_shares = ec1.text_input("Shares",      value=get_shares(t))
-                        new_sl     = ec2.text_input("Stop Loss",   value=t.get("stop_loss",""))
-                        new_tp     = ec3.text_input("Take Profit", value=t.get("take_profit",""))
-                        ec4, ec5   = st.columns(2)
-                        new_entry  = ec4.text_input("AVG Price",   value=t.get("entry_price",""))
-                        new_thesis = ec5.text_input("Thesis",      value=t.get("thesis",""))
+                        new_ticker = ec1.text_input("Ticker",      value=t.get("ticker",""))
+                        new_shares = ec2.text_input("Shares",      value=get_shares(t))
+                        new_entry  = ec3.text_input("AVG Price",   value=t.get("entry_price",""))
+                        ec4, ec5, ec6 = st.columns(3)
+                        new_sl     = ec4.text_input("Stop Loss",   value=t.get("stop_loss",""))
+                        new_tp     = ec5.text_input("Take Profit", value=t.get("take_profit",""))
+                        new_thesis = ec6.text_input("Thesis",      value=t.get("thesis",""))
                         if st.form_submit_button("💾 บันทึก"):
                             t.update({
+                                "ticker": new_ticker.upper().strip(),
                                 "shares": new_shares, "stop_loss": new_sl,
                                 "take_profit": new_tp, "entry_price": new_entry,
                                 "thesis": new_thesis,
