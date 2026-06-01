@@ -620,13 +620,37 @@ def page_investment(investments: list, trades: list, cash: list, disp: str, rate
             icon    = "🟢" if (pnl_thb or 0) >= 0 else "🔴"
 
             with st.expander(f"{icon} {inv['ticker']} · {fmt_pct(pnl_pct)} · {fmt_money(pnl_thb, disp, rate)}"):
-                ca, _, cc = st.columns([2, 3, 1])
+                ca, cb, _, cc = st.columns([2, 2, 2, 1])
                 if ca.button("🔒 ปิด Position", key=f"ci_{inv['id']}"):
                     st.session_state[f"close_inv_{inv['id']}"] = True
+                    st.session_state.pop(f"edit_inv_{inv['id']}", None)
+                if cb.button("✏️ แก้ไข", key=f"ei_{inv['id']}"):
+                    st.session_state[f"edit_inv_{inv['id']}"] = True
+                    st.session_state.pop(f"close_inv_{inv['id']}", None)
                 if cc.button("🗑️", key=f"di_{inv['id']}"):
                     investments[:] = [x for x in investments if x["id"] != inv["id"]]
                     save_investments(investments)
                     st.rerun()
+
+                if st.session_state.get(f"edit_inv_{inv['id']}"):
+                    st.markdown("**แก้ไข Investment**")
+                    with st.form(f"form_edit_inv_{inv['id']}"):
+                        ei1, ei2, ei3 = st.columns(3)
+                        new_ticker = ei1.text_input("Ticker",       value=inv.get("ticker",""))
+                        new_shares = ei2.text_input("จำนวนหุ้น",    value=get_shares(inv))
+                        new_entry  = ei3.text_input("Entry Price",  value=inv.get("entry_price",""))
+                        new_thesis = st.text_input("Thesis",        value=inv.get("thesis",""))
+                        if st.form_submit_button("💾 บันทึก"):
+                            inv.update({
+                                "ticker":      new_ticker.upper().strip(),
+                                "shares":      new_shares,
+                                "entry_price": new_entry,
+                                "thesis":      new_thesis,
+                            })
+                            save_investments(investments)
+                            st.session_state.pop(f"edit_inv_{inv['id']}", None)
+                            st.success("แก้ไขเรียบร้อย!")
+                            st.rerun()
 
                 if st.session_state.get(f"close_inv_{inv['id']}"):
                     with st.form(f"clf_inv_{inv['id']}"):
@@ -990,12 +1014,11 @@ def page_cash(trades: list, investments: list, cash: list, disp: str, rate: floa
                     st.caption("แก้ชื่อ / ยอด")
                     with st.form(f"edit_acc_{acc['id']}"):
                         new_name   = st.text_input("ชื่อ", value=acc["name"])
-                        new_amount = st.number_input("ยอด", value=float(acc["amount"]),
-                                                      step=1000.0 if acc["currency"] == "THB" else 100.0,
-                                                      format="%.0f" if acc["currency"] == "THB" else "%.2f")
+                        new_amount = st.text_input("ยอด", value=str(acc["amount"]),
+                                                   placeholder="เช่น 50000 หรือ 1500.50")
                         if st.form_submit_button("💾 บันทึก"):
                             acc["name"]   = new_name.strip() or acc["name"]
-                            acc["amount"] = round(new_amount, 2)
+                            acc["amount"] = round(parse(new_amount) or 0, 2)
                             save_cash(cash)
                             st.rerun()
 
@@ -1038,13 +1061,12 @@ def page_cash(trades: list, investments: list, cash: list, disp: str, rate: floa
             preset      = fc1.selectbox("แหล่ง Cash", CASH_PRESETS)
             custom_name = fc2.text_input("หรือพิมพ์ชื่อเอง", placeholder="เช่น Binance Thai")
             currency    = fc3.selectbox("สกุลเงิน", ["THB", "USD"])
-            amount      = st.number_input("ยอดเริ่มต้น", min_value=0.0,
-                                           step=1000.0 if currency == "THB" else 100.0,
-                                           format="%.0f" if currency == "THB" else "%.2f")
+            amount_str  = st.text_input("ยอดเริ่มต้น", placeholder="เช่น 50000 หรือ 1500.50")
             if st.form_submit_button("💾 บันทึก"):
                 name   = custom_name.strip() if custom_name.strip() else preset
                 new_id = max((a["id"] for a in cash), default=0) + 1
-                cash.append({"id": new_id, "name": name, "currency": currency, "amount": float(amount)})
+                cash.append({"id": new_id, "name": name, "currency": currency,
+                             "amount": round(parse(amount_str) or 0, 2)})
                 save_cash(cash)
                 st.success(f"เพิ่ม {name} ({currency}) เรียบร้อย!")
                 st.rerun()
