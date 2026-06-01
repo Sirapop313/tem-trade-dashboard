@@ -271,9 +271,9 @@ def fmt_money(val_thb: float | None, disp: str, rate: float, sign: bool = True) 
     if val_thb is None: return "—"
     if disp == "USD":
         v = val_thb / rate
-        prefix = ("+" if v >= 0 else "") if sign else ""
+        prefix = ("+" if v >= 0 else "-") if sign else ("" if v >= 0 else "-")
         return f"{prefix}${abs(v):,.2f}"
-    prefix = ("+" if val_thb >= 0 else "") if sign else ""
+    prefix = ("+" if val_thb >= 0 else "-") if sign else ("" if val_thb >= 0 else "-")
     return f"{prefix}฿{abs(val_thb):,.0f}"
 
 def to_display(val_thb: float | None, disp: str, rate: float) -> float | None:
