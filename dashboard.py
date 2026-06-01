@@ -665,7 +665,7 @@ def page_investment(investments: list, trades: list, cash: list, disp: str, rate
 
     # ── Summary ───────────────────────────────────────────────────────────────
     section("Summary")
-    total_val_thb, total_pnl_thb = 0.0, 0.0
+    total_val_thb, total_pnl_thb, total_cost_thb = 0.0, 0.0, 0.0
     best_ticker, best_pct = "—", None
 
     cash_usd_total = sum(a["amount"] for a in cash if a["currency"] == "USD")
@@ -677,6 +677,9 @@ def page_investment(investments: list, trades: list, cash: list, disp: str, rate
         ref   = str(price) if price else inv.get("entry_price")
         pos   = calc_position_thb(ref, get_shares(inv), get_currency(inv), rate)
         if pos: total_val_thb += pos
+        s_val, e_val = parse(get_shares(inv)), parse(inv.get("entry_price",""))
+        if s_val and e_val:
+            total_cost_thb += s_val * e_val * (rate if get_currency(inv) == "USD" else 1)
         if price:
             pnl = calc_pnl_thb(inv.get("entry_price"), price, get_shares(inv), get_currency(inv), rate)
             pct = calc_pnl_pct(inv.get("entry_price"), price)
@@ -685,10 +688,13 @@ def page_investment(investments: list, trades: list, cash: list, disp: str, rate
                 best_pct, best_ticker = pct, inv.get("ticker","—")
 
     total_with_cash_thb = total_val_thb + cash_total_thb
+    total_pnl_pct = total_pnl_thb / total_cost_thb * 100 if total_cost_thb else None
 
     s1, s2, s3, s4 = st.columns(4)
     s1.metric("Total Value (incl. Cash)", fmt_money(total_with_cash_thb or None, disp, rate, sign=False) if total_with_cash_thb else "No data yet")
-    s2.metric("Total P&L",     fmt_money(total_pnl_thb or None, disp, rate) if open_inv else "No holdings yet")
+    s2.metric("Total P&L",
+              fmt_money(total_pnl_thb or None, disp, rate) if open_inv else "No holdings yet",
+              delta=fmt_pct(total_pnl_pct) if total_pnl_pct is not None else None)
     s3.metric("Holdings",      len(open_inv))
     s4.metric("Best Performer", f"{best_ticker}  {fmt_pct(best_pct)}" if best_pct is not None else "—")
 
@@ -753,10 +759,17 @@ def page_investment(investments: list, trades: list, cash: list, disp: str, rate
 
         # Build display rows
         section(f"Current Holdings ({len(open_inv)})")
+        total_mv, total_pnl_disp = 0.0, 0.0
         rows = []
-        for r in raw:
+        for i, r in enumerate(raw):
             inv, price = r["inv"], r["price"]
+            mv = to_display(r["pos_thb"] or 0, disp, rate)
+            pnl_d = to_display(r["pnl_thb"] or 0, disp, rate)
+            if price:
+                total_mv   += mv
+                total_pnl_disp += pnl_d
             rows.append({
+                "#":             i + 1,
                 "Ticker":        inv.get("ticker","—"),
                 "Shares":        get_shares(inv),
                 "Avg Cost":      inv.get("entry_price","—"),
@@ -767,8 +780,21 @@ def page_investment(investments: list, trades: list, cash: list, disp: str, rate
                 "Thesis":        inv.get("thesis","—"),
             })
 
-        # Style P&L columns
-        df_inv = pd.DataFrame(rows)
+        # Total row
+        sym_p = "฿" if disp == "THB" else "$"
+        total_pnl_pct_row = total_pnl_disp / (total_mv - total_pnl_disp) * 100 if (total_mv - total_pnl_disp) else 0
+        rows.append({
+            "#":             "—",
+            "Ticker":        "📊 TOTAL",
+            "Shares":        "—",
+            "Avg Cost":      "—",
+            "Current Price": "—",
+            "Market Value":  f"{sym_p}{total_mv:,.0f}",
+            "P&L %":         fmt_pct(total_pnl_pct_row),
+            f"P&L ({sym})":  fmt_money(sum(r["pnl_thb"] for r in raw if r.get("price")), disp, rate),
+            "Thesis":        "—",
+        })
+
         pnl_cols = ["P&L %", f"P&L ({sym})"]
 
         def _color_pnl(val):
@@ -778,10 +804,22 @@ def page_investment(investments: list, trades: list, cash: list, disp: str, rate
                 return "color: #ef4444; font-weight: 600"
             return ""
 
+        def _style_total(row):
+            if row["Ticker"] == "📊 TOTAL":
+                return ["background-color: rgba(88,101,242,0.12); font-weight: 700"] * len(row)
+            return [""] * len(row)
+
+        df_inv = pd.DataFrame(rows)
         try:
-            styled = df_inv.style.map(_color_pnl, subset=pnl_cols).hide(axis="index")
+            styled = (df_inv.style
+                      .map(_color_pnl, subset=pnl_cols)
+                      .apply(_style_total, axis=1)
+                      .hide(axis="index"))
         except AttributeError:
-            styled = df_inv.style.applymap(_color_pnl, subset=pnl_cols).hide(axis="index")
+            styled = (df_inv.style
+                      .applymap(_color_pnl, subset=pnl_cols)
+                      .apply(_style_total, axis=1)
+                      .hide(axis="index"))
         st.dataframe(styled, use_container_width=True)
 
         # Position actions (ปิด/ลบ)
