@@ -331,11 +331,8 @@ def page_login():
                         st.error("กรุณากรอก Email และ Password อย่างน้อย 6 ตัว")
                     else:
                         result = sb_signup(email.strip(), password)
-                        if result and "id" in result.get("user", {}):
-                            signin = sb_signin(email.strip(), password)
-                            if signin and "access_token" in signin:
-                                st.session_state["sb_session"] = signin
-                                st.rerun()
+                        if result and ("id" in result.get("user", {}) or result.get("user") is None):
+                            st.success("✅ สมัครสมาชิกสำเร็จ! กรุณาตรวจสอบ Email เพื่อยืนยันตัวตน แล้วกลับมา Login")
                         else:
                             st.error("สมัครไม่สำเร็จ — Email อาจถูกใช้ไปแล้ว")
 
