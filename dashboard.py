@@ -770,13 +770,17 @@ def page_trade(trades: list, disp: str, rate: float):
                 st.caption(f"Thesis: {t.get('thesis','—')}")
                 st.divider()
 
-                ca, cb, _ = st.columns([2, 2, 3])
+                ca, cb, cc, _ = st.columns([2, 2, 1, 2])
                 if ca.button("🔒 ปิด Trade", key=f"btn_close_{t['id']}"):
                     st.session_state[f"show_close_{t['id']}"] = True
                     st.session_state.pop(f"show_edit_{t['id']}", None)
                 if cb.button("✏️ แก้ไข", key=f"btn_edit_{t['id']}"):
                     st.session_state[f"show_edit_{t['id']}"] = True
                     st.session_state.pop(f"show_close_{t['id']}", None)
+                if cc.button("🗑️", key=f"btn_del_{t['id']}"):
+                    trades[:] = [x for x in trades if x["id"] != t["id"]]
+                    save_trades(trades)
+                    st.rerun()
 
                 if st.session_state.get(f"show_edit_{t['id']}"):
                     st.markdown("**แก้ไข Trade**")
