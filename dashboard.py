@@ -400,7 +400,7 @@ def render_sidebar() -> str:
                 del st.session_state["sb_session"]
                 st.rerun()
         st.markdown("---")
-        page = st.radio("", ["📊 Overview", "💼 Investment", "📈 Trade", "📓 Log"],
+        page = st.radio("", ["📊 Overview", "💼 Investment", "📈 Trade", "💵 Cash", "📓 Log"],
                         label_visibility="collapsed")
         st.markdown("---")
         st.caption("Tim.fin Personal OS")
@@ -575,89 +575,13 @@ def page_investment(investments: list, trades: list, cash: list, disp: str, rate
 
     st.markdown("<div style='height:1rem'></div>", unsafe_allow_html=True)
 
-    # ── Cash ──────────────────────────────────────────────────────────────────
+    # ── Cash Summary (link to Cash page) ──────────────────────────────────────
     section("Cash")
-    mc1, mc2, mc3 = st.columns(3)
-    mc1.metric("Cash THB รวม", f"฿{cash_thb_total:,.0f}" if cash_thb_total else "฿0")
-    mc2.metric("Cash USD รวม", f"${cash_usd_total:,.2f}" if cash_usd_total else "$0")
-    mc3.metric(f"Total Cash ({disp})", fmt_money(cash_total_thb or None, disp, rate, sign=False) if cash_total_thb else ("฿0" if disp == "THB" else "$0"))
-
-    st.markdown("<div style='height:0.5rem'></div>", unsafe_allow_html=True)
-
-    # แสดง accounts
-    if cash:
-        for acc in cash:
-            amount_str = f"${acc['amount']:,.2f}" if acc["currency"] == "USD" else f"฿{acc['amount']:,.0f}"
-            color = "#ef4444" if acc["amount"] < 0 else "#e2e8f0"
-            with st.expander(f"**{acc['name']}** · {acc['currency']} · {amount_str}"):
-                ea1, ea2, ea3 = st.columns(3)
-                # แก้ชื่อ
-                with ea1:
-                    with st.form(f"rename_cash_{acc['id']}"):
-                        new_name = st.text_input("ชื่อใหม่", value=acc["name"])
-                        if st.form_submit_button("✏️ แก้ชื่อ"):
-                            acc["name"] = new_name.strip() or acc["name"]
-                            save_cash(cash)
-                            st.rerun()
-                # Reassign → รวมกับบัญชีอื่น
-                other_accs = [a for a in cash if a["id"] != acc["id"]]
-                if other_accs:
-                    with ea2:
-                        with st.form(f"reassign_cash_{acc['id']}"):
-                            target_labels = [acc_label(a) for a in other_accs]
-                            t_idx = st.selectbox("รวมเข้ากับ", range(len(other_accs)),
-                                                  format_func=lambda i: target_labels[i])
-                            if st.form_submit_button("🔀 Reassign"):
-                                target = other_accs[t_idx]
-                                # ย้ายยอดเงิน
-                                if acc["currency"] == target["currency"]:
-                                    target["amount"] = round(target["amount"] + acc["amount"], 2)
-                                else:
-                                    thb = acc["amount"] * rate if acc["currency"] == "USD" else acc["amount"]
-                                    target["amount"] = round(target["amount"] + (thb / rate if target["currency"] == "USD" else thb), 2)
-                                # อัปเดต source_account_id ใน trades + investments
-                                for t in trades:
-                                    if t.get("source_account_id") == acc["id"]:
-                                        t["source_account_id"] = target["id"]
-                                        t["source_account_name"] = target["name"]
-                                for inv in investments:
-                                    if inv.get("source_account_id") == acc["id"]:
-                                        inv["source_account_id"] = target["id"]
-                                        inv["source_account_name"] = target["name"]
-                                cash[:] = [a for a in cash if a["id"] != acc["id"]]
-                                save_cash(cash)
-                                save_trades(trades)
-                                save_investments(investments)
-                                st.success(f"ย้าย {acc['name']} เข้า {target['name']} แล้ว")
-                                st.rerun()
-                with ea3:
-                    st.markdown("<div style='height:1.8rem'></div>", unsafe_allow_html=True)
-                    if st.button("🗑️ ลบบัญชีนี้", key=f"del_cash_{acc['id']}"):
-                        cash[:] = [a for a in cash if a["id"] != acc["id"]]
-                        save_cash(cash)
-                        st.rerun()
-    else:
-        st.caption("ยังไม่มี Cash — เพิ่มได้ด้านล่าง")
-
-    st.markdown("<div style='height:0.5rem'></div>", unsafe_allow_html=True)
-
-    with st.expander("➕ เพิ่ม Cash Account"):
-        with st.form("add_cash"):
-            fc1, fc2, fc3 = st.columns(3)
-            preset = fc1.selectbox("แหล่ง Cash", CASH_PRESETS)
-            custom_name = fc1.text_input("หรือพิมพ์ชื่อเอง", placeholder="เช่น Binance Thai")
-            currency = fc2.selectbox("สกุลเงิน", ["THB", "USD"])
-            amount = fc3.number_input(
-                "จำนวน", min_value=0.0, step=1000.0 if currency == "THB" else 100.0,
-                format="%.0f" if currency == "THB" else "%.2f"
-            )
-            if st.form_submit_button("💾 บันทึก"):
-                name = custom_name.strip() if custom_name.strip() else preset
-                new_id = max((a["id"] for a in cash), default=0) + 1
-                cash.append({"id": new_id, "name": name, "currency": currency, "amount": float(amount)})
-                save_cash(cash)
-                st.success(f"เพิ่ม {name} เรียบร้อย!")
-                st.rerun()
+    cc1, cc2, cc3 = st.columns(3)
+    cc1.metric("Cash THB รวม", f"฿{cash_thb_total:,.0f}")
+    cc2.metric("Cash USD รวม", f"${cash_usd_total:,.2f}")
+    cc3.metric(f"Total Cash ({disp})", fmt_money(cash_total_thb or None, disp, rate, sign=False) if cash_total_thb else "฿0")
+    st.caption("จัดการบัญชี Cash ได้ที่หน้า 💵 Cash")
 
     st.markdown("<div style='height:1rem'></div>", unsafe_allow_html=True)
 
@@ -1031,7 +955,150 @@ def page_trade(trades: list, cash: list, disp: str, rate: float):
                     st.rerun()
 
 
-# ── Page 4: Log ───────────────────────────────────────────────────────────────
+# ── Page 4: Cash ──────────────────────────────────────────────────────────────
+def page_cash(trades: list, investments: list, cash: list, disp: str, rate: float):
+
+    # ── Summary metrics ───────────────────────────────────────────────────────
+    section("Summary")
+    cash_usd = sum(a["amount"] for a in cash if a["currency"] == "USD")
+    cash_thb = sum(a["amount"] for a in cash if a["currency"] == "THB")
+    cash_total_thb = (cash_usd * rate) + cash_thb
+
+    m1, m2, m3 = st.columns(3)
+    m1.metric("Cash THB รวม", f"฿{cash_thb:,.0f}")
+    m2.metric("Cash USD รวม", f"${cash_usd:,.2f}")
+    m3.metric(f"Net Cash ({disp})", fmt_money(cash_total_thb, disp, rate, sign=False) if cash else "฿0")
+
+    st.markdown("<div style='height:1rem'></div>", unsafe_allow_html=True)
+
+    # ── Account list ──────────────────────────────────────────────────────────
+    section(f"บัญชี Cash ({len(cash)})")
+    if not cash:
+        st.info("ยังไม่มีบัญชี Cash — เพิ่มได้ด้านล่าง")
+    else:
+        for acc in cash:
+            amount_str = f"${acc['amount']:,.2f}" if acc["currency"] == "USD" else f"฿{acc['amount']:,.0f}"
+            color = "🔴" if acc["amount"] < 0 else "🟢"
+            with st.expander(f"{color} **{acc['name']}** · {acc['currency']} · {amount_str}"):
+                col_r, col_a, col_d = st.columns(3)
+
+                with col_r:
+                    st.caption("แก้ชื่อ / ยอด")
+                    with st.form(f"edit_acc_{acc['id']}"):
+                        new_name   = st.text_input("ชื่อ", value=acc["name"])
+                        new_amount = st.number_input("ยอด", value=float(acc["amount"]),
+                                                      step=1000.0 if acc["currency"] == "THB" else 100.0,
+                                                      format="%.0f" if acc["currency"] == "THB" else "%.2f")
+                        if st.form_submit_button("💾 บันทึก"):
+                            acc["name"]   = new_name.strip() or acc["name"]
+                            acc["amount"] = round(new_amount, 2)
+                            save_cash(cash)
+                            st.rerun()
+
+                other_accs = [a for a in cash if a["id"] != acc["id"]]
+                if other_accs:
+                    with col_a:
+                        st.caption("🔀 Reassign → รวมกับบัญชีอื่น")
+                        with st.form(f"reassign_{acc['id']}"):
+                            t_idx = st.selectbox("ย้ายเข้า", range(len(other_accs)),
+                                                  format_func=lambda i: acc_label(other_accs[i]))
+                            if st.form_submit_button("ยืนยัน Reassign"):
+                                target = other_accs[t_idx]
+                                amt_thb = acc["amount"] * rate if acc["currency"] == "USD" else acc["amount"]
+                                target["amount"] = round(target["amount"] + (amt_thb / rate if target["currency"] == "USD" else amt_thb), 2)
+                                for item in trades + investments:
+                                    if item.get("source_account_id") == acc["id"]:
+                                        item["source_account_id"]   = target["id"]
+                                        item["source_account_name"] = target["name"]
+                                cash[:] = [a for a in cash if a["id"] != acc["id"]]
+                                save_cash(cash)
+                                save_trades(trades)
+                                save_investments(investments)
+                                st.success(f"ย้าย '{acc['name']}' เข้า '{target['name']}' เรียบร้อย!")
+                                st.rerun()
+
+                with col_d:
+                    st.caption("ลบบัญชี")
+                    st.markdown("<div style='height:1.6rem'></div>", unsafe_allow_html=True)
+                    if st.button("🗑️ ลบ", key=f"del_acc_{acc['id']}"):
+                        cash[:] = [a for a in cash if a["id"] != acc["id"]]
+                        save_cash(cash)
+                        st.rerun()
+
+    st.markdown("<div style='height:0.5rem'></div>", unsafe_allow_html=True)
+
+    # ── Add account ───────────────────────────────────────────────────────────
+    with st.expander("➕ เพิ่มบัญชี Cash"):
+        with st.form("add_cash_page"):
+            fc1, fc2, fc3 = st.columns(3)
+            preset      = fc1.selectbox("แหล่ง Cash", CASH_PRESETS)
+            custom_name = fc2.text_input("หรือพิมพ์ชื่อเอง", placeholder="เช่น Binance Thai")
+            currency    = fc3.selectbox("สกุลเงิน", ["THB", "USD"])
+            amount      = st.number_input("ยอดเริ่มต้น", min_value=0.0,
+                                           step=1000.0 if currency == "THB" else 100.0,
+                                           format="%.0f" if currency == "THB" else "%.2f")
+            if st.form_submit_button("💾 บันทึก"):
+                name   = custom_name.strip() if custom_name.strip() else preset
+                new_id = max((a["id"] for a in cash), default=0) + 1
+                cash.append({"id": new_id, "name": name, "currency": currency, "amount": float(amount)})
+                save_cash(cash)
+                st.success(f"เพิ่ม {name} ({currency}) เรียบร้อย!")
+                st.rerun()
+
+    # ── Cash Flow History ─────────────────────────────────────────────────────
+    st.markdown("<div style='height:1rem'></div>", unsafe_allow_html=True)
+    section("Cash Flow History")
+
+    flows = []
+    for t in trades:
+        src = t.get("source_account_name") or t.get("source_account_id") or "—"
+        pos = calc_position_thb(t.get("entry_price"), get_shares(t), get_currency(t), rate)
+        flows.append({
+            "วันที่":   t.get("open_date","—"),
+            "ประเภท":  "เปิด Trade",
+            "Ticker":  t.get("ticker","—"),
+            "บัญชี":   src,
+            "Flow":    fmt_money(-(pos or 0), disp, rate),
+        })
+        if t.get("status") == "closed" and t.get("exit_price"):
+            ep = parse(t.get("exit_price",""))
+            exit_thb = parse(get_shares(t)) * (ep or 0) * (rate if get_currency(t) == "USD" else 1)
+            flows.append({
+                "วันที่":   t.get("close_date","—"),
+                "ประเภท":  "ปิด Trade",
+                "Ticker":  t.get("ticker","—"),
+                "บัญชี":   src,
+                "Flow":    fmt_money(exit_thb, disp, rate),
+            })
+    for inv in investments:
+        src = inv.get("source_account_name") or inv.get("source_account_id") or "—"
+        pos = calc_position_thb(inv.get("entry_price"), get_shares(inv), get_currency(inv), rate)
+        flows.append({
+            "วันที่":   inv.get("entry_date","—"),
+            "ประเภท":  "ซื้อ Investment",
+            "Ticker":  inv.get("ticker","—"),
+            "บัญชี":   src,
+            "Flow":    fmt_money(-(pos or 0), disp, rate),
+        })
+        if inv.get("status") == "closed" and inv.get("exit_price"):
+            ep = parse(inv.get("exit_price",""))
+            exit_thb = parse(get_shares(inv)) * (ep or 0) * (rate if get_currency(inv) == "USD" else 1)
+            flows.append({
+                "วันที่":   inv.get("exit_date","—"),
+                "ประเภท":  "ขาย Investment",
+                "Ticker":  inv.get("ticker","—"),
+                "บัญชี":   src,
+                "Flow":    fmt_money(exit_thb, disp, rate),
+            })
+
+    if flows:
+        flows.sort(key=lambda x: x["วันที่"], reverse=True)
+        st.dataframe(flows, use_container_width=True, hide_index=True)
+    else:
+        st.caption("ยังไม่มีรายการ — จะแสดงเมื่อมี trade/investment ที่เลือก source account")
+
+
+# ── Page 5: Log ───────────────────────────────────────────────────────────────
 def page_log(trades: list, investments: list, disp: str, rate: float):
     sym = "฿" if disp == "THB" else "$"
 
@@ -1104,6 +1171,7 @@ def main():
         "📊 Overview":   "How is my portfolio doing?",
         "💼 Investment": "What do I currently own?",
         "📈 Trade":      "How am I performing as a trader?",
+        "💵 Cash":       "บัญชีเงินสดและ Cash Flow",
         "📓 Log":        "What happened historically?",
     }
     disp, rate = page_header(
@@ -1114,6 +1182,7 @@ def main():
     if   page == "📊 Overview":   page_overview(trades, investments, cash, disp, rate)
     elif page == "💼 Investment": page_investment(investments, trades, cash, disp, rate)
     elif page == "📈 Trade":      page_trade(trades, cash, disp, rate)
+    elif page == "💵 Cash":       page_cash(trades, investments, cash, disp, rate)
     elif page == "📓 Log":        page_log(trades, investments, disp, rate)
 
 
