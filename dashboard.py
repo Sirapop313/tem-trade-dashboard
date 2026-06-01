@@ -294,6 +294,91 @@ CHART_LAYOUT = dict(
                zerolinecolor="rgba(255,255,255,0.15)"),
 )
 
+def allocation_pie(labels, vals_thb, disp, rate, title, height=320):
+    vals = [to_display(v, disp, rate) for v in vals_thb]
+    total = sum(v for v in vals if v)
+    colors = ["#5865f2","#22c55e","#f59e0b","#ef4444","#06b6d4",
+              "#a855f7","#ec4899","#84cc16","#f97316","#14b8a6"]
+    fig = go.Figure(go.Pie(
+        labels=labels, values=vals, hole=0.45,
+        textinfo="label+percent", textfont=dict(size=12, color="#e2e8f0"),
+        marker=dict(colors=colors[:len(labels)],
+                    line=dict(color="rgba(0,0,0,0.3)", width=1)),
+    ))
+    sym = "฿" if disp == "THB" else "$"
+    fig.update_layout(**{**CHART_LAYOUT,
+        "title": dict(text=title, font=dict(size=14, color="#94a3b8"), x=0),
+        "height": height, "showlegend": True,
+        "legend": dict(font=dict(color="#94a3b8", size=11), orientation="v"),
+        "annotations": [dict(text=f"{sym}{total:,.0f}", x=0.5, y=0.5,
+                              font=dict(size=15, color="#e2e8f0"), showarrow=False)],
+    })
+    return fig
+
+@st.cache_data(ttl=300, show_spinner=False)
+def get_history(ticker: str, period: str, interval: str):
+    try:
+        import yfinance as yf
+        import pandas as pd
+        df = yf.Ticker(ticker).history(period=period, interval=interval)
+        return df["Close"] if not df.empty else None
+    except Exception:
+        return None
+
+def portfolio_line_chart(open_items: list, cash_thb: float, rate: float,
+                         disp: str, period_label: str, height=300):
+    import pandas as pd
+    period_map = {"1D": ("1d","1h"), "1W": ("5d","1d"),
+                  "1M": ("1mo","1d"), "1Y": ("1y","1wk")}
+    period, interval = period_map.get(period_label, ("1mo","1d"))
+
+    histories = {}
+    for item in open_items:
+        t = item.get("ticker","")
+        if t and t not in histories:
+            h = get_history(t, period, interval)
+            if h is not None:
+                histories[t] = h
+
+    if not histories:
+        return None
+
+    combined = pd.DataFrame(histories).ffill().bfill()
+    if combined.empty:
+        return None
+
+    port_vals = []
+    for dt, row in combined.iterrows():
+        v = cash_thb
+        for item in open_items:
+            t = item.get("ticker","")
+            if t in row.index and pd.notna(row[t]):
+                s = parse(get_shares(item)) or 0
+                v += s * row[t] * (rate if get_currency(item) == "USD" else 1)
+        port_vals.append(to_display(v, disp, rate))
+
+    dates = list(combined.index)
+    pct = (port_vals[-1] - port_vals[0]) / port_vals[0] * 100 if port_vals[0] else 0
+    color_pct = "#22c55e" if pct >= 0 else "#ef4444"
+    sym = "฿" if disp == "THB" else "$"
+    sign = "+" if pct >= 0 else ""
+
+    fig = go.Figure(go.Scatter(
+        x=dates, y=port_vals, mode="lines",
+        line=dict(color="#5865f2", width=2.5),
+        fill="tozeroy", fillcolor="rgba(88,101,242,0.08)",
+    ))
+    fig.update_layout(**{**CHART_LAYOUT,
+        "title": dict(
+            text=f"Portfolio Value  "
+                 f"<span style='color:{color_pct};font-size:14px'>{sign}{pct:.2f}%</span>",
+            font=dict(size=14, color="#94a3b8"), x=0),
+        "yaxis_title": f"Value ({sym})", "height": height,
+        "yaxis_tickformat": ",.0f",
+        "xaxis": dict(showgrid=False, tickfont=dict(size=11, color="#94a3b8")),
+    })
+    return fig
+
 def pnl_bar_chart(labels, vals_thb, disp, rate, title, height=280):
     vals   = [to_display(v, disp, rate) for v in vals_thb]
     texts  = [fmt_money(v, disp, rate) for v in vals_thb]
@@ -456,7 +541,41 @@ def page_overview(trades: list, investments: list, cash: dict, disp: str, rate: 
 
     st.markdown("<div style='height:1.5rem'></div>", unsafe_allow_html=True)
 
-    # ── Chart + Snapshot ──────────────────────────────────────────────────────
+    # ── Allocation Pie + Portfolio Line ───────────────────────────────────────
+    open_all = open_trades + open_inv
+    if open_all or cash_thb > 0:
+        section("Portfolio Breakdown")
+        col_pie, col_line = st.columns([4, 6])
+
+        with col_pie:
+            pie_labels, pie_vals = [], []
+            for item in open_all:
+                price = get_price(item.get("ticker",""))
+                ref   = str(price) if price else item.get("entry_price")
+                pos   = calc_position_thb(ref, get_shares(item), get_currency(item), rate)
+                if pos:
+                    pie_labels.append(item.get("ticker","?"))
+                    pie_vals.append(pos)
+            if cash_thb > 0:
+                pie_labels.append("💵 Cash")
+                pie_vals.append(cash_thb)
+            if pie_labels:
+                st.plotly_chart(allocation_pie(pie_labels, pie_vals, disp, rate,
+                                               "Asset Allocation", height=320),
+                                use_container_width=True)
+
+        with col_line:
+            period = st.radio("", ["1D","1W","1M","1Y"], horizontal=True,
+                               key="port_period", index=2)
+            fig_line = portfolio_line_chart(open_all, cash_thb, rate, disp, period)
+            if fig_line:
+                st.plotly_chart(fig_line, use_container_width=True)
+            else:
+                st.info("ไม่มีข้อมูลราคาย้อนหลัง")
+
+        st.markdown("<div style='height:0.5rem'></div>", unsafe_allow_html=True)
+
+    # ── P&L Charts + Snapshot ─────────────────────────────────────────────────
     section("Performance")
     col_chart, col_snap = st.columns([7, 3])
 
@@ -465,14 +584,14 @@ def page_overview(trades: list, investments: list, cash: dict, disp: str, rate: 
             st.plotly_chart(
                 pnl_bar_chart([d["label"] for d in unreal_items],
                               [d["pnl_thb"] for d in unreal_items],
-                              disp, rate, "Unrealized P&L by Position", height=300),
+                              disp, rate, "Unrealized P&L by Position", height=280),
                 use_container_width=True)
         closed_with_pnl = [t for t in closed_trades if t.get("pnl_thb") is not None]
         if closed_with_pnl:
             st.plotly_chart(
                 pnl_bar_chart([t["ticker"] for t in closed_with_pnl],
                               [t["pnl_thb"] for t in closed_with_pnl],
-                              disp, rate, "Realized P&L — Trade History", height=260),
+                              disp, rate, "Realized P&L — Trade History", height=240),
                 use_container_width=True)
         if not unreal_items and not closed_with_pnl:
             st.info("เพิ่ม Trade หรือ Investment เพื่อดู chart")
@@ -589,8 +708,9 @@ def page_investment(investments: list, trades: list, cash: list, disp: str, rate
     if not open_inv:
         st.info("ยังไม่มี Investment — เพิ่มได้ด้านล่าง")
     else:
-        section(f"Current Holdings ({len(open_inv)})")
-        rows = []
+        # Build raw data first (for sorting)
+        raw = []
+        pie_labels_inv, pie_vals_inv = [], []
         for inv in open_inv:
             price   = get_price(inv.get("ticker",""))
             pnl_thb = calc_pnl_thb(inv.get("entry_price"), price, get_shares(inv),
@@ -598,17 +718,68 @@ def page_investment(investments: list, trades: list, cash: list, disp: str, rate
             pnl_pct = calc_pnl_pct(inv.get("entry_price"), price) if price else None
             ref     = str(price) if price else inv.get("entry_price")
             pos_thb = calc_position_thb(ref, get_shares(inv), get_currency(inv), rate)
+            if pos_thb:
+                pie_labels_inv.append(inv.get("ticker","?"))
+                pie_vals_inv.append(pos_thb)
+            raw.append({
+                "inv": inv, "price": price,
+                "pnl_thb": pnl_thb or 0, "pnl_pct": pnl_pct or 0,
+                "pos_thb": pos_thb or 0,
+            })
+
+        # Pie chart + Sort selector
+        col_pie_inv, col_sort_inv = st.columns([4, 6])
+        with col_pie_inv:
+            if pie_labels_inv:
+                st.plotly_chart(allocation_pie(pie_labels_inv, pie_vals_inv, disp, rate,
+                                               "Holdings Allocation", height=280),
+                                use_container_width=True)
+        with col_sort_inv:
+            sort_by = st.selectbox("เรียงตาม", [
+                "📊 Size (ใหญ่ → เล็ก)",
+                "📈 Gain (มาก → น้อย)",
+                "📉 Loss (มาก → น้อย)",
+                "🔤 Ticker (A → Z)",
+                f"💰 P&L {sym} (มาก → น้อย)",
+            ], key="inv_sort")
+            sort_fns = {
+                "📊 Size (ใหญ่ → เล็ก)":    lambda r: -r["pos_thb"],
+                "📈 Gain (มาก → น้อย)":      lambda r: -r["pnl_pct"],
+                "📉 Loss (มาก → น้อย)":      lambda r:  r["pnl_pct"],
+                "🔤 Ticker (A → Z)":          lambda r:  r["inv"].get("ticker",""),
+                f"💰 P&L {sym} (มาก → น้อย)": lambda r: -r["pnl_thb"],
+            }
+            raw.sort(key=sort_fns.get(sort_by, lambda r: -r["pos_thb"]))
+
+        # Build display rows
+        section(f"Current Holdings ({len(open_inv)})")
+        rows = []
+        for r in raw:
+            inv, price = r["inv"], r["price"]
             rows.append({
                 "Ticker":        inv.get("ticker","—"),
                 "Shares":        get_shares(inv),
                 "Avg Cost":      inv.get("entry_price","—"),
                 "Current Price": f"{price:.2f}" if price else "—",
-                "Market Value":  fmt_money(pos_thb, disp, rate, sign=False),
-                "P&L %":         fmt_pct(pnl_pct),
-                f"P&L ({sym})":  fmt_money(pnl_thb, disp, rate),
+                "Market Value":  fmt_money(r["pos_thb"] or None, disp, rate, sign=False),
+                "P&L %":         fmt_pct(r["pnl_pct"]) if price else "—",
+                f"P&L ({sym})":  fmt_money(r["pnl_thb"] or None, disp, rate) if price else "—",
                 "Thesis":        inv.get("thesis","—"),
             })
-        st.dataframe(rows, use_container_width=True, hide_index=True)
+
+        # Style P&L columns
+        df_inv = pd.DataFrame(rows)
+        pnl_cols = ["P&L %", f"P&L ({sym})"]
+
+        def _color_pnl(val):
+            if isinstance(val, str) and val.startswith("+"):
+                return "color: #22c55e; font-weight: 600"
+            if isinstance(val, str) and val.startswith("-"):
+                return "color: #ef4444; font-weight: 600"
+            return ""
+
+        styled = df_inv.style.applymap(_color_pnl, subset=pnl_cols).hide(axis="index")
+        st.dataframe(styled, use_container_width=True)
 
         # Position actions (ปิด/ลบ)
         section("Position Actions")
