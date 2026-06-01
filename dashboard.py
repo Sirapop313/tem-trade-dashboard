@@ -93,9 +93,11 @@ def _sb_load(table: str) -> list:
 
 def _sb_save(table: str, items: list) -> None:
     user_id = st.session_state.get("sb_session", {}).get("user", {}).get("id")
+    if not user_id:
+        return
     base, h = _sb_base(table), _sb_headers()
-    _req.delete(base, headers=h)
-    if items and user_id:
+    _req.delete(f"{base}?user_id=eq.{user_id}", headers=h)
+    if items:
         _req.post(base, headers={**h, "Prefer": "return=minimal"},
                   json=[{"data": item, "user_id": user_id} for item in items])
 
@@ -820,6 +822,8 @@ def page_trade(trades: list, disp: str, rate: float):
 
     # ── Analytics ─────────────────────────────────────────────────────────────
     closed_with_pnl = [t for t in closed_trades if t.get("pnl_thb") is not None]
+    if not closed_with_pnl and open_trades:
+        st.info("📊 กราฟ Analytics จะขึ้นหลังจากปิด Trade แรก")
     if closed_with_pnl:
         section("Analytics")
         col_wl, col_strat = st.columns(2)
