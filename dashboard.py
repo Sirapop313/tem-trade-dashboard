@@ -778,7 +778,10 @@ def page_investment(investments: list, trades: list, cash: list, disp: str, rate
                 return "color: #ef4444; font-weight: 600"
             return ""
 
-        styled = df_inv.style.applymap(_color_pnl, subset=pnl_cols).hide(axis="index")
+        try:
+            styled = df_inv.style.map(_color_pnl, subset=pnl_cols).hide(axis="index")
+        except AttributeError:
+            styled = df_inv.style.applymap(_color_pnl, subset=pnl_cols).hide(axis="index")
         st.dataframe(styled, use_container_width=True)
 
         # Position actions (ปิด/ลบ)
