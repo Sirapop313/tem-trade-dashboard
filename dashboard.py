@@ -89,7 +89,14 @@ def _sb_base(table: str) -> str:
 def _sb_load(table: str) -> list:
     r = _req.get(f"{_sb_base(table)}?select=data", headers=_sb_headers())
     r.raise_for_status()
-    return [row["data"] for row in r.json()]
+    rows = [row["data"] for row in r.json()]
+    seen, deduped = set(), []
+    for row in rows:
+        rid = row.get("id")
+        if rid not in seen:
+            seen.add(rid)
+            deduped.append(row)
+    return deduped
 
 def _sb_save(table: str, items: list) -> None:
     user_id = st.session_state.get("sb_session", {}).get("user", {}).get("id")
