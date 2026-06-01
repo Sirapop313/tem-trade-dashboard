@@ -66,20 +66,25 @@ def _save(path: str, data: list) -> None:
     with open(path, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
 
-# ── Supabase helpers ──────────────────────────────────────────────────────────
+# ── Supabase + Auth ───────────────────────────────────────────────────────────
 def _use_sb() -> bool:
     try: return bool(st.secrets.get("SUPABASE_URL"))
     except Exception: return False
 
+def _sb_url() -> str:
+    return st.secrets["SUPABASE_URL"].rstrip("/")
+
 def _sb_headers() -> dict:
     key = st.secrets["SUPABASE_KEY"]
+    session = st.session_state.get("sb_session")
+    token = session["access_token"] if session else key
     return {
-        "apikey": key, "Authorization": f"Bearer {key}",
+        "apikey": key, "Authorization": f"Bearer {token}",
         "Content-Type": "application/json", "Prefer": "return=minimal",
     }
 
 def _sb_base(table: str) -> str:
-    return st.secrets["SUPABASE_URL"].rstrip("/") + f"/rest/v1/{table}"
+    return _sb_url() + f"/rest/v1/{table}"
 
 def _sb_load(table: str) -> list:
     r = _req.get(f"{_sb_base(table)}?select=data", headers=_sb_headers())
@@ -87,11 +92,27 @@ def _sb_load(table: str) -> list:
     return [row["data"] for row in r.json()]
 
 def _sb_save(table: str, items: list) -> None:
+    user_id = st.session_state.get("sb_session", {}).get("user", {}).get("id")
     base, h = _sb_base(table), _sb_headers()
     _req.delete(base, headers=h)
-    if items:
+    if items and user_id:
         _req.post(base, headers={**h, "Prefer": "return=minimal"},
-                  json=[{"data": item} for item in items])
+                  json=[{"data": item, "user_id": user_id} for item in items])
+
+def sb_signin(email: str, password: str) -> dict | None:
+    r = _req.post(f"{_sb_url()}/auth/v1/token?grant_type=password",
+                  headers={"apikey": st.secrets["SUPABASE_KEY"], "Content-Type": "application/json"},
+                  json={"email": email, "password": password})
+    return r.json() if r.status_code == 200 else None
+
+def sb_signup(email: str, password: str) -> dict | None:
+    r = _req.post(f"{_sb_url()}/auth/v1/signup",
+                  headers={"apikey": st.secrets["SUPABASE_KEY"], "Content-Type": "application/json"},
+                  json={"email": email, "password": password})
+    return r.json() if r.status_code in (200, 201) else None
+
+def is_logged_in() -> bool:
+    return "sb_session" in st.session_state
 
 # ── Public load/save ──────────────────────────────────────────────────────────
 def load_trades() -> list:
@@ -276,10 +297,59 @@ def page_header(title: str, subtitle: str = "") -> tuple[str, float]:
     return disp, rate
 
 
-# ── Sidebar — navigation only ─────────────────────────────────────────────────
+# ── Login Page ────────────────────────────────────────────────────────────────
+def page_login():
+    col = st.columns([1, 2, 1])[1]
+    with col:
+        st.markdown("<div style='height:3rem'></div>", unsafe_allow_html=True)
+        st.markdown("## 📊 Tim.fin OS")
+        st.markdown("ระบบติดตาม Portfolio ส่วนตัว")
+        st.markdown("---")
+        tab_in, tab_up = st.tabs(["เข้าสู่ระบบ", "สมัครสมาชิก"])
+
+        with tab_in:
+            with st.form("login_form"):
+                email    = st.text_input("Email")
+                password = st.text_input("Password", type="password")
+                if st.form_submit_button("เข้าสู่ระบบ", use_container_width=True):
+                    if not email or not password:
+                        st.error("กรุณากรอก Email และ Password")
+                    else:
+                        result = sb_signin(email.strip(), password)
+                        if result and "access_token" in result:
+                            st.session_state["sb_session"] = result
+                            st.rerun()
+                        else:
+                            st.error("Email หรือ Password ไม่ถูกต้อง")
+
+        with tab_up:
+            with st.form("signup_form"):
+                email    = st.text_input("Email")
+                password = st.text_input("Password (อย่างน้อย 6 ตัวอักษร)", type="password")
+                if st.form_submit_button("สมัครสมาชิก", use_container_width=True):
+                    if not email or len(password) < 6:
+                        st.error("กรุณากรอก Email และ Password อย่างน้อย 6 ตัว")
+                    else:
+                        result = sb_signup(email.strip(), password)
+                        if result and "id" in result.get("user", {}):
+                            signin = sb_signin(email.strip(), password)
+                            if signin and "access_token" in signin:
+                                st.session_state["sb_session"] = signin
+                                st.rerun()
+                        else:
+                            st.error("สมัครไม่สำเร็จ — Email อาจถูกใช้ไปแล้ว")
+
+
+# ── Sidebar ───────────────────────────────────────────────────────────────────
 def render_sidebar() -> str:
     with st.sidebar:
         st.markdown("### 📊 Tim.fin OS")
+        if is_logged_in():
+            email = st.session_state["sb_session"]["user"]["email"]
+            st.caption(f"👤 {email}")
+            if st.button("ออกจากระบบ", use_container_width=True):
+                del st.session_state["sb_session"]
+                st.rerun()
         st.markdown("---")
         page = st.radio("", ["📊 Overview", "💼 Investment", "📈 Trade", "📓 Log"],
                         label_visibility="collapsed")
@@ -896,6 +966,10 @@ def page_log(trades: list, investments: list, disp: str, rate: float):
 
 # ── Main ──────────────────────────────────────────────────────────────────────
 def main():
+    if _use_sb() and not is_logged_in():
+        page_login()
+        return
+
     trades      = load_trades()
     investments = load_investments()
     cash        = load_cash()
