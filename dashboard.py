@@ -16,6 +16,7 @@ st.set_page_config(page_title="Tim.fin OS", page_icon="📊", layout="wide")
 DIR = os.path.dirname(os.path.abspath(__file__))
 TRADES_FILE      = os.path.join(DIR, "trades.json")
 INVESTMENTS_FILE = os.path.join(DIR, "investments.json")
+CASH_FILE        = os.path.join(DIR, "cash.json")
 STRATEGY_PRESETS = ["Breakout", "Swing", "Buy on dip", "Others"]
 
 # ── CSS ───────────────────────────────────────────────────────────────────────
@@ -68,6 +69,16 @@ def load_trades() -> list:       return _load(TRADES_FILE)
 def save_trades(d: list):        _save(TRADES_FILE, d)
 def load_investments() -> list:  return _load(INVESTMENTS_FILE)
 def save_investments(d: list):   _save(INVESTMENTS_FILE, d)
+
+def load_cash() -> dict:
+    if not os.path.exists(CASH_FILE):
+        return {"usd": 0.0, "thb": 0.0}
+    with open(CASH_FILE, encoding="utf-8") as f:
+        return json.load(f)
+
+def save_cash(cash: dict) -> None:
+    with open(CASH_FILE, "w", encoding="utf-8") as f:
+        json.dump(cash, f, ensure_ascii=False, indent=2)
 
 
 # ── Live Prices ───────────────────────────────────────────────────────────────
@@ -223,14 +234,15 @@ def render_sidebar() -> str:
 
 
 # ── Page 1: Overview ──────────────────────────────────────────────────────────
-def page_overview(trades: list, investments: list, disp: str, rate: float):
+def page_overview(trades: list, investments: list, cash: dict, disp: str, rate: float):
     open_trades   = [t for t in trades      if t.get("status") == "open"]
     closed_trades = [t for t in trades      if t.get("status") == "closed"]
     open_inv      = [i for i in investments if i.get("status") == "open"]
     wins          = [t for t in closed_trades if t.get("win_loss") == "Win"]
 
-    # Portfolio Value = sum ของ market value ทุก position ที่เปิดอยู่
-    port_thb = 0.0
+    # Portfolio Value = positions + cash
+    cash_thb = (cash.get("usd", 0.0) * rate) + cash.get("thb", 0.0)
+    port_thb = cash_thb
     for item in open_trades + open_inv:
         price = get_price(item.get("ticker",""))
         ref   = str(price) if price else item.get("entry_price")
@@ -353,7 +365,7 @@ def page_overview(trades: list, investments: list, disp: str, rate: float):
 
 
 # ── Page 2: Investment ────────────────────────────────────────────────────────
-def page_investment(investments: list, disp: str, rate: float):
+def page_investment(investments: list, cash: dict, disp: str, rate: float):
     open_inv   = [i for i in investments if i.get("status") == "open"]
     closed_inv = [i for i in investments if i.get("status") == "closed"]
     sym = "฿" if disp == "THB" else "$"
@@ -362,6 +374,10 @@ def page_investment(investments: list, disp: str, rate: float):
     section("Summary")
     total_val_thb, total_pnl_thb = 0.0, 0.0
     best_ticker, best_pct = "—", None
+
+    cash_usd = cash.get("usd", 0.0)
+    cash_thb = cash.get("thb", 0.0)
+    cash_total_thb = (cash_usd * rate) + cash_thb
 
     for inv in open_inv:
         price = get_price(inv.get("ticker",""))
@@ -375,11 +391,37 @@ def page_investment(investments: list, disp: str, rate: float):
             if pct is not None and (best_pct is None or pct > best_pct):
                 best_pct, best_ticker = pct, inv.get("ticker","—")
 
+    total_with_cash_thb = total_val_thb + cash_total_thb
+
     s1, s2, s3, s4 = st.columns(4)
-    s1.metric("Total Value",    fmt_money(total_val_thb or None, disp, rate, sign=False) if total_val_thb else "No data yet")
+    s1.metric("Total Value (incl. Cash)", fmt_money(total_with_cash_thb or None, disp, rate, sign=False) if total_with_cash_thb else "No data yet")
     s2.metric("Total P&L",     fmt_money(total_pnl_thb or None, disp, rate) if open_inv else "No holdings yet")
     s3.metric("Holdings",      len(open_inv))
     s4.metric("Best Performer", f"{best_ticker}  {fmt_pct(best_pct)}" if best_pct is not None else "—")
+
+    st.markdown("<div style='height:1rem'></div>", unsafe_allow_html=True)
+
+    # ── Cash ──────────────────────────────────────────────────────────────────
+    section("Cash")
+    cash_display_thb = fmt_money(cash_thb or None, "THB", rate, sign=False) if cash_thb else "฿0"
+    cash_display_usd = fmt_money(cash_usd * rate or None, "USD", rate, sign=False) if cash_usd else "$0"
+    cash_display_total = fmt_money(cash_total_thb or None, disp, rate, sign=False) if cash_total_thb else ("฿0" if disp == "THB" else "$0")
+
+    cc1, cc2, cc3, cc4 = st.columns([2, 2, 2, 3])
+    cc1.metric("Cash (THB)", f"฿{cash_thb:,.0f}" if cash_thb else "฿0")
+    cc2.metric("Cash (USD)", f"${cash_usd:,.2f}" if cash_usd else "$0")
+    cc3.metric(f"Total Cash ({disp})", cash_display_total)
+
+    with cc4:
+        with st.expander("✏️ แก้ไข Cash"):
+            with st.form("edit_cash"):
+                ec1, ec2 = st.columns(2)
+                new_thb = ec1.number_input("THB (บาท)", min_value=0.0, value=float(cash_thb), step=1000.0, format="%.0f")
+                new_usd = ec2.number_input("USD (ดอลลาร์)", min_value=0.0, value=float(cash_usd), step=100.0, format="%.2f")
+                if st.form_submit_button("💾 บันทึก"):
+                    save_cash({"usd": new_usd, "thb": new_thb})
+                    st.success("อัปเดต Cash เรียบร้อย!")
+                    st.rerun()
 
     st.markdown("<div style='height:1rem'></div>", unsafe_allow_html=True)
 
@@ -778,6 +820,7 @@ def page_log(trades: list, investments: list, disp: str, rate: float):
 def main():
     trades      = load_trades()
     investments = load_investments()
+    cash        = load_cash()
     page        = render_sidebar()
 
     subtitles = {
@@ -791,8 +834,8 @@ def main():
         subtitle = subtitles.get(page, ""),
     )
 
-    if   page == "📊 Overview":   page_overview(trades, investments, disp, rate)
-    elif page == "💼 Investment": page_investment(investments, disp, rate)
+    if   page == "📊 Overview":   page_overview(trades, investments, cash, disp, rate)
+    elif page == "💼 Investment": page_investment(investments, cash, disp, rate)
     elif page == "📈 Trade":      page_trade(trades, disp, rate)
     elif page == "📓 Log":        page_log(trades, investments, disp, rate)
 
