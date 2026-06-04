@@ -906,7 +906,7 @@ def page_investment(investments: list, trades: list, cash: list, disp: str, rate
                     st.markdown("**🔴 ขาย**")
                     s_current = parse(get_shares(inv)) or 0
                     st.caption(f"ถืออยู่ {s_current} หุ้น · AVG {inv.get('entry_price','—')} · ใส่ครบ = ปิด position")
-                    with st.form(f"sell_inv_{inv['id']}"):
+                    with st.form(f"form_sell_inv_{inv['id']}"):
                         sv1, sv2, sv3 = st.columns(3)
                         sell_shares = sv1.text_input("จำนวนที่ขาย *", placeholder=f"สูงสุด {s_current}")
                         exit_p      = sv2.text_input("ราคาที่ขาย *", placeholder="เช่น 420")
