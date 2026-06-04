@@ -834,18 +834,18 @@ def page_investment(investments: list, trades: list, cash: list, disp: str, rate
             inv_label = f"{icon} {inv['ticker']} · {fmt_pct(pnl_pct)} · {fmt_money(pnl_thb, disp, rate)}"
             with st.expander(inv_label.replace("$", r"\$")):
                 ca, cb, cc, _, cd = st.columns([2, 2, 2, 1, 1])
-                if ca.button("🔒 ปิด Position", key=f"ci_{inv['id']}"):
-                    st.session_state[f"close_inv_{inv['id']}"] = True
+                if ca.button("🔴 ขาย", key=f"ci_{inv['id']}"):
+                    st.session_state[f"sell_inv_{inv['id']}"] = True
                     st.session_state.pop(f"edit_inv_{inv['id']}", None)
                     st.session_state.pop(f"add_inv_{inv['id']}", None)
                 if cb.button("✏️ แก้ไข", key=f"ei_{inv['id']}"):
                     st.session_state[f"edit_inv_{inv['id']}"] = True
-                    st.session_state.pop(f"close_inv_{inv['id']}", None)
+                    st.session_state.pop(f"sell_inv_{inv['id']}", None)
                     st.session_state.pop(f"add_inv_{inv['id']}", None)
                 if cc.button("➕ ซื้อเพิ่ม", key=f"ai_{inv['id']}"):
                     st.session_state[f"add_inv_{inv['id']}"] = True
                     st.session_state.pop(f"edit_inv_{inv['id']}", None)
-                    st.session_state.pop(f"close_inv_{inv['id']}", None)
+                    st.session_state.pop(f"sell_inv_{inv['id']}", None)
                 if cd.button("🗑️", key=f"di_{inv['id']}"):
                     investments[:] = [x for x in investments if x["id"] != inv["id"]]
                     save_investments(investments)
@@ -902,28 +902,60 @@ def page_investment(investments: list, trades: list, cash: list, disp: str, rate
                             st.success("แก้ไขเรียบร้อย!")
                             st.rerun()
 
-                if st.session_state.get(f"close_inv_{inv['id']}"):
-                    with st.form(f"clf_inv_{inv['id']}"):
-                        cc1, cc2 = st.columns(2)
-                        exit_p = cc1.text_input("Exit Price *")
-                        exit_d = cc2.date_input("วันที่ขาย", value=date.today())
-                        if st.form_submit_button("ยืนยันปิด"):
-                            ep        = parse(exit_p)
-                            pnl_pct_v = calc_pnl_pct(inv["entry_price"], ep) if ep else None
-                            pnl_thb_v = calc_pnl_thb(inv["entry_price"], ep, get_shares(inv),
-                                                      get_currency(inv), rate) if ep else None
-                            inv.update({"status": "closed", "exit_price": exit_p,
-                                        "exit_date": str(exit_d),
-                                        "pnl_pct": pnl_pct_v, "pnl_thb": pnl_thb_v})
-                            # คืนเงิน + กำไรกลับ cash
-                            src_id = inv.get("source_account_id")
-                            if src_id and ep:
-                                exit_thb = parse(get_shares(inv)) * ep * (rate if get_currency(inv) == "USD" else 1)
-                                cash_credit(cash, src_id, exit_thb or 0, rate)
-                                save_cash(cash)
-                            save_investments(investments)
-                            st.success("ปิด Position เรียบร้อย!")
-                            st.rerun()
+                if st.session_state.get(f"sell_inv_{inv['id']}"):
+                    st.markdown("**🔴 ขาย**")
+                    s_current = parse(get_shares(inv)) or 0
+                    st.caption(f"ถืออยู่ {s_current} หุ้น · AVG {inv.get('entry_price','—')} · ใส่ครบ = ปิด position")
+                    with st.form(f"sell_inv_{inv['id']}"):
+                        sv1, sv2, sv3 = st.columns(3)
+                        sell_shares = sv1.text_input("จำนวนที่ขาย *", placeholder=f"สูงสุด {s_current}")
+                        exit_p      = sv2.text_input("ราคาที่ขาย *", placeholder="เช่น 420")
+                        exit_d      = sv3.date_input("วันที่ขาย", value=date.today())
+                        if st.form_submit_button("✅ ยืนยันขาย"):
+                            s_sell = parse(sell_shares)
+                            ep     = parse(exit_p)
+                            if not s_sell or not ep:
+                                st.error("กรุณากรอกจำนวนหุ้นและราคาที่ขาย")
+                            elif s_sell > s_current:
+                                st.error(f"ขายได้สูงสุด {s_current} หุ้น")
+                            else:
+                                src_id   = inv.get("source_account_id")
+                                currency = get_currency(inv)
+                                exit_thb = s_sell * ep * (rate if currency == "USD" else 1)
+                                if s_sell >= s_current:
+                                    pnl_pct_v = calc_pnl_pct(inv["entry_price"], ep)
+                                    pnl_thb_v = calc_pnl_thb(inv["entry_price"], ep, str(s_current), currency, rate)
+                                    inv.update({"status": "closed", "exit_price": str(ep),
+                                                "exit_date": str(exit_d),
+                                                "pnl_pct": pnl_pct_v, "pnl_thb": pnl_thb_v})
+                                    if src_id:
+                                        cash_credit(cash, src_id, exit_thb, rate)
+                                        save_cash(cash)
+                                    save_investments(investments)
+                                    st.session_state.pop(f"sell_inv_{inv['id']}", None)
+                                    st.success(f"ปิด Position ✅  P&L = {fmt_money(pnl_thb_v, disp, rate)}")
+                                else:
+                                    s_remain  = round(s_current - s_sell, 8)
+                                    pnl_thb_p = calc_pnl_thb(inv["entry_price"], ep, str(s_sell), currency, rate)
+                                    sell_hist = inv.get("sell_history", [])
+                                    sell_hist.append({
+                                        "date": str(exit_d), "shares": str(s_sell),
+                                        "price": str(ep), "thb": round(exit_thb, 2),
+                                        "pnl_thb": round(pnl_thb_p or 0, 2),
+                                    })
+                                    new_pos_thb = (inv.get("position_thb") or 0) * (s_remain / s_current)
+                                    inv.update({
+                                        "shares":       str(s_remain),
+                                        "position_thb": round(new_pos_thb, 2),
+                                        "sell_history": sell_hist,
+                                    })
+                                    if src_id:
+                                        cash_credit(cash, src_id, exit_thb, rate)
+                                        save_cash(cash)
+                                    save_investments(investments)
+                                    st.session_state.pop(f"sell_inv_{inv['id']}", None)
+                                    st.success(f"ขาย {s_sell} หุ้น @ {ep} ✅  เหลือ {s_remain} หุ้น · P&L = {fmt_money(pnl_thb_p, disp, rate)}")
+                                st.rerun()
 
     # ── Closed ────────────────────────────────────────────────────────────────
     if closed_inv:
@@ -1122,7 +1154,7 @@ def page_trade(trades: list, cash: list, disp: str, rate: float):
                 st.divider()
 
                 ca, cb, cc, _, cd = st.columns([2, 2, 2, 1, 1])
-                if ca.button("🔒 ปิด Trade", key=f"btn_close_{t['id']}"):
+                if ca.button("🔴 ขาย", key=f"btn_close_{t['id']}"):
                     st.session_state[f"show_close_{t['id']}"] = True
                     st.session_state.pop(f"show_edit_{t['id']}", None)
                     st.session_state.pop(f"show_add_{t['id']}", None)
@@ -1196,40 +1228,77 @@ def page_trade(trades: list, cash: list, disp: str, rate: float):
                             st.rerun()
 
                 if st.session_state.get(f"show_close_{t['id']}"):
-                    st.markdown("**ปิด Trade**")
+                    st.markdown("**🔴 ขาย**")
+                    s_current = parse(get_shares(t)) or 0
+                    st.caption(f"ถืออยู่ {s_current} shares · AVG {t.get('entry_price','—')} · ใส่ครบ = ปิด trade")
                     with st.form(f"form_close_{t['id']}"):
-                        cc1, cc2  = st.columns(2)
-                        exit_p    = cc1.text_input("Exit Price *")
-                        exit_d    = cc2.date_input("วันที่ปิด", value=date.today())
-                        cc3, cc4  = st.columns(2)
-                        thesis_ok = cc3.selectbox("Thesis ถูกไหม",
-                                                  ["✅ ถูก", "❌ ผิด", "⚠️ บางส่วน"])
-                        emotion   = cc4.selectbox("Emotion", ["ปกติ", "กลัว", "โลภ", "FOMO"])
-                        lesson    = st.text_input("Lesson ที่ได้")
-                        if st.form_submit_button("ยืนยันปิด"):
-                            ep        = parse(exit_p)
-                            pnl_pct_v = calc_pnl_pct(t["entry_price"], ep, t["direction"]) if ep else None
-                            pnl_thb_v = calc_pnl_thb(t["entry_price"], ep, get_shares(t),
-                                                      get_currency(t), rate, t["direction"]) if ep else None
-                            t.update({
-                                "status": "closed", "exit_price": exit_p,
-                                "close_date": str(exit_d), "thesis_correct": thesis_ok,
-                                "emotion": emotion, "lesson": lesson,
-                                "pnl_pct": pnl_pct_v, "pnl_thb": pnl_thb_v,
-                                "win_loss": "Win" if (pnl_thb_v or 0) > 0 else "Loss",
-                            })
-                            # คืนเงิน + กำไรกลับ cash
-                            src_id = t.get("source_account_id")
-                            if src_id and ep:
-                                exit_thb = parse(get_shares(t)) * ep * (rate if get_currency(t) == "USD" else 1)
-                                if t.get("direction") == "Short":
-                                    entry_thb = parse(get_shares(t)) * parse(t["entry_price"]) * (rate if get_currency(t) == "USD" else 1)
-                                    exit_thb = 2 * (entry_thb or 0) - (exit_thb or 0)
-                                cash_credit(cash, src_id, exit_thb or 0, rate)
-                                save_cash(cash)
-                            save_trades(trades)
-                            st.success(f"ปิด Trade! P&L = {fmt_money(pnl_thb_v, disp, rate)}")
-                            st.rerun()
+                        tc1, tc2, tc3 = st.columns(3)
+                        sell_shares = tc1.text_input("จำนวน Shares ที่ขาย *", placeholder=f"สูงสุด {s_current}")
+                        exit_p      = tc2.text_input("Exit Price *")
+                        exit_d      = tc3.date_input("วันที่ปิด", value=date.today())
+                        tc4, tc5    = st.columns(2)
+                        thesis_ok   = tc4.selectbox("Thesis ถูกไหม (ถ้าขายหมด)",
+                                                     ["✅ ถูก", "❌ ผิด", "⚠️ บางส่วน"])
+                        emotion     = tc5.selectbox("Emotion (ถ้าขายหมด)",
+                                                     ["ปกติ", "กลัว", "โลภ", "FOMO"])
+                        lesson      = st.text_input("Lesson ที่ได้ (ถ้าขายหมด)")
+                        if st.form_submit_button("✅ ยืนยันขาย"):
+                            s_sell = parse(sell_shares)
+                            ep     = parse(exit_p)
+                            if not s_sell or not ep:
+                                st.error("กรุณากรอกจำนวน shares และ Exit Price")
+                            elif s_sell > s_current:
+                                st.error(f"ขายได้สูงสุด {s_current} shares")
+                            else:
+                                src_id    = t.get("source_account_id")
+                                currency  = get_currency(t)
+                                direction = t.get("direction", "Long")
+                                if s_sell >= s_current:
+                                    pnl_pct_v = calc_pnl_pct(t["entry_price"], ep, direction)
+                                    pnl_thb_v = calc_pnl_thb(t["entry_price"], ep, str(s_current), currency, rate, direction)
+                                    t.update({
+                                        "status": "closed", "exit_price": str(ep),
+                                        "close_date": str(exit_d), "thesis_correct": thesis_ok,
+                                        "emotion": emotion, "lesson": lesson,
+                                        "pnl_pct": pnl_pct_v, "pnl_thb": pnl_thb_v,
+                                        "win_loss": "Win" if (pnl_thb_v or 0) > 0 else "Loss",
+                                    })
+                                    if src_id:
+                                        exit_thb = s_current * ep * (rate if currency == "USD" else 1)
+                                        if direction == "Short":
+                                            entry_thb = s_current * (parse(t["entry_price"]) or 0) * (rate if currency == "USD" else 1)
+                                            exit_thb  = 2 * entry_thb - exit_thb
+                                        cash_credit(cash, src_id, exit_thb, rate)
+                                        save_cash(cash)
+                                    save_trades(trades)
+                                    st.session_state.pop(f"show_close_{t['id']}", None)
+                                    st.success(f"ปิด Trade ✅  P&L = {fmt_money(pnl_thb_v, disp, rate)}")
+                                else:
+                                    s_remain   = round(s_current - s_sell, 8)
+                                    pnl_thb_p  = calc_pnl_thb(t["entry_price"], ep, str(s_sell), currency, rate, direction)
+                                    exit_thb_p = s_sell * ep * (rate if currency == "USD" else 1)
+                                    if direction == "Short":
+                                        entry_thb_p = s_sell * (parse(t["entry_price"]) or 0) * (rate if currency == "USD" else 1)
+                                        exit_thb_p  = 2 * entry_thb_p - exit_thb_p
+                                    sell_hist = t.get("sell_history", [])
+                                    sell_hist.append({
+                                        "date": str(exit_d), "shares": str(s_sell),
+                                        "price": str(ep), "pnl_thb": round(pnl_thb_p or 0, 2),
+                                    })
+                                    new_pos_thb = (t.get("position_thb") or 0) * (s_remain / s_current)
+                                    t.update({
+                                        "shares":       str(s_remain),
+                                        "position_thb": round(new_pos_thb, 2),
+                                        "sell_history": sell_hist,
+                                        "rr": auto_rr(t["entry_price"], t.get("stop_loss",""), t.get("take_profit","")),
+                                    })
+                                    if src_id:
+                                        cash_credit(cash, src_id, exit_thb_p, rate)
+                                        save_cash(cash)
+                                    save_trades(trades)
+                                    st.session_state.pop(f"show_close_{t['id']}", None)
+                                    st.success(f"ขาย {s_sell} shares @ {ep} ✅  เหลือ {s_remain} shares · P&L = {fmt_money(pnl_thb_p, disp, rate)}")
+                                st.rerun()
 
     # ── Analytics ─────────────────────────────────────────────────────────────
     closed_with_pnl = [t for t in closed_trades if t.get("pnl_thb") is not None]
