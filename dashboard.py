@@ -663,13 +663,26 @@ def page_investment(investments: list, trades: list, cash: list, disp: str, rate
     closed_inv = [i for i in investments if i.get("status") == "closed"]
     sym = "฿" if disp == "THB" else "$"
 
+    # ── Account Filter ────────────────────────────────────────────────────────
+    inv_acct_names  = sorted({i.get("source_account_name","") for i in open_inv if i.get("source_account_name")})
+    cash_acct_names = sorted({a["name"] for a in cash})
+    filter_opts     = ["Overall"] + sorted(set(inv_acct_names) | set(cash_acct_names))
+    acct_filter     = st.radio("", filter_opts, horizontal=True, key="inv_acct_filter",
+                               label_visibility="collapsed")
+
+    if acct_filter != "Overall":
+        open_inv      = [i for i in open_inv if i.get("source_account_name") == acct_filter]
+        filtered_cash = [a for a in cash      if a["name"] == acct_filter]
+    else:
+        filtered_cash = cash
+
     # ── Summary ───────────────────────────────────────────────────────────────
     section("Summary")
     total_val_thb, total_pnl_thb, total_cost_thb = 0.0, 0.0, 0.0
     best_ticker, best_pct = "—", None
 
-    cash_usd_total = sum(a["amount"] for a in cash if a["currency"] == "USD")
-    cash_thb_total = sum(a["amount"] for a in cash if a["currency"] == "THB")
+    cash_usd_total = sum(a["amount"] for a in filtered_cash if a["currency"] == "USD")
+    cash_thb_total = sum(a["amount"] for a in filtered_cash if a["currency"] == "THB")
     cash_total_thb = (cash_usd_total * rate) + cash_thb_total
 
     for inv in open_inv:
@@ -687,26 +700,22 @@ def page_investment(investments: list, trades: list, cash: list, disp: str, rate
             if pct is not None and (best_pct is None or pct > best_pct):
                 best_pct, best_ticker = pct, inv.get("ticker","—")
 
-    total_with_cash_thb = total_val_thb + cash_total_thb
     total_pnl_pct = total_pnl_thb / total_cost_thb * 100 if total_cost_thb else None
 
     s1, s2, s3, s4 = st.columns(4)
-    s1.metric("Total Value (incl. Cash)", fmt_money(total_with_cash_thb or None, disp, rate, sign=False) if total_with_cash_thb else "No data yet")
+    s1.metric("Portfolio Value", fmt_money(total_val_thb or None, disp, rate, sign=False) if total_val_thb else "No data yet")
     s2.metric("Total P&L",
               fmt_money(total_pnl_thb or None, disp, rate) if open_inv else "No holdings yet",
               delta=fmt_pct(total_pnl_pct) if total_pnl_pct is not None else None)
     s3.metric("Holdings",      len(open_inv))
     s4.metric("Best Performer", f"{best_ticker}  {fmt_pct(best_pct)}" if best_pct is not None else "—")
 
-    st.markdown("<div style='height:1rem'></div>", unsafe_allow_html=True)
-
-    # ── Cash Summary (link to Cash page) ──────────────────────────────────────
-    section("Cash")
-    cc1, cc2, cc3 = st.columns(3)
-    cc1.metric("Cash THB รวม", f"฿{cash_thb_total:,.0f}")
-    cc2.metric("Cash USD รวม", f"${cash_usd_total:,.2f}")
-    cc3.metric(f"Total Cash ({disp})", fmt_money(cash_total_thb or None, disp, rate, sign=False) if cash_total_thb else "฿0")
-    st.caption("จัดการบัญชี Cash ได้ที่หน้า 💵 Cash")
+    # ── Cash (compact) ────────────────────────────────────────────────────────
+    cash_parts = []
+    if cash_thb_total: cash_parts.append(f"฿{cash_thb_total:,.0f} THB")
+    if cash_usd_total: cash_parts.append(f"${cash_usd_total:,.2f} USD")
+    cash_summary = "  |  ".join(cash_parts) if cash_parts else "฿0"
+    st.caption(f"💵 Cash: {cash_summary}  ·  จัดการที่หน้า 💵 Cash")
 
     st.markdown("<div style='height:1rem'></div>", unsafe_allow_html=True)
 
