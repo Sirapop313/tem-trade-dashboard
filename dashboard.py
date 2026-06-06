@@ -667,8 +667,7 @@ def page_investment(investments: list, trades: list, cash: list, disp: str, rate
     inv_acct_names  = sorted({i.get("source_account_name","") for i in open_inv if i.get("source_account_name")})
     cash_acct_names = sorted({a["name"] for a in cash})
     filter_opts     = ["Overall"] + sorted(set(inv_acct_names) | set(cash_acct_names))
-    acct_filter     = st.radio("", filter_opts, horizontal=True, key="inv_acct_filter",
-                               label_visibility="collapsed")
+    acct_filter     = st.selectbox("พอร์ต", filter_opts, key="inv_acct_filter")
 
     if acct_filter != "Overall":
         open_inv      = [i for i in open_inv if i.get("source_account_name") == acct_filter]
@@ -710,12 +709,22 @@ def page_investment(investments: list, trades: list, cash: list, disp: str, rate
     s3.metric("Holdings",      len(open_inv))
     s4.metric("Best Performer", f"{best_ticker}  {fmt_pct(best_pct)}" if best_pct is not None else "—")
 
-    # ── Cash (compact) ────────────────────────────────────────────────────────
+    # ── Cash (mini card) ──────────────────────────────────────────────────────
     cash_parts = []
     if cash_thb_total: cash_parts.append(f"฿{cash_thb_total:,.0f} THB")
     if cash_usd_total: cash_parts.append(f"${cash_usd_total:,.2f} USD")
-    cash_summary = "  |  ".join(cash_parts) if cash_parts else "฿0"
-    st.caption(f"💵 Cash: {cash_summary}  ·  จัดการที่หน้า 💵 Cash")
+    cash_inline = " &nbsp;·&nbsp; ".join(cash_parts) if cash_parts else "฿0"
+    st.markdown(
+        f"<div style='background:rgba(88,101,242,0.08);border:1px solid rgba(88,101,242,0.25);"
+        f"border-radius:8px;padding:8px 16px;margin:6px 0 4px 0;line-height:1.5'>"
+        f"<span style='font-size:11px;color:#64748b;text-transform:uppercase;"
+        f"letter-spacing:0.06em'>💵 Cash</span>"
+        f"&nbsp;&nbsp;"
+        f"<span style='font-size:15px;font-weight:600;color:#e2e8f0'>{cash_inline}</span>"
+        f"&nbsp;&nbsp;<span style='font-size:11px;color:#64748b'>· จัดการที่หน้า 💵 Cash</span>"
+        f"</div>",
+        unsafe_allow_html=True,
+    )
 
     st.markdown("<div style='height:1rem'></div>", unsafe_allow_html=True)
 
@@ -840,8 +849,29 @@ def page_investment(investments: list, trades: list, cash: list, disp: str, rate
             pnl_pct = calc_pnl_pct(inv.get("entry_price"), price) if price else None
             icon    = "🟢" if (pnl_thb or 0) >= 0 else "🔴"
 
-            inv_label = f"{icon} {inv['ticker']} · {fmt_pct(pnl_pct)} · {fmt_money(pnl_thb, disp, rate)}"
-            with st.expander(inv_label.replace("$", r"\$")):
+            inv_label = (f"{icon} **{inv['ticker']}**  ·  "
+                         f"AVG {inv.get('entry_price','—')}  ·  "
+                         f"{get_shares(inv)} shares"
+                         f"  |  {fmt_pct(pnl_pct)}  {fmt_money(pnl_thb, disp, rate)}"
+                         ).replace("$", r"\$")
+            with st.expander(inv_label):
+                # P&L banner
+                _pc2 = "#22c55e" if (pnl_thb or 0) >= 0 else "#ef4444"
+                _bg2 = "rgba(34,197,94,0.08)" if (pnl_thb or 0) >= 0 else "rgba(239,68,68,0.08)"
+                _cp  = get_price(inv.get("ticker",""))
+                _pos = calc_position_thb(str(_cp) if _cp else inv.get("entry_price"), get_shares(inv), get_currency(inv), rate)
+                st.markdown(
+                    f"<div style='background:{_bg2};border-left:3px solid {_pc2};"
+                    f"border-radius:0 6px 6px 0;padding:10px 14px;margin-bottom:10px'>"
+                    f"<div style='font-size:10px;color:#94a3b8;text-transform:uppercase;"
+                    f"letter-spacing:0.07em;margin-bottom:2px'>Unrealized P&L</div>"
+                    f"<span style='font-size:22px;font-weight:700;color:{_pc2}'>"
+                    f"{fmt_money(pnl_thb, disp, rate) if pnl_thb is not None else '—'}</span>"
+                    f"&nbsp;&nbsp;<span style='font-size:13px;color:{_pc2}'>{fmt_pct(pnl_pct)}</span>"
+                    f"&nbsp;&nbsp;&nbsp;<span style='font-size:11px;color:#64748b'>"
+                    f"Price {f'{_cp:.2f}' if _cp else '—'}  ·  Value {fmt_money(_pos, disp, rate, sign=False)}</span>"
+                    f"</div>",
+                    unsafe_allow_html=True)
                 ca, cb, cc, _, cd = st.columns([2, 2, 2, 1, 1])
                 if ca.button("🔴 ขาย", key=f"ci_{inv['id']}"):
                     st.session_state[f"sell_inv_{inv['id']}"] = True
@@ -1124,6 +1154,20 @@ def page_trade(trades: list, cash: list, disp: str, rate: float):
                       ).replace("$", r"\$")
 
             with st.expander(header):
+                # P&L banner
+                _pc = "#22c55e" if (pnl_thb or 0) >= 0 else "#ef4444"
+                _bg = "rgba(34,197,94,0.08)" if (pnl_thb or 0) >= 0 else "rgba(239,68,68,0.08)"
+                st.markdown(
+                    f"<div style='background:{_bg};border-left:3px solid {_pc};"
+                    f"border-radius:0 6px 6px 0;padding:10px 14px;margin-bottom:10px'>"
+                    f"<div style='font-size:10px;color:#94a3b8;text-transform:uppercase;"
+                    f"letter-spacing:0.07em;margin-bottom:2px'>Unrealized P&L</div>"
+                    f"<span style='font-size:22px;font-weight:700;color:{_pc}'>"
+                    f"{fmt_money(pnl_thb, disp, rate) if pnl_thb is not None else '—'}</span>"
+                    f"&nbsp;&nbsp;<span style='font-size:13px;color:{_pc}'>{fmt_pct(pnl_pct)}</span>"
+                    f"</div>",
+                    unsafe_allow_html=True)
+
                 r1c1, r1c2, r1c3, r1c4 = st.columns(4)
                 r1c1.metric("AVG Price",     t.get("entry_price","—"))
                 r1c2.metric("Shares",        get_shares(t))
@@ -1142,23 +1186,19 @@ def page_trade(trades: list, cash: list, disp: str, rate: float):
                         f"Profit {fmt_money(tp_thb, disp, rate) if tp_thb else '—'}</div>",
                         unsafe_allow_html=True)
                 with r2c2:
-                    pnl_color = "#22c55e" if (pnl_thb or 0) >= 0 else "#ef4444"
-                    st.markdown(
-                        f"<div style='font-size:12px;color:#64748b;margin-bottom:2px'>P&L</div>"
-                        f"<div style='font-size:22px;font-weight:700;color:{pnl_color}'>"
-                        f"{fmt_money(pnl_thb, disp, rate)}</div>"
-                        f"<div style='font-size:12px;color:{pnl_color}'>{fmt_pct(pnl_pct)}</div>",
-                        unsafe_allow_html=True)
-                with r2c3:
                     st.markdown(
                         f"<div style='font-size:12px;color:#64748b;margin-bottom:2px'>SL</div>"
                         f"<div style='font-size:18px;font-weight:600'>{t.get('stop_loss','—')}</div>"
                         f"<div style='font-size:12px;color:#ef4444'>"
                         f"Loss {fmt_money(sl_thb, disp, rate) if sl_thb else '—'}</div>",
                         unsafe_allow_html=True)
+                with r2c3:
+                    st.markdown(
+                        f"<div style='font-size:12px;color:#64748b;margin-bottom:2px'>R:R &amp; Info</div>"
+                        f"<div style='font-size:15px;font-weight:600'>{t.get('rr','—')}</div>"
+                        f"<div style='font-size:11px;color:#64748b'>{get_currency(t)} · เปิด {t.get('open_date','—')}</div>",
+                        unsafe_allow_html=True)
 
-                st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
-                st.caption(f"R:R {t.get('rr','—')}  ·  {get_currency(t)}  ·  เปิด {t.get('open_date','—')}")
                 st.caption(f"Thesis: {t.get('thesis','—')}")
                 st.divider()
 
