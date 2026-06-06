@@ -701,13 +701,24 @@ def page_investment(investments: list, trades: list, cash: list, disp: str, rate
 
     total_pnl_pct = total_pnl_thb / total_cost_thb * 100 if total_cost_thb else None
 
-    s1, s2, s3, s4 = st.columns(4)
-    s1.metric("Portfolio Value", fmt_money(total_val_thb or None, disp, rate, sign=False) if total_val_thb else "No data yet")
-    s2.metric("Total P&L",
-              fmt_money(total_pnl_thb or None, disp, rate) if open_inv else "No holdings yet",
-              delta=fmt_pct(total_pnl_pct) if total_pnl_pct is not None else None)
-    s3.metric("Holdings",      len(open_inv))
-    s4.metric("Best Performer", f"{best_ticker}  {fmt_pct(best_pct)}" if best_pct is not None else "—")
+    _pnl_c  = "#22c55e" if (total_pnl_thb or 0) >= 0 else "#ef4444"
+    _port_s = fmt_money(total_val_thb or None, disp, rate, sign=False) if total_val_thb else "No data yet"
+    _pnl_s  = fmt_money(total_pnl_thb or None, disp, rate) if open_inv else "No holdings yet"
+    _pct_s  = f"<span style='font-size:12px;color:{_pnl_c}'>{fmt_pct(total_pnl_pct)}</span>" if total_pnl_pct is not None else ""
+    _best_s = f"{best_ticker} {fmt_pct(best_pct)}" if best_pct is not None else "—"
+    _card   = "background:rgba(30,41,59,0.6);border:1px solid rgba(148,163,184,0.12);border-radius:10px;padding:12px 16px"
+    _lbl    = "font-size:10px;color:#94a3b8;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:4px"
+    st.markdown(f"""
+<div style='display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:6px 0 10px 0'>
+  <div style='{_card}'><div style='{_lbl}'>Portfolio Value</div>
+    <div style='font-size:20px;font-weight:700;color:#f1f5f9'>{_port_s}</div></div>
+  <div style='{_card}'><div style='{_lbl}'>Total P&L</div>
+    <div style='font-size:20px;font-weight:700;color:{_pnl_c}'>{_pnl_s}</div>{_pct_s}</div>
+  <div style='{_card}'><div style='{_lbl}'>Holdings</div>
+    <div style='font-size:24px;font-weight:700;color:#f1f5f9'>{len(open_inv)}</div></div>
+  <div style='{_card}'><div style='{_lbl}'>Best Performer</div>
+    <div style='font-size:16px;font-weight:700;color:#22c55e'>{_best_s}</div></div>
+</div>""", unsafe_allow_html=True)
 
     # ── Cash (mini card) ──────────────────────────────────────────────────────
     cash_parts = []
@@ -745,10 +756,13 @@ def page_investment(investments: list, trades: list, cash: list, disp: str, rate
             if pos_thb:
                 pie_labels_inv.append(inv.get("ticker","?"))
                 pie_vals_inv.append(pos_thb)
+            s_v = parse(get_shares(inv))
+            e_v = parse(inv.get("entry_price",""))
+            cost_thb_row = s_v * e_v * (rate if get_currency(inv) == "USD" else 1) if s_v and e_v else 0
             raw.append({
                 "inv": inv, "price": price,
                 "pnl_thb": pnl_thb or 0, "pnl_pct": pnl_pct or 0,
-                "pos_thb": pos_thb or 0,
+                "pos_thb": pos_thb or 0, "cost_thb": cost_thb_row,
             })
 
         # Pie chart + Sort selector
@@ -777,20 +791,23 @@ def page_investment(investments: list, trades: list, cash: list, disp: str, rate
 
         # Build display rows
         section(f"Current Holdings ({len(open_inv)})")
-        total_mv, total_pnl_disp = 0.0, 0.0
+        total_mv, total_pnl_disp, total_cost_disp = 0.0, 0.0, 0.0
         rows = []
         for i, r in enumerate(raw):
             inv, price = r["inv"], r["price"]
-            mv = to_display(r["pos_thb"] or 0, disp, rate)
-            pnl_d = to_display(r["pnl_thb"] or 0, disp, rate)
+            mv     = to_display(r["pos_thb"] or 0, disp, rate)
+            pnl_d  = to_display(r["pnl_thb"] or 0, disp, rate)
+            cost_d = to_display(r["cost_thb"] or 0, disp, rate)
             if price:
                 total_mv   += mv
                 total_pnl_disp += pnl_d
+            total_cost_disp += cost_d
             rows.append({
                 "#":             i + 1,
                 "Ticker":        inv.get("ticker","—"),
                 "Shares":        get_shares(inv),
                 "Avg Cost":      inv.get("entry_price","—"),
+                "Total Cost":    fmt_money(r["cost_thb"] or None, disp, rate, sign=False) if r["cost_thb"] else "—",
                 "Current Price": f"{price:.2f}" if price else "—",
                 "Market Value":  fmt_money(r["pos_thb"] or None, disp, rate, sign=False),
                 "P&L %":         fmt_pct(r["pnl_pct"]) if price else "—",
@@ -806,6 +823,7 @@ def page_investment(investments: list, trades: list, cash: list, disp: str, rate
             "Ticker":        "📊 TOTAL",
             "Shares":        "—",
             "Avg Cost":      "—",
+            "Total Cost":    f"{sym_p}{total_cost_disp:,.0f}",
             "Current Price": "—",
             "Market Value":  f"{sym_p}{total_mv:,.0f}",
             "P&L %":         fmt_pct(total_pnl_pct_row),
@@ -838,7 +856,7 @@ def page_investment(investments: list, trades: list, cash: list, disp: str, rate
                       .applymap(_color_pnl, subset=pnl_cols)
                       .apply(_style_total, axis=1)
                       .hide(axis="index"))
-        st.dataframe(styled, use_container_width=True)
+        st.dataframe(styled, use_container_width=True, hide_index=True)
 
         # Position actions (ปิด/ลบ)
         section("Position Actions")
@@ -849,10 +867,11 @@ def page_investment(investments: list, trades: list, cash: list, disp: str, rate
             pnl_pct = calc_pnl_pct(inv.get("entry_price"), price) if price else None
             icon    = "🟢" if (pnl_thb or 0) >= 0 else "🔴"
 
+            _ihc = "green" if (pnl_thb or 0) >= 0 else "red"
             inv_label = (f"{icon} **{inv['ticker']}**  ·  "
                          f"AVG {inv.get('entry_price','—')}  ·  "
                          f"{get_shares(inv)} shares"
-                         f"  |  {fmt_pct(pnl_pct)}  {fmt_money(pnl_thb, disp, rate)}"
+                         f"  |  :{_ihc}[{fmt_pct(pnl_pct)}  {fmt_money(pnl_thb, disp, rate)}]"
                          ).replace("$", r"\$")
             with st.expander(inv_label):
                 # P&L banner
@@ -1147,10 +1166,11 @@ def page_trade(trades: list, cash: list, disp: str, rate: float):
             icon  = "🟢" if (pnl_thb or 0) >= 0 else "🔴"
             arrow = "↑" if t.get("direction") == "Long" else "↓"
 
+            _hc = "green" if (pnl_thb or 0) >= 0 else "red"
             header = (f"{icon} **{t['ticker']}** {arrow}  ·  "
                       f"AVG {t.get('entry_price','—')}  ·  "
                       f"{get_shares(t)} shares  ·  {fmt_money(pos_thb, disp, rate, sign=False)}"
-                      f"  |  {fmt_pct(pnl_pct)}  {fmt_money(pnl_thb, disp, rate)}"
+                      f"  |  :{_hc}[{fmt_pct(pnl_pct)}  {fmt_money(pnl_thb, disp, rate)}]"
                       ).replace("$", r"\$")
 
             with st.expander(header):
