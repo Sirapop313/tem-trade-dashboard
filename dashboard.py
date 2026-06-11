@@ -379,6 +379,122 @@ def portfolio_line_chart(open_items: list, cash_thb: float, rate: float,
     })
     return fig
 
+def portfolio_return_chart(open_items: list, rate: float, disp: str, period_label: str,
+                           show_spy=False, show_qqq=False, height=300):
+    import pandas as pd
+    period_map = {"1D": ("1d","1h"), "1W": ("5d","1d"), "1M": ("1mo","1d"), "1Y": ("1y","1wk")}
+    period, interval = period_map.get(period_label, ("1mo","1d"))
+
+    histories = {}
+    for item in open_items:
+        t = item.get("ticker","")
+        if t and t not in histories:
+            h = get_history(t, period, interval)
+            if h is not None:
+                histories[t] = h
+    if not histories:
+        return None
+
+    combined = pd.DataFrame(histories).ffill().bfill()
+    if combined.empty:
+        return None
+
+    port_vals = []
+    for _, row in combined.iterrows():
+        v = 0.0
+        for item in open_items:
+            t = item.get("ticker","")
+            if t in row.index and pd.notna(row[t]):
+                s = parse(get_shares(item)) or 0
+                v += s * float(row[t]) * (rate if get_currency(item) == "USD" else 1)
+        port_vals.append(v)
+
+    if not port_vals or port_vals[0] == 0:
+        return None
+
+    base   = port_vals[0]
+    ret_pcts = [(v - base) / base * 100 for v in port_vals]
+    dates    = list(combined.index)
+    final    = ret_pcts[-1]
+    col      = "#22c55e" if final >= 0 else "#ef4444"
+    sign     = "+" if final >= 0 else ""
+
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(
+        x=dates, y=ret_pcts, mode="lines", name="Portfolio",
+        line=dict(color="#5865f2", width=2.5),
+        fill="tozeroy", fillcolor="rgba(88,101,242,0.08)",
+    ))
+
+    for ticker, label, color in [("SPY", "S&P 500", "#f59e0b"), ("QQQ", "NASDAQ 100", "#a78bfa")]:
+        if (ticker == "SPY" and show_spy) or (ticker == "QQQ" and show_qqq):
+            h = get_history(ticker, period, interval)
+            if h is not None:
+                h_al = h.reindex(combined.index, method="ffill").dropna()
+                if len(h_al) > 0:
+                    b0 = float(h_al.iloc[0])
+                    fig.add_trace(go.Scatter(
+                        x=list(h_al.index),
+                        y=[(float(v) - b0) / b0 * 100 for v in h_al],
+                        mode="lines", name=label,
+                        line=dict(color=color, width=1.5, dash="dot"),
+                    ))
+
+    fig.update_layout(**{**CHART_LAYOUT,
+        "title": dict(
+            text=f"Return %  <span style='color:{col};font-size:14px'>{sign}{final:.2f}%</span>",
+            font=dict(size=14, color="#94a3b8"), x=0),
+        "yaxis_title": "Return (%)", "height": height,
+        "yaxis_tickformat": ".2f", "yaxis_ticksuffix": "%",
+        "xaxis": dict(showgrid=False, tickfont=dict(size=11, color="#94a3b8")),
+        "legend": dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+    })
+    return fig
+
+def build_activity_log(investments: list, trades: list) -> list:
+    events = []
+    for inv in investments:
+        ticker = inv.get("ticker","—")
+        if inv.get("entry_date"):
+            events.append({"วันที่": inv.get("entry_date",""), "ประเภท": "💼 Invest",
+                "Action": "🟢 ซื้อ", "Ticker": ticker,
+                "รายละเอียด": f"เปิด · {get_shares(inv)} shares @ {inv.get('entry_price','—')}"})
+        for bh in inv.get("buy_history", []):
+            events.append({"วันที่": bh.get("date",""), "ประเภท": "💼 Invest",
+                "Action": "➕ ซื้อเพิ่ม", "Ticker": ticker,
+                "รายละเอียด": f"+{bh.get('shares','?')} shares @ {bh.get('price','—')}"})
+        for sh in inv.get("sell_history", []):
+            pnl_s = f"฿{sh.get('pnl_thb',0):,.0f}" if sh.get("pnl_thb") is not None else "—"
+            events.append({"วันที่": sh.get("date",""), "ประเภท": "💼 Invest",
+                "Action": "🔴 ขายบางส่วน", "Ticker": ticker,
+                "รายละเอียด": f"-{sh.get('shares','?')} shares @ {sh.get('price','—')} · P&L {pnl_s}"})
+        if inv.get("status") == "closed" and inv.get("exit_date"):
+            events.append({"วันที่": inv.get("exit_date",""), "ประเภท": "💼 Invest",
+                "Action": "🔴 ปิด", "Ticker": ticker,
+                "รายละเอียด": f"ปิด @ {inv.get('exit_price','—')} · P&L {fmt_pct(inv.get('pnl_pct'))}"})
+    for t in trades:
+        ticker = t.get("ticker","—")
+        arr = "↑" if t.get("direction") == "Long" else "↓"
+        if t.get("open_date"):
+            events.append({"วันที่": t.get("open_date",""), "ประเภท": "📈 Trade",
+                "Action": "🟢 เปิด", "Ticker": f"{ticker} {arr}",
+                "รายละเอียด": f"{get_shares(t)} shares @ {t.get('entry_price','—')} · SL {t.get('stop_loss','—')} · TP {t.get('take_profit','—')}"})
+        for bh in t.get("buy_history", []):
+            events.append({"วันที่": bh.get("date",""), "ประเภท": "📈 Trade",
+                "Action": "➕ ซื้อเพิ่ม", "Ticker": f"{ticker} {arr}",
+                "รายละเอียด": f"+{bh.get('shares','?')} shares @ {bh.get('price','—')}"})
+        for sh in t.get("sell_history", []):
+            pnl_s = f"฿{sh.get('pnl_thb',0):,.0f}" if sh.get("pnl_thb") is not None else "—"
+            events.append({"วันที่": sh.get("date",""), "ประเภท": "📈 Trade",
+                "Action": "🔴 ขายบางส่วน", "Ticker": f"{ticker} {arr}",
+                "รายละเอียด": f"-{sh.get('shares','?')} shares @ {sh.get('price','—')} · P&L {pnl_s}"})
+        if t.get("status") == "closed" and t.get("close_date"):
+            events.append({"วันที่": t.get("close_date",""), "ประเภท": "📈 Trade",
+                "Action": "🔴 ปิด", "Ticker": f"{ticker} {arr}",
+                "รายละเอียด": f"ปิด @ {t.get('exit_price','—')} · P&L {fmt_pct(t.get('pnl_pct'))} · {t.get('win_loss','')}"})
+    events.sort(key=lambda e: e.get("วันที่",""), reverse=True)
+    return events
+
 def pnl_bar_chart(labels, vals_thb, disp, rate, title, height=280):
     vals   = [to_display(v, disp, rate) for v in vals_thb]
     texts  = [fmt_money(v, disp, rate) for v in vals_thb]
@@ -541,8 +657,34 @@ def page_overview(trades: list, investments: list, cash: dict, disp: str, rate: 
 
     st.markdown("<div style='height:1.5rem'></div>", unsafe_allow_html=True)
 
-    # ── Allocation Pie + Portfolio Line ───────────────────────────────────────
+    # ── Return % Chart ────────────────────────────────────────────────────────
     open_all = open_trades + open_inv
+    if open_all:
+        section("Portfolio Return")
+        rc1, rc2, rc3 = st.columns([3, 4, 3])
+        with rc1:
+            ret_view = st.radio("", ["Overall","Investment","Trade"], horizontal=True,
+                                key="ret_view", label_visibility="collapsed")
+        with rc2:
+            ret_period = st.radio("", ["1D","1W","1M","1Y"], horizontal=True,
+                                  key="ret_period", index=2, label_visibility="collapsed")
+        with rc3:
+            cspy = st.checkbox("S&P 500", key="cmp_spy")
+            cqqq = st.checkbox("NASDAQ 100", key="cmp_qqq")
+
+        ret_items = (open_inv if ret_view == "Investment"
+                     else open_trades if ret_view == "Trade"
+                     else open_all)
+        fig_ret = portfolio_return_chart(ret_items, rate, disp, ret_period,
+                                         show_spy=cspy, show_qqq=cqqq, height=280)
+        if fig_ret:
+            st.plotly_chart(fig_ret, use_container_width=True)
+        else:
+            st.info("ไม่มีข้อมูลราคาย้อนหลัง")
+
+        st.markdown("<div style='height:0.5rem'></div>", unsafe_allow_html=True)
+
+    # ── Allocation Pie + Portfolio Line ───────────────────────────────────────
     if open_all or cash_thb > 0:
         section("Portfolio Breakdown")
         col_pie, col_line = st.columns([4, 6])
@@ -765,29 +907,45 @@ def page_investment(investments: list, trades: list, cash: list, disp: str, rate
                 "pos_thb": pos_thb or 0, "cost_thb": cost_thb_row,
             })
 
-        # Pie chart + Sort selector
-        col_pie_inv, col_sort_inv = st.columns([4, 6])
+        # Pie chart + Return % chart
+        col_pie_inv, col_ret_inv = st.columns([4, 6])
         with col_pie_inv:
             if pie_labels_inv:
                 st.plotly_chart(allocation_pie(pie_labels_inv, pie_vals_inv, disp, rate,
                                                "Holdings Allocation", height=280),
                                 use_container_width=True)
-        with col_sort_inv:
-            sort_by = st.selectbox("เรียงตาม", [
-                "📊 Size (ใหญ่ → เล็ก)",
-                "📈 Gain (มาก → น้อย)",
-                "📉 Loss (มาก → น้อย)",
-                "🔤 Ticker (A → Z)",
-                f"💰 P&L {sym} (มาก → น้อย)",
-            ], key="inv_sort")
-            sort_fns = {
-                "📊 Size (ใหญ่ → เล็ก)":    lambda r: -r["pos_thb"],
-                "📈 Gain (มาก → น้อย)":      lambda r: -r["pnl_pct"],
-                "📉 Loss (มาก → น้อย)":      lambda r:  r["pnl_pct"],
-                "🔤 Ticker (A → Z)":          lambda r:  r["inv"].get("ticker",""),
-                f"💰 P&L {sym} (มาก → น้อย)": lambda r: -r["pnl_thb"],
-            }
-            raw.sort(key=sort_fns.get(sort_by, lambda r: -r["pos_thb"]))
+        with col_ret_inv:
+            inv_rp1, inv_rp2, inv_rp3 = st.columns([5, 4, 3])
+            with inv_rp1:
+                inv_period = st.radio("", ["1D","1W","1M","1Y"], horizontal=True,
+                                      key="inv_period", index=2, label_visibility="collapsed")
+            with inv_rp2:
+                inv_spy = st.checkbox("S&P 500", key="inv_spy")
+            with inv_rp3:
+                inv_qqq = st.checkbox("NASDAQ 100", key="inv_qqq")
+            fig_inv_ret = portfolio_return_chart(open_inv, rate, disp, inv_period,
+                                                  show_spy=inv_spy, show_qqq=inv_qqq, height=260)
+            if fig_inv_ret:
+                st.plotly_chart(fig_inv_ret, use_container_width=True)
+            else:
+                st.info("ไม่มีข้อมูลราคาย้อนหลัง")
+
+        # Sort selector (above table)
+        sort_by = st.selectbox("เรียงตาม", [
+            "📊 Size (ใหญ่ → เล็ก)",
+            "📈 Gain (มาก → น้อย)",
+            "📉 Loss (มาก → น้อย)",
+            "🔤 Ticker (A → Z)",
+            f"💰 P&L {sym} (มาก → น้อย)",
+        ], key="inv_sort")
+        sort_fns = {
+            "📊 Size (ใหญ่ → เล็ก)":    lambda r: -r["pos_thb"],
+            "📈 Gain (มาก → น้อย)":      lambda r: -r["pnl_pct"],
+            "📉 Loss (มาก → น้อย)":      lambda r:  r["pnl_pct"],
+            "🔤 Ticker (A → Z)":          lambda r:  r["inv"].get("ticker",""),
+            f"💰 P&L {sym} (มาก → น้อย)": lambda r: -r["pnl_thb"],
+        }
+        raw.sort(key=sort_fns.get(sort_by, lambda r: -r["pos_thb"]))
 
         # Build display rows
         section(f"Current Holdings ({len(open_inv)})")
@@ -1612,6 +1770,16 @@ def page_cash(trades: list, investments: list, cash: list, disp: str, rate: floa
 # ── Page 5: Log ───────────────────────────────────────────────────────────────
 def page_log(trades: list, investments: list, disp: str, rate: float):
     sym = "฿" if disp == "THB" else "$"
+
+    # ── Activity Log ──────────────────────────────────────────────────────────
+    section("Activity Log")
+    activity = build_activity_log(investments, trades)
+    if activity:
+        st.dataframe(activity, use_container_width=True, hide_index=True)
+    else:
+        st.info("ยังไม่มี activity")
+
+    st.markdown("<div style='height:1rem'></div>", unsafe_allow_html=True)
 
     rows = []
     for t in trades:
