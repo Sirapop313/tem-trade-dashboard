@@ -214,13 +214,21 @@ def resolve_source(cash: list, source_id, other_name: str, other_currency: str) 
 
 
 # ── Live Prices ───────────────────────────────────────────────────────────────
+_DR_PATTERN = re.compile(r'^[A-Z]+\d{2}$')  # Thai DR: NINTENDO23, META24
+
 @st.cache_data(ttl=300)
-def get_price(ticker: str) -> float | None:
+def _fetch_price(ticker: str) -> float | None:
     try:
         import yfinance as yf
         return yf.Ticker(ticker).fast_info.last_price
     except Exception:
         return None
+
+def get_price(ticker: str) -> float | None:
+    price = _fetch_price(ticker)
+    if price is None and _DR_PATTERN.match(ticker.upper()):
+        price = _fetch_price(ticker.upper() + ".BK")
+    return price
 
 @st.cache_data(ttl=60)
 def get_usd_thb() -> float:
@@ -284,18 +292,10 @@ def to_display(val_thb: float | None, disp: str, rate: float) -> float | None:
     if val_thb is None: return None
     return val_thb / rate if disp == "USD" else val_thb
 
-_DR_PATTERN = re.compile(r'^[A-Z]+\d{2}$')  # e.g. NINTENDO23, META24
-
 def get_inv_price(inv: dict) -> float | None:
-    """ดึงราคา: manual_price → yfinance → auto .BK สำหรับ DR"""
+    """manual_price ถ้าตั้งไว้ มิเช่นนั้น get_price (auto-.BK สำหรับ DR)"""
     mp = parse(inv.get("manual_price"))
-    if mp is not None:
-        return mp
-    ticker = inv.get("ticker", "")
-    price  = get_price(ticker)
-    if price is None and _DR_PATTERN.match(ticker):
-        price = get_price(ticker + ".BK")
-    return price
+    return mp if mp is not None else get_price(inv.get("ticker", ""))
 
 def days_held_str(entry_date_str: str) -> str:
     try:
