@@ -109,10 +109,13 @@ def _sb_save(table: str, items: list) -> None:
                   json=[{"data": item, "user_id": user_id} for item in items])
 
 def sb_signin(email: str, password: str) -> dict | None:
-    r = _req.post(f"{_sb_url()}/auth/v1/token?grant_type=password",
-                  headers={"apikey": st.secrets["SUPABASE_KEY"], "Content-Type": "application/json"},
-                  json={"email": email, "password": password})
-    return r.json() if r.status_code == 200 else None
+    try:
+        r = _req.post(f"{_sb_url()}/auth/v1/token?grant_type=password",
+                      headers={"apikey": st.secrets["SUPABASE_KEY"], "Content-Type": "application/json"},
+                      json={"email": email, "password": password}, timeout=10)
+        return r.json() if r.status_code == 200 else None
+    except Exception:
+        return "connection_error"
 
 def sb_signup(email: str, password: str) -> tuple[dict | None, str]:
     r = _req.post(f"{_sb_url()}/auth/v1/signup",
@@ -280,6 +283,18 @@ def to_display(val_thb: float | None, disp: str, rate: float) -> float | None:
     if val_thb is None: return None
     return val_thb / rate if disp == "USD" else val_thb
 
+def days_held_str(entry_date_str: str) -> str:
+    try:
+        d    = date.fromisoformat(str(entry_date_str))
+        days = (date.today() - d).days
+        if days < 0:   return "—"
+        if days < 30:  return f"{days}d"
+        months = days // 30
+        if months < 12: return f"{months}m {days % 30}d"
+        return f"{months // 12}y {months % 12}m"
+    except Exception:
+        return "—"
+
 
 # ── Chart Helpers ─────────────────────────────────────────────────────────────
 CHART_LAYOUT = dict(
@@ -442,7 +457,8 @@ def portfolio_return_chart(open_items: list, rate: float, disp: str, period_labe
 
     fig.update_layout(**{**CHART_LAYOUT,
         "title": dict(
-            text=f"Return %  <span style='color:{col};font-size:14px'>{sign}{final:.2f}%</span>",
+            text=(f"Return %  <span style='color:{col};font-size:14px'>{sign}{final:.2f}%</span>"
+                  f"<br><span style='font-size:10px;color:#64748b'>ราคา-based · ไม่นับเวลาที่ซื้อจริง</span>"),
             font=dict(size=14, color="#94a3b8"), x=0),
         "yaxis_title": "Return (%)", "height": height,
         "yaxis_tickformat": ".2f", "yaxis_ticksuffix": "%",
@@ -569,7 +585,9 @@ def page_login():
                         st.error("กรุณากรอก Email และ Password")
                     else:
                         result = sb_signin(email.strip(), password)
-                        if result and "access_token" in result:
+                        if result == "connection_error":
+                            st.error("⚠️ เชื่อมต่อเซิร์ฟเวอร์ไม่ได้ กรุณารีเฟรชหน้าแล้วลองใหม่")
+                        elif result and "access_token" in result:
                             st.session_state["sb_session"] = result
                             st.rerun()
                         else:
@@ -644,7 +662,7 @@ def page_overview(trades: list, investments: list, cash: dict, disp: str, rate: 
     # ── KPI Row ───────────────────────────────────────────────────────────────
     section("Portfolio Summary")
     k1, k2, k3, k4 = st.columns(4)
-    k1.metric("Portfolio Value",
+    k1.metric("Total Wealth (incl. Cash)",
               fmt_money(port_thb, disp, rate, sign=False) if port_thb else "No data yet")
     k2.metric("Unrealized P&L",
               fmt_money(unreal_thb if unreal_items else None, disp, rate),
@@ -757,22 +775,14 @@ def page_overview(trades: list, investments: list, cash: dict, disp: str, rate: 
             st.markdown("  ·  ".join(tickers))
 
     # ── Recent Activity ───────────────────────────────────────────────────────
-    all_items = []
-    for t in trades:
-        icon  = "🔒" if t.get("status") == "closed" else "📈"
-        label = f"{icon} **{t.get('ticker')}** — Trade {'ปิด' if t.get('status')=='closed' else 'เปิด'}"
-        all_items.append({"date": t.get("open_date",""), "label": label})
-    for inv in investments:
-        all_items.append({
-            "date":  inv.get("entry_date",""),
-            "label": f"💼 **{inv.get('ticker')}** — Investment เพิ่ม",
-        })
-    all_items.sort(key=lambda x: x["date"], reverse=True)
-
-    if all_items:
+    recent_events = build_activity_log(investments, trades)
+    if recent_events:
         section("Recent Activity")
-        for item in all_items[:5]:
-            st.caption(f"{item['date']}  ·  {item['label']}")
+        for ev in recent_events[:5]:
+            st.caption(
+                f"{ev['วันที่']}  ·  {ev['ประเภท']}  {ev['Action']}  "
+                f"**{ev['Ticker']}**  ·  {ev['รายละเอียด']}"
+            )
 
     # ── Winners & Losers ──────────────────────────────────────────────────────
     closed_with_pnl = [t for t in closed_trades if t.get("pnl_thb") is not None]
@@ -930,6 +940,84 @@ def page_investment(investments: list, trades: list, cash: list, disp: str, rate
             else:
                 st.info("ไม่มีข้อมูลราคาย้อนหลัง")
 
+        # ── Target Allocation ─────────────────────────────────────────────────────
+        inv_with_target = [r for r in raw if r["inv"].get("target_pct") is not None]
+        if inv_with_target and total_val_thb:
+            st.markdown("<div style='height:0.5rem'></div>", unsafe_allow_html=True)
+            section("🎯 Target Allocation")
+
+            t_tickers  = [r["inv"]["ticker"] for r in inv_with_target]
+            curr_pcts  = [r["pos_thb"] / total_val_thb * 100 if total_val_thb else 0
+                          for r in inv_with_target]
+            tgt_pcts   = [r["inv"].get("target_pct", 0) for r in inv_with_target]
+            deltas     = [c - t for c, t in zip(curr_pcts, tgt_pcts)]
+            total_tgt  = sum(t for t in tgt_pcts if t)
+
+            def _tgt_color(d):
+                if abs(d) <= 3: return "#22c55e"
+                if abs(d) <= 8: return "#f59e0b"
+                return "#ef4444"
+            bar_colors = [_tgt_color(d) for d in deltas]
+
+            fig_tgt = go.Figure()
+            fig_tgt.add_trace(go.Bar(
+                name="Target %", y=t_tickers, x=tgt_pcts, orientation="h",
+                marker_color="rgba(148,163,184,0.25)",
+                marker_line=dict(color="#94a3b8", width=1),
+                text=[f"{p:.0f}%" for p in tgt_pcts], textposition="inside",
+                textfont=dict(size=11, color="#94a3b8"),
+            ))
+            fig_tgt.add_trace(go.Bar(
+                name="Current %", y=t_tickers, x=curr_pcts, orientation="h",
+                marker_color=bar_colors, opacity=0.85,
+                text=[f"{p:.1f}%" for p in curr_pcts], textposition="outside",
+                textfont=dict(size=11, color="#e2e8f0"),
+            ))
+            fig_tgt.update_layout(
+                **{**CHART_LAYOUT,
+                   "barmode": "overlay",
+                   "height": max(200, len(t_tickers) * 45 + 70),
+                   "showlegend": True,
+                   "legend": dict(orientation="h", y=1.1, x=0, font=dict(size=11, color="#94a3b8")),
+                   "margin": dict(t=50, b=8, l=8, r=80),
+                   "xaxis": dict(showgrid=True, gridcolor="rgba(255,255,255,0.06)",
+                                 ticksuffix="%", tickfont=dict(size=11, color="#94a3b8")),
+                   "yaxis": dict(showgrid=False, tickfont=dict(size=12, color="#e2e8f0")),
+                   "title": dict(
+                       text=(f"Current vs Target  "
+                             f"<span style='font-size:11px;color:#64748b'>"
+                             f"Target รวม {total_tgt:.0f}% · Cash {max(0, 100-total_tgt):.0f}%</span>"),
+                       font=dict(size=13, color="#94a3b8"), x=0),
+                }
+            )
+            st.plotly_chart(fig_tgt, use_container_width=True)
+
+            sym_r = "฿" if disp == "THB" else "$"
+            rebal_rows = []
+            for r, curr_p, tgt_p, delta in zip(inv_with_target, curr_pcts, tgt_pcts, deltas):
+                action_thb = abs(delta) / 100 * total_val_thb
+                action_disp = to_display(action_thb, disp, rate)
+                if tgt_p == 0:
+                    action = "—"
+                elif delta > 3:
+                    action = f"🔴 ขายลด {sym_r}{action_disp:,.0f}"
+                elif delta < -3:
+                    action = f"🟢 ซื้อเพิ่ม {sym_r}{action_disp:,.0f}"
+                else:
+                    action = "✅ ใกล้เป้า"
+                rebal_rows.append({
+                    "Ticker":   r["inv"]["ticker"],
+                    "Current":  f"{curr_p:.1f}%",
+                    "Target":   f"{tgt_p:.0f}%",
+                    "Δ":        f"{'+' if delta >= 0 else ''}{delta:.1f}%",
+                    "Action":   action,
+                })
+            st.dataframe(rebal_rows, use_container_width=True, hide_index=True)
+
+            no_target = [r["inv"]["ticker"] for r in raw if r["inv"].get("target_pct") is None]
+            if no_target:
+                st.caption(f"ยังไม่ตั้ง Target %: {', '.join(no_target)} — กดแก้ไขใน position เพื่อตั้งค่า")
+
         # Sort selector (above table)
         sort_by = st.selectbox("เรียงตาม", [
             "📊 Size (ใหญ่ → เล็ก)",
@@ -963,6 +1051,7 @@ def page_investment(investments: list, trades: list, cash: list, disp: str, rate
             rows.append({
                 "#":             i + 1,
                 "Ticker":        inv.get("ticker","—"),
+                "ถือมา":         days_held_str(inv.get("entry_date","")),
                 "Shares":        get_shares(inv),
                 "Avg Cost":      inv.get("entry_price","—"),
                 "Total Cost":    fmt_money(r["cost_thb"] or None, disp, rate, sign=False) if r["cost_thb"] else "—",
@@ -984,6 +1073,7 @@ def page_investment(investments: list, trades: list, cash: list, disp: str, rate
             "Total Cost":    f"{sym_p}{total_cost_disp:,.0f}",
             "Current Price": "—",
             "Market Value":  f"{sym_p}{total_mv:,.0f}",
+            "ถือมา":         "—",
             "P&L %":         fmt_pct(total_pnl_pct_row),
             f"P&L ({sym})":  fmt_money(sum(r["pnl_thb"] for r in raw if r.get("price")), disp, rate),
             "Thesis":        "—",
@@ -1105,14 +1195,26 @@ def page_investment(investments: list, trades: list, cash: list, disp: str, rate
                         new_ticker = ei1.text_input("Ticker",       value=inv.get("ticker",""))
                         new_shares = ei2.text_input("จำนวนหุ้น",    value=get_shares(inv))
                         new_entry  = ei3.text_input("Entry Price",  value=inv.get("entry_price",""))
-                        new_thesis = st.text_input("Thesis",        value=inv.get("thesis",""))
+                        ee1, ee2 = st.columns(2)
+                        new_thesis  = ee1.text_input("Thesis", value=inv.get("thesis",""))
+                        new_tgt_raw = ee2.text_input(
+                            "Target % (สัดส่วนเป้าหมาย)",
+                            value=str(inv["target_pct"]) if inv.get("target_pct") is not None else "",
+                            placeholder="เช่น 20  (ว่าง = ไม่ตั้ง)",
+                        )
                         if st.form_submit_button("💾 บันทึก"):
-                            inv.update({
+                            upd = {
                                 "ticker":      new_ticker.upper().strip(),
                                 "shares":      new_shares,
                                 "entry_price": new_entry,
                                 "thesis":      new_thesis,
-                            })
+                            }
+                            t_pct = parse(new_tgt_raw)
+                            if t_pct is not None:
+                                upd["target_pct"] = t_pct
+                            elif not new_tgt_raw.strip() and "target_pct" in inv:
+                                upd["target_pct"] = None
+                            inv.update(upd)
                             save_investments(investments)
                             st.session_state.pop(f"edit_inv_{inv['id']}", None)
                             st.success("แก้ไขเรียบร้อย!")
@@ -1127,6 +1229,12 @@ def page_investment(investments: list, trades: list, cash: list, disp: str, rate
                         sell_shares = sv1.text_input("จำนวนที่ขาย *", placeholder=f"สูงสุด {s_current}")
                         exit_p      = sv2.text_input("ราคาที่ขาย *", placeholder="เช่น 420")
                         exit_d      = sv3.date_input("วันที่ขาย", value=date.today())
+                        sv4, sv5 = st.columns(2)
+                        thesis_ok = sv4.selectbox("Thesis ถูกไหม (ถ้าปิด position)",
+                                                   ["✅ ถูก", "❌ ผิด", "⚠️ บางส่วน"])
+                        emotion   = sv5.selectbox("Emotion (ถ้าปิด position)",
+                                                   ["ปกติ", "กลัว", "โลภ", "FOMO"])
+                        lesson    = st.text_input("Lesson ที่ได้ (optional, ถ้าปิด position)")
                         if st.form_submit_button("✅ ยืนยันขาย"):
                             s_sell = parse(sell_shares)
                             ep     = parse(exit_p)
@@ -1143,7 +1251,9 @@ def page_investment(investments: list, trades: list, cash: list, disp: str, rate
                                     pnl_thb_v = calc_pnl_thb(inv["entry_price"], ep, str(s_current), currency, rate)
                                     inv.update({"status": "closed", "exit_price": str(ep),
                                                 "exit_date": str(exit_d),
-                                                "pnl_pct": pnl_pct_v, "pnl_thb": pnl_thb_v})
+                                                "pnl_pct": pnl_pct_v, "pnl_thb": pnl_thb_v,
+                                                "thesis_correct": thesis_ok,
+                                                "emotion": emotion, "lesson": lesson})
                                     if src_id:
                                         cash_credit(cash, src_id, exit_thb, rate)
                                         save_cash(cash)
@@ -1250,8 +1360,11 @@ def page_investment(investments: list, trades: list, cash: list, disp: str, rate
                 c4, c5     = st.columns(2)
                 entry      = c4.text_input("Entry Price *", placeholder="ราคาที่ซื้อ")
                 entry_date = c5.date_input("วันที่ซื้อ", value=date.today())
-                thesis     = st.text_input("เหตุผลที่ลงทุน",
-                                           placeholder="เช่น พื้นฐานดี dividend สม่ำเสมอ...")
+                ni1, ni2 = st.columns(2)
+                thesis     = ni1.text_input("เหตุผลที่ลงทุน",
+                                             placeholder="เช่น พื้นฐานดี dividend สม่ำเสมอ...")
+                target_pct_inp = ni2.text_input("Target % (optional)",
+                                                 placeholder="เช่น 20  — สัดส่วนเป้าหมายในพอร์ต")
                 st.markdown("---")
                 src_id, other_name, other_curr = source_selector(cash, "inv")
                 is_import = st.checkbox("📥 Import position เก่า (ไม่หักเงินจาก Cash)", key="import_inv")
@@ -1260,12 +1373,13 @@ def page_investment(investments: list, trades: list, cash: list, disp: str, rate
                     if not ticker or e is None or s is None:
                         st.error("กรุณากรอก Ticker, จำนวนหุ้น และ Entry Price")
                     else:
-                        pos_thb = s * e * (rate if currency == "USD" else 1)
+                        pos_thb  = s * e * (rate if currency == "USD" else 1)
+                        t_pct_v  = parse(target_pct_inp)
                         resolved = resolve_source(cash, src_id, other_name, other_curr)
                         if not is_import:
                             cash_deduct(cash, resolved, pos_thb, rate)
                             save_cash(cash)
-                        investments.append({
+                        new_inv = {
                             "id": next_id(investments), "type": "investment", "status": "open",
                             "ticker": ticker.upper().strip(), "shares": shares,
                             "currency": currency, "entry_price": entry,
@@ -1275,7 +1389,10 @@ def page_investment(investments: list, trades: list, cash: list, disp: str, rate
                             "source_account_name": next((a["name"] for a in cash if a["id"] == resolved), ""),
                             "buy_history": [{"date": str(entry_date), "shares": shares,
                                              "price": entry, "thb": round(pos_thb, 2), "note": "เปิด position"}],
-                        })
+                        }
+                        if t_pct_v is not None:
+                            new_inv["target_pct"] = t_pct_v
+                        investments.append(new_inv)
                         save_investments(investments)
                         st.success(f"✅ บันทึก {ticker.upper()}")
                         st.rerun()
