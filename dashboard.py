@@ -1741,8 +1741,8 @@ def page_trade(trades: list, cash: list, disp: str, rate: float):
             is_import = st.checkbox("📥 Import position เก่า (ไม่หักเงินจาก Cash)", key="import_trade")
             if st.form_submit_button("✅ บันทึก Trade"):
                 e, s = parse(entry), parse(shares)
-                if not ticker or e is None or not thesis:
-                    st.error("กรุณากรอก Ticker, Entry Price และ Thesis")
+                if not ticker or e is None:
+                    st.error("กรุณากรอก Ticker และ Entry Price")
                 elif not strategy:
                     st.error("กรุณาเลือก Strategy")
                 else:
