@@ -4,6 +4,7 @@ Tim.fin Personal OS — Investment & Trade Dashboard
 import io
 import json
 import os
+import re
 from datetime import date
 
 import pandas as pd
@@ -282,6 +283,19 @@ def fmt_money(val_thb: float | None, disp: str, rate: float, sign: bool = True) 
 def to_display(val_thb: float | None, disp: str, rate: float) -> float | None:
     if val_thb is None: return None
     return val_thb / rate if disp == "USD" else val_thb
+
+_DR_PATTERN = re.compile(r'^[A-Z]+\d{2}$')  # e.g. NINTENDO23, META24
+
+def get_inv_price(inv: dict) -> float | None:
+    """ดึงราคา: manual_price → yfinance → auto .BK สำหรับ DR"""
+    mp = parse(inv.get("manual_price"))
+    if mp is not None:
+        return mp
+    ticker = inv.get("ticker", "")
+    price  = get_price(ticker)
+    if price is None and _DR_PATTERN.match(ticker):
+        price = get_price(ticker + ".BK")
+    return price
 
 def days_held_str(entry_date_str: str) -> str:
     try:
@@ -818,12 +832,13 @@ def page_investment(investments: list, trades: list, cash: list, disp: str, rate
     # ── Account Filter ────────────────────────────────────────────────────────
     inv_acct_names  = sorted({i.get("source_account_name","") for i in open_inv if i.get("source_account_name")})
     cash_acct_names = sorted({a["name"] for a in cash})
-    filter_opts     = ["Overall"] + sorted(set(inv_acct_names) | set(cash_acct_names))
-    acct_filter     = st.selectbox("พอร์ต", filter_opts, key="inv_acct_filter")
+    acct_opts   = sorted(set(inv_acct_names) | set(cash_acct_names))
+    acct_filter = st.multiselect("พอร์ต (เลือกได้หลายอัน)", acct_opts,
+                                  placeholder="Overall — แสดงทั้งหมด", key="inv_acct_filter")
 
-    if acct_filter != "Overall":
-        open_inv      = [i for i in open_inv if i.get("source_account_name") == acct_filter]
-        filtered_cash = [a for a in cash      if a["name"] == acct_filter]
+    if acct_filter:
+        open_inv      = [i for i in open_inv if i.get("source_account_name") in acct_filter]
+        filtered_cash = [a for a in cash      if a["name"] in acct_filter]
     else:
         filtered_cash = cash
 
@@ -837,7 +852,7 @@ def page_investment(investments: list, trades: list, cash: list, disp: str, rate
     cash_total_thb = (cash_usd_total * rate) + cash_thb_total
 
     for inv in open_inv:
-        price = get_price(inv.get("ticker",""))
+        price = get_inv_price(inv)
         ref   = str(price) if price else inv.get("entry_price")
         pos   = calc_position_thb(ref, get_shares(inv), get_currency(inv), rate)
         if pos: total_val_thb += pos
@@ -899,7 +914,7 @@ def page_investment(investments: list, trades: list, cash: list, disp: str, rate
         raw = []
         pie_labels_inv, pie_vals_inv = [], []
         for inv in open_inv:
-            price   = get_price(inv.get("ticker",""))
+            price   = get_inv_price(inv)
             pnl_thb = calc_pnl_thb(inv.get("entry_price"), price, get_shares(inv),
                                     get_currency(inv), rate) if price else None
             pnl_pct = calc_pnl_pct(inv.get("entry_price"), price) if price else None
@@ -1055,7 +1070,7 @@ def page_investment(investments: list, trades: list, cash: list, disp: str, rate
                 "Shares":        get_shares(inv),
                 "Avg Cost":      inv.get("entry_price","—"),
                 "Total Cost":    fmt_money(r["cost_thb"] or None, disp, rate, sign=False) if r["cost_thb"] else "—",
-                "Current Price": f"{price:.2f}" if price else "—",
+                "Current Price": (f"📌 {price:.2f}" if inv.get("manual_price") else f"{price:.2f}") if price else "—",
                 "Market Value":  fmt_money(r["pos_thb"] or None, disp, rate, sign=False),
                 "P&L %":         fmt_pct(r["pnl_pct"]) if price else "—",
                 f"P&L ({sym})":  fmt_money(r["pnl_thb"] or None, disp, rate) if price else "—",
@@ -1202,6 +1217,11 @@ def page_investment(investments: list, trades: list, cash: list, disp: str, rate
                             value=str(inv["target_pct"]) if inv.get("target_pct") is not None else "",
                             placeholder="เช่น 20  (ว่าง = ไม่ตั้ง)",
                         )
+                        new_manual_price = st.text_input(
+                            "📌 Manual Price (DR / หุ้นที่ดึงราคาไม่ได้)",
+                            value=str(inv["manual_price"]) if inv.get("manual_price") is not None else "",
+                            placeholder="ใส่ราคาปัจจุบัน เช่น 85.50  (ว่าง = ดึงจาก yfinance)",
+                        )
                         if st.form_submit_button("💾 บันทึก"):
                             upd = {
                                 "ticker":      new_ticker.upper().strip(),
@@ -1214,6 +1234,11 @@ def page_investment(investments: list, trades: list, cash: list, disp: str, rate
                                 upd["target_pct"] = t_pct
                             elif not new_tgt_raw.strip() and "target_pct" in inv:
                                 upd["target_pct"] = None
+                            mp = parse(new_manual_price)
+                            if mp is not None:
+                                upd["manual_price"] = mp
+                            elif not new_manual_price.strip():
+                                upd["manual_price"] = None
                             inv.update(upd)
                             save_investments(investments)
                             st.session_state.pop(f"edit_inv_{inv['id']}", None)
