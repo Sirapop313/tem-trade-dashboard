@@ -657,8 +657,7 @@ def page_overview(trades: list, investments: list, cash: list, disp: str, rate: 
     if ov_filter:
         open_inv    = [i for i in open_inv    if i.get("source_account_name") in ov_filter]
         cash        = [a for a in cash        if a["name"] in ov_filter]
-        open_trades = [t for t in open_trades if not t.get("source_account_name")
-                       or t.get("source_account_name") in ov_filter]
+        open_trades = [t for t in open_trades if t.get("source_account_name") in ov_filter]
 
     # Portfolio Value = positions + cash
     cash_thb = sum(a["amount"] * rate if a["currency"] == "USD" else a["amount"] for a in cash)
@@ -1614,13 +1613,24 @@ def page_trade(trades: list, cash: list, disp: str, rate: float):
                         new_sl     = ec4.text_input("Stop Loss",   value=t.get("stop_loss",""))
                         new_tp     = ec5.text_input("Take Profit", value=t.get("take_profit",""))
                         new_thesis = ec6.text_input("Thesis",      value=t.get("thesis",""))
+                        ec7, ec8   = st.columns([3, 1])
+                        _acct_opts = ["— ไม่ระบุ"] + [a["name"] for a in cash]
+                        _curr_acct = t.get("source_account_name", "")
+                        _acct_idx  = _acct_opts.index(_curr_acct) if _curr_acct in _acct_opts else 0
+                        new_acct   = ec7.selectbox("พอร์ต / บัญชี", _acct_opts, index=_acct_idx)
+                        new_dir    = ec8.selectbox("Direction", ["Long", "Short"],
+                                                   index=0 if t.get("direction","Long") == "Long" else 1)
                         if st.form_submit_button("💾 บันทึก"):
+                            _matched = next((a for a in cash if a["name"] == new_acct), None)
                             t.update({
                                 "ticker": new_ticker.upper().strip(),
                                 "shares": new_shares, "stop_loss": new_sl,
                                 "take_profit": new_tp, "entry_price": new_entry,
                                 "thesis": new_thesis,
                                 "rr": auto_rr(new_entry, new_sl, new_tp),
+                                "direction": new_dir,
+                                "source_account_name": _matched["name"] if _matched else "",
+                                "source_account_id":   _matched["id"]   if _matched else None,
                             })
                             save_trades(trades)
                             st.session_state.pop(f"show_edit_{t['id']}", None)
