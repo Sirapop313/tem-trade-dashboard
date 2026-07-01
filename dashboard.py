@@ -641,11 +641,24 @@ def render_sidebar() -> str:
 
 
 # ── Page 1: Overview ──────────────────────────────────────────────────────────
-def page_overview(trades: list, investments: list, cash: dict, disp: str, rate: float):
+def page_overview(trades: list, investments: list, cash: list, disp: str, rate: float):
+    # ── Account Filter ────────────────────────────────────────────────────────
+    all_acct_names = sorted(set(
+        i.get("source_account_name","") for i in investments if i.get("source_account_name")
+    ) | set(a["name"] for a in cash))
+    ov_filter = st.multiselect("แสดงพอร์ต", all_acct_names,
+                               placeholder="Overall — แสดงทั้งหมด", key="ov_acct_filter")
+
     open_trades   = [t for t in trades      if t.get("status") == "open"]
     closed_trades = [t for t in trades      if t.get("status") == "closed"]
     open_inv      = [i for i in investments if i.get("status") == "open"]
     wins          = [t for t in closed_trades if t.get("win_loss") == "Win"]
+
+    if ov_filter:
+        open_inv    = [i for i in open_inv    if i.get("source_account_name") in ov_filter]
+        cash        = [a for a in cash        if a["name"] in ov_filter]
+        open_trades = [t for t in open_trades if not t.get("source_account_name")
+                       or t.get("source_account_name") in ov_filter]
 
     # Portfolio Value = positions + cash
     cash_thb = sum(a["amount"] * rate if a["currency"] == "USD" else a["amount"] for a in cash)
@@ -673,26 +686,36 @@ def page_overview(trades: list, investments: list, cash: dict, disp: str, rate: 
     realized_thb = sum(t.get("pnl_thb", 0) or 0 for t in closed_trades)
     win_rate     = len(wins) / len(closed_trades) * 100 if closed_trades else None
 
+    cost_basis_thb = 0.0
+    for _item in open_trades + open_inv:
+        _s = parse(get_shares(_item))
+        _e = parse(_item.get("entry_price",""))
+        if _s and _e:
+            cost_basis_thb += _s * _e * (rate if get_currency(_item) == "USD" else 1)
+
     # ── KPI Row ───────────────────────────────────────────────────────────────
     section("Portfolio Summary")
     k1, k2, k3, k4 = st.columns(4)
     k1.metric("Total Wealth (incl. Cash)",
               fmt_money(port_thb, disp, rate, sign=False) if port_thb else "No data yet")
-    k2.metric("Unrealized P&L",
+    k2.metric("Deployed (Cost Basis)",
+              fmt_money(cost_basis_thb if cost_basis_thb else None, disp, rate, sign=False)
+              if cost_basis_thb else "No holdings")
+    _unreal_ret_pct = unreal_thb / cost_basis_thb * 100 if cost_basis_thb and unreal_items else None
+    k3.metric("Unrealized P&L",
               fmt_money(unreal_thb if unreal_items else None, disp, rate),
-              delta=fmt_pct(unreal_thb / port_thb * 100 if port_thb and unreal_items else None))
-    k3.metric("Realized P&L",
+              delta=fmt_pct(_unreal_ret_pct))
+    k4.metric("Realized P&L",
               fmt_money(realized_thb if closed_trades else None, disp, rate)
-              if closed_trades else "No closed trades yet")
-    k4.metric("Win Rate",
-              f"{win_rate:.1f}%" if win_rate is not None else "No closed trades yet")
+              if closed_trades else "No trades closed")
 
     st.markdown("<div style='height:1.5rem'></div>", unsafe_allow_html=True)
 
     # ── Return % Chart ────────────────────────────────────────────────────────
     open_all = open_trades + open_inv
     if open_all:
-        section("Portfolio Return")
+        section("Price Return — ช่วงเวลาที่เลือก")
+        st.caption("📊 วัดว่า holdings ปัจจุบันเปลี่ยนราคาเท่าไหร่ในช่วงนั้น · ไม่ใช่ return ตั้งแต่วันที่ซื้อจริง · ดู Unrealized P&L ด้านบนสำหรับ return จากต้นทุนของคุณ")
         rc1, rc2, rc3 = st.columns([3, 4, 3])
         with rc1:
             ret_view = st.radio("", ["Overall","Investment","Trade"], horizontal=True,
@@ -869,7 +892,7 @@ def page_investment(investments: list, trades: list, cash: list, disp: str, rate
     total_pnl_pct = total_pnl_thb / total_cost_thb * 100 if total_cost_thb else None
 
     _pnl_c  = "#22c55e" if (total_pnl_thb or 0) >= 0 else "#ef4444"
-    _port_s = fmt_money(total_val_thb or None, disp, rate, sign=False) if total_val_thb else "No data yet"
+    _cost_s = fmt_money(total_cost_thb or None, disp, rate, sign=False) if total_cost_thb else "No holdings yet"
     _pnl_s  = fmt_money(total_pnl_thb or None, disp, rate) if open_inv else "No holdings yet"
     _pct_s  = f"<span style='font-size:12px;color:{_pnl_c}'>{fmt_pct(total_pnl_pct)}</span>" if total_pnl_pct is not None else ""
     _best_s = f"{best_ticker} {fmt_pct(best_pct)}" if best_pct is not None else "—"
@@ -877,9 +900,9 @@ def page_investment(investments: list, trades: list, cash: list, disp: str, rate
     _lbl    = "font-size:10px;color:#94a3b8;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:4px"
     st.markdown(f"""
 <div style='display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:6px 0 10px 0'>
-  <div style='{_card}'><div style='{_lbl}'>Portfolio Value</div>
-    <div style='font-size:20px;font-weight:700;color:#f1f5f9'>{_port_s}</div></div>
-  <div style='{_card}'><div style='{_lbl}'>Total P&L</div>
+  <div style='{_card}'><div style='{_lbl}'>Cost Basis (Deployed)</div>
+    <div style='font-size:20px;font-weight:700;color:#f1f5f9'>{_cost_s}</div></div>
+  <div style='{_card}'><div style='{_lbl}'>Unrealized Return</div>
     <div style='font-size:20px;font-weight:700;color:{_pnl_c}'>{_pnl_s}</div>{_pct_s}</div>
   <div style='{_card}'><div style='{_lbl}'>Holdings</div>
     <div style='font-size:24px;font-weight:700;color:#f1f5f9'>{len(open_inv)}</div></div>
@@ -887,11 +910,13 @@ def page_investment(investments: list, trades: list, cash: list, disp: str, rate
     <div style='font-size:16px;font-weight:700;color:#22c55e'>{_best_s}</div></div>
 </div>""", unsafe_allow_html=True)
 
-    # ── Cash (mini card) ──────────────────────────────────────────────────────
+    # ── Cash + Account Total ──────────────────────────────────────────────────
     cash_parts = []
     if cash_thb_total: cash_parts.append(f"฿{cash_thb_total:,.0f} THB")
     if cash_usd_total: cash_parts.append(f"${cash_usd_total:,.2f} USD")
-    cash_inline = " &nbsp;·&nbsp; ".join(cash_parts) if cash_parts else "฿0"
+    cash_inline    = " &nbsp;·&nbsp; ".join(cash_parts) if cash_parts else "฿0"
+    acct_total_thb = total_val_thb + cash_total_thb
+    acct_total_s   = fmt_money(acct_total_thb, disp, rate, sign=False)
     st.markdown(
         f"<div style='background:rgba(88,101,242,0.08);border:1px solid rgba(88,101,242,0.25);"
         f"border-radius:8px;padding:8px 16px;margin:6px 0 4px 0;line-height:1.5'>"
@@ -900,6 +925,12 @@ def page_investment(investments: list, trades: list, cash: list, disp: str, rate
         f"&nbsp;&nbsp;"
         f"<span style='font-size:15px;font-weight:600;color:#e2e8f0'>{cash_inline}</span>"
         f"&nbsp;&nbsp;<span style='font-size:11px;color:#64748b'>· จัดการที่หน้า 💵 Cash</span>"
+        f"&nbsp;&nbsp;&nbsp;│&nbsp;&nbsp;&nbsp;"
+        f"<span style='font-size:11px;color:#64748b;text-transform:uppercase;"
+        f"letter-spacing:0.06em'>Account Total</span>"
+        f"&nbsp;&nbsp;"
+        f"<span style='font-size:15px;font-weight:700;color:#94a3b8'>{acct_total_s}</span>"
+        f"<span style='font-size:10px;color:#475569'>&nbsp;(positions + cash)</span>"
         f"</div>",
         unsafe_allow_html=True,
     )
