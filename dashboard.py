@@ -715,40 +715,11 @@ def page_overview(trades: list, investments: list, cash: list, disp: str, rate: 
               fmt_money(realized_thb if closed_trades else None, disp, rate)
               if closed_trades else "No trades closed")
 
-    st.markdown("<div style='height:1.5rem'></div>", unsafe_allow_html=True)
-
-    # ── Return % Chart ────────────────────────────────────────────────────────
+    # ── Asset Allocation ──────────────────────────────────────────────────────
     open_all = open_trades + open_inv
-    if open_all:
-        section("Price Return — ช่วงเวลาที่เลือก")
-        st.caption("📊 วัดว่า holdings ปัจจุบันเปลี่ยนราคาเท่าไหร่ในช่วงนั้น · ไม่ใช่ return ตั้งแต่วันที่ซื้อจริง · ดู Unrealized P&L ด้านบนสำหรับ return จากต้นทุนของคุณ")
-        rc1, rc2, rc3 = st.columns([3, 4, 3])
-        with rc1:
-            ret_view = st.radio("", ["Overall","Investment","Trade"], horizontal=True,
-                                key="ret_view", label_visibility="collapsed")
-        with rc2:
-            ret_period = st.radio("", ["1D","1W","1M","1Y"], horizontal=True,
-                                  key="ret_period", index=2, label_visibility="collapsed")
-        with rc3:
-            cspy = st.checkbox("S&P 500", key="cmp_spy")
-            cqqq = st.checkbox("NASDAQ 100", key="cmp_qqq")
-
-        ret_items = (open_inv if ret_view == "Investment"
-                     else open_trades if ret_view == "Trade"
-                     else open_all)
-        fig_ret = portfolio_return_chart(ret_items, rate, disp, ret_period,
-                                         show_spy=cspy, show_qqq=cqqq, height=280)
-        if fig_ret:
-            st.plotly_chart(fig_ret, use_container_width=True)
-        else:
-            st.info("ไม่มีข้อมูลราคาย้อนหลัง")
-
-        st.markdown("<div style='height:0.5rem'></div>", unsafe_allow_html=True)
-
-    # ── Allocation Pie + Portfolio Line ───────────────────────────────────────
     if open_all or cash_thb > 0:
-        section("Portfolio Breakdown")
-        col_pie, col_line = st.columns([4, 6])
+        st.markdown("<div style='height:0.5rem'></div>", unsafe_allow_html=True)
+        col_pie, col_stats = st.columns([5, 4])
 
         with col_pie:
             pie_labels, pie_vals = [], []
@@ -764,62 +735,40 @@ def page_overview(trades: list, investments: list, cash: list, disp: str, rate: 
                 pie_vals.append(cash_thb)
             if pie_labels:
                 st.plotly_chart(allocation_pie(pie_labels, pie_vals, disp, rate,
-                                               "Asset Allocation", height=320),
+                                               "Asset Allocation", height=300),
                                 use_container_width=True)
 
-        with col_line:
-            period = st.radio("", ["1D","1W","1M","1Y"], horizontal=True,
-                               key="port_period", index=2)
-            fig_line = portfolio_line_chart(open_all, cash_thb, rate, disp, period)
-            if fig_line:
-                st.plotly_chart(fig_line, use_container_width=True)
-            else:
-                st.info("ไม่มีข้อมูลราคาย้อนหลัง")
+        with col_stats:
+            st.markdown("**Portfolio Stats**")
+            stats_data = [
+                ("💼 Investments",   len(open_inv)),
+                ("📈 Open Trades",   len(open_trades)),
+                ("🔒 Closed Trades", len(closed_trades)),
+            ]
+            if win_rate is not None:
+                stats_data.append(("🏆 Win Rate", f"{win_rate:.1f}%"))
+            for label, val in stats_data:
+                a, b = st.columns([3, 2])
+                a.caption(label)
+                b.markdown(f"**{val}**")
 
-        st.markdown("<div style='height:0.5rem'></div>", unsafe_allow_html=True)
+            if cash:
+                st.divider()
+                st.caption("💵 Cash Accounts")
+                for acc in cash:
+                    sym_c = "$" if acc["currency"] == "USD" else "฿"
+                    val_c = acc["amount"] * rate if acc["currency"] == "USD" else acc["amount"]
+                    line  = f"**{acc['name']}** · {sym_c}{acc['amount']:,.2f}"
+                    if acc["currency"] == "USD":
+                        line += f" (≈฿{val_c:,.0f})"
+                    st.caption(line)
 
-    # ── P&L Charts + Snapshot ─────────────────────────────────────────────────
-    section("Performance")
-    col_chart, col_snap = st.columns([7, 3])
-
-    with col_chart:
-        if unreal_items:
-            st.plotly_chart(
-                pnl_bar_chart([d["label"] for d in unreal_items],
-                              [d["pnl_thb"] for d in unreal_items],
-                              disp, rate, "Unrealized P&L by Position", height=280),
-                use_container_width=True)
-        closed_with_pnl = [t for t in closed_trades if t.get("pnl_thb") is not None]
-        if closed_with_pnl:
-            st.plotly_chart(
-                pnl_bar_chart([t["ticker"] for t in closed_with_pnl],
-                              [t["pnl_thb"] for t in closed_with_pnl],
-                              disp, rate, "Realized P&L — Trade History", height=240),
-                use_container_width=True)
-        if not unreal_items and not closed_with_pnl:
-            st.info("เพิ่ม Trade หรือ Investment เพื่อดู chart")
-
-    with col_snap:
-        st.markdown("**Portfolio Snapshot**")
-        for label, val in [
-            ("Investment Positions", len(open_inv)),
-            ("Open Trades",          len(open_trades)),
-            ("Closed Trades",        len(closed_trades)),
-            ("Total Positions",      len(open_inv) + len(open_trades)),
-        ]:
-            a, b = st.columns([3, 1])
-            a.caption(label)
-            b.markdown(f"**{val}**")
-
-        if open_inv + open_trades:
-            st.divider()
-            st.caption("Active Tickers")
-            tickers = [i.get("ticker","") for i in open_inv + open_trades]
-            st.markdown("  ·  ".join(tickers))
-
-    # ── All Positions Table ───────────────────────────────────────────────────
+    # ── Portfolio Snapshot ────────────────────────────────────────────────────
     if open_inv or open_trades:
         st.markdown("<div style='height:0.5rem'></div>", unsafe_allow_html=True)
+        section("📋 Portfolio Snapshot")
+        st.caption("แคปหน้าจอส่วนนี้เพื่อให้ Claude ช่วยวิเคราะห์พอร์ตได้เลย")
+
         sym_ov  = "฿" if disp == "THB" else "$"
         _pc_col = f"P&L ({sym_ov})"
         pos_rows = []
@@ -831,15 +780,15 @@ def page_overview(trades: list, investments: list, cash: list, disp: str, rate: 
             ref     = str(price) if price else item.get("entry_price")
             pos_thb = calc_position_thb(ref, get_shares(item), get_currency(item), rate)
             pos_rows.append({
-                "Type":    "💼 Invest",
-                "Ticker":  item.get("ticker","—"),
-                "Account": item.get("source_account_name","—") or "ไม่ระบุ",
-                "ถือมา":  days_held_str(item.get("entry_date","")),
-                "Shares":  get_shares(item),
-                "Avg Cost": item.get("entry_price","—"),
+                "Type":      "💼 Invest",
+                "Ticker":    item.get("ticker","—"),
+                "Account":   item.get("source_account_name","—") or "ไม่ระบุ",
+                "ถือมา":    days_held_str(item.get("entry_date","")),
+                "Shares":    get_shares(item),
+                "Avg Cost":  item.get("entry_price","—"),
                 "Mkt Value": fmt_money(pos_thb, disp, rate, sign=False),
-                "P&L %":   fmt_pct(pnl_pct) if price else "—",
-                _pc_col:   fmt_money(pnl_thb, disp, rate) if price else "—",
+                "P&L %":     fmt_pct(pnl_pct) if price else "—",
+                _pc_col:     fmt_money(pnl_thb, disp, rate) if price else "—",
             })
         for item in open_trades:
             price     = get_price(item.get("ticker",""))
@@ -851,18 +800,16 @@ def page_overview(trades: list, investments: list, cash: list, disp: str, rate: 
             pos_thb   = calc_position_thb(ref, get_shares(item), get_currency(item), rate)
             arr       = "↑" if direction == "Long" else "↓"
             pos_rows.append({
-                "Type":    f"📈 Trade {arr}",
-                "Ticker":  item.get("ticker","—"),
-                "Account": item.get("source_account_name","—") or "ไม่ระบุ",
-                "ถือมา":  days_held_str(item.get("open_date","")),
-                "Shares":  get_shares(item),
-                "Avg Cost": item.get("entry_price","—"),
+                "Type":      f"📈 Trade {arr}",
+                "Ticker":    item.get("ticker","—"),
+                "Account":   item.get("source_account_name","—") or "ไม่ระบุ",
+                "ถือมา":    days_held_str(item.get("open_date","")),
+                "Shares":    get_shares(item),
+                "Avg Cost":  item.get("entry_price","—"),
                 "Mkt Value": fmt_money(pos_thb, disp, rate, sign=False),
-                "P&L %":   fmt_pct(pnl_pct) if price else "—",
-                _pc_col:   fmt_money(pnl_thb, disp, rate) if price else "—",
+                "P&L %":     fmt_pct(pnl_pct) if price else "—",
+                _pc_col:     fmt_money(pnl_thb, disp, rate) if price else "—",
             })
-
-        section(f"All Positions ({len(pos_rows)})")
 
         def _col_pnl_ov(val):
             if isinstance(val, str) and val.startswith("+"): return "color:#22c55e;font-weight:600"
@@ -875,7 +822,6 @@ def page_overview(trades: list, investments: list, cash: list, disp: str, rate: 
             styled_ov = df_ov.style.applymap(_col_pnl_ov, subset=["P&L %", _pc_col]).hide(axis="index")
         st.dataframe(styled_ov, use_container_width=True, hide_index=True)
 
-        # Cash summary row
         if cash:
             cash_lines = []
             for a in cash:
@@ -887,120 +833,40 @@ def page_overview(trades: list, investments: list, cash: list, disp: str, rate: 
                 )
             st.caption("💵 Cash: " + "  ·  ".join(cash_lines))
 
-        # Quick Add
-        with st.expander("➕ เพิ่ม Position ใหม่"):
-            qa_type = st.radio("ประเภท", ["💼 Investment", "📈 Trade"], horizontal=True, key="qa_type")
-            if qa_type == "💼 Investment":
-                with st.form("ov_new_inv"):
-                    qa1, qa2, qa3, qa4 = st.columns(4)
-                    qa_ticker   = qa1.text_input("Ticker *", placeholder="เช่น AAPL, AOT.BK")
-                    qa_shares   = qa2.text_input("จำนวนหุ้น *")
-                    qa_currency = qa3.selectbox("ราคาเป็น", ["THB","USD"])
-                    qa_entry    = qa4.text_input("Entry Price *")
-                    qa5, qa6    = st.columns(2)
-                    qa_date     = qa5.date_input("วันที่ซื้อ", value=date.today())
-                    qa_thesis   = qa6.text_input("Thesis (optional)")
-                    st.markdown("---")
-                    src_id_qi, other_name_qi, other_curr_qi = source_selector(cash, "ov_inv")
-                    qa_import   = st.checkbox("📥 Import mode (ไม่หักเงิน)", key="qa_imp_inv")
-                    if st.form_submit_button("✅ เพิ่ม Investment"):
-                        e_qi, s_qi = parse(qa_entry), parse(qa_shares)
-                        if not qa_ticker or e_qi is None or s_qi is None:
-                            st.error("กรุณากรอก Ticker, จำนวนหุ้น และ Entry Price")
-                        else:
-                            pos_thb_qi = s_qi * e_qi * (rate if qa_currency == "USD" else 1)
-                            resolved_qi = resolve_source(cash, src_id_qi, other_name_qi, other_curr_qi)
-                            if not qa_import:
-                                cash_deduct(cash, resolved_qi, pos_thb_qi, rate)
-                                save_cash(cash)
-                            investments.append({
-                                "id": next_id(investments), "type": "investment", "status": "open",
-                                "ticker": qa_ticker.upper().strip(), "shares": qa_shares,
-                                "currency": qa_currency, "entry_price": qa_entry,
-                                "entry_date": str(qa_date), "thesis": qa_thesis,
-                                "position_thb": round(pos_thb_qi, 2),
-                                "source_account_id": resolved_qi,
-                                "source_account_name": next((a["name"] for a in cash if a["id"] == resolved_qi), ""),
-                                "buy_history": [{"date": str(qa_date), "shares": qa_shares,
-                                                 "price": qa_entry, "thb": round(pos_thb_qi, 2), "note": "เปิด position"}],
-                            })
-                            save_investments(investments)
-                            st.success(f"✅ เพิ่ม {qa_ticker.upper()}")
-                            st.rerun()
+    # ── Charts (collapsible) ──────────────────────────────────────────────────
+    if open_all:
+        with st.expander("📊 ดู Charts"):
+            rc1, rc2, rc3 = st.columns([3, 4, 3])
+            with rc1:
+                ret_view = st.radio("", ["Overall","Investment","Trade"], horizontal=True,
+                                    key="ret_view", label_visibility="collapsed")
+            with rc2:
+                ret_period = st.radio("", ["1D","1W","1M","1Y"], horizontal=True,
+                                      key="ret_period", index=2, label_visibility="collapsed")
+            with rc3:
+                cspy = st.checkbox("S&P 500", key="cmp_spy")
+                cqqq = st.checkbox("NASDAQ 100", key="cmp_qqq")
+            ret_items = (open_inv if ret_view == "Investment"
+                         else open_trades if ret_view == "Trade"
+                         else open_all)
+            fig_ret = portfolio_return_chart(ret_items, rate, disp, ret_period,
+                                             show_spy=cspy, show_qqq=cqqq, height=280)
+            if fig_ret:
+                st.caption("📊 วัดการเปลี่ยนแปลงราคาในช่วงเวลาที่เลือก · ไม่ใช่ return จากราคาต้นทุนจริง")
+                st.plotly_chart(fig_ret, use_container_width=True)
             else:
-                qa_strat = strategy_input("ov_tr")
-                with st.form("ov_new_trade"):
-                    qt1, qt2, qt3, qt4 = st.columns(4)
-                    qt_ticker   = qt1.text_input("Ticker *", placeholder="เช่น AAPL, BTC-USD")
-                    qt_dir      = qt2.selectbox("Direction", ["Long","Short"])
-                    qt_currency = qt3.selectbox("ราคาเป็น", ["THB","USD"])
-                    qt_shares   = qt4.text_input("จำนวนหุ้น")
-                    qt5, qt6, qt7 = st.columns(3)
-                    qt_entry    = qt5.text_input("Entry Price *")
-                    qt_sl       = qt6.text_input("Stop Loss")
-                    qt_tp       = qt7.text_input("Take Profit")
-                    qt_date     = st.date_input("วันที่เปิด", value=date.today())
-                    st.markdown("---")
-                    src_id_qt, other_name_qt, other_curr_qt = source_selector(cash, "ov_tr")
-                    qt_import   = st.checkbox("📥 Import mode (ไม่หักเงิน)", key="qa_imp_tr")
-                    if st.form_submit_button("✅ เพิ่ม Trade"):
-                        e_qt = parse(qt_entry)
-                        if not qt_ticker or e_qt is None:
-                            st.error("กรุณากรอก Ticker และ Entry Price")
-                        else:
-                            s_qt = parse(qt_shares) or 0
-                            pos_thb_qt = s_qt * e_qt * (rate if qt_currency == "USD" else 1)
-                            resolved_qt = resolve_source(cash, src_id_qt, other_name_qt, other_curr_qt)
-                            if not qt_import:
-                                cash_deduct(cash, resolved_qt, pos_thb_qt, rate)
-                                save_cash(cash)
-                            trades.append({
-                                "id": next_id(trades), "type": "trade", "status": "open",
-                                "ticker": qt_ticker.upper().strip(), "direction": qt_dir,
-                                "currency": qt_currency, "shares": qt_shares or "1",
-                                "entry_price": qt_entry, "stop_loss": qt_sl, "take_profit": qt_tp,
-                                "open_date": str(qt_date), "strategy": qa_strat,
-                                "rr": auto_rr(qt_entry, qt_sl, qt_tp),
-                                "source_account_id": resolved_qt,
-                                "source_account_name": next((a["name"] for a in cash if a["id"] == resolved_qt), ""),
-                            })
-                            save_trades(trades)
-                            st.success(f"✅ เพิ่ม {qt_ticker.upper()}")
-                            st.rerun()
+                st.info("ไม่มีข้อมูลราคาย้อนหลัง")
 
     # ── Recent Activity ───────────────────────────────────────────────────────
     recent_events = build_activity_log(investments, trades)
     if recent_events:
+        st.markdown("<div style='height:0.5rem'></div>", unsafe_allow_html=True)
         section("Recent Activity")
         for ev in recent_events[:5]:
             st.caption(
                 f"{ev['วันที่']}  ·  {ev['ประเภท']}  {ev['Action']}  "
                 f"**{ev['Ticker']}**  ·  {ev['รายละเอียด']}"
             )
-
-    # ── Winners & Losers ──────────────────────────────────────────────────────
-    closed_with_pnl = [t for t in closed_trades if t.get("pnl_thb") is not None]
-    if closed_with_pnl:
-        section("Winners & Losers")
-        sorted_pnl = sorted(closed_with_pnl, key=lambda x: x.get("pnl_thb", 0), reverse=True)
-        winners = [t for t in sorted_pnl if (t.get("pnl_thb", 0) or 0) > 0][:3]
-        losers  = [t for t in sorted_pnl if (t.get("pnl_thb", 0) or 0) < 0][-3:]
-
-        w_col, l_col = st.columns(2)
-        with w_col:
-            st.markdown("**🏆 Top Winners**")
-            if winners:
-                for t in winners:
-                    st.caption(f"{t['ticker']}  ·  {fmt_pct(t.get('pnl_pct'))}  ·  {fmt_money(t.get('pnl_thb'), disp, rate)}")
-            else:
-                st.caption("No winners yet")
-        with l_col:
-            st.markdown("**📉 Top Losers**")
-            if losers:
-                for t in reversed(losers):
-                    st.caption(f"{t['ticker']}  ·  {fmt_pct(t.get('pnl_pct'))}  ·  {fmt_money(t.get('pnl_thb'), disp, rate)}")
-            else:
-                st.caption("No losses yet")
 
 
 # ── Page 2: Investment ────────────────────────────────────────────────────────
