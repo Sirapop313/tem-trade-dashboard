@@ -643,9 +643,13 @@ def render_sidebar() -> str:
 # ── Page 1: Overview ──────────────────────────────────────────────────────────
 def page_overview(trades: list, investments: list, cash: list, disp: str, rate: float):
     # ── Account Filter ────────────────────────────────────────────────────────
-    all_acct_names = sorted(set(
+    _UNASSIGNED = "— ไม่ระบุ"
+    _named_accts = sorted(set(
         i.get("source_account_name","") for i in investments if i.get("source_account_name")
     ) | set(a["name"] for a in cash))
+    _all_items   = list(investments) + list(trades)
+    _has_unassigned = any(not x.get("source_account_name") for x in _all_items)
+    all_acct_names = ([_UNASSIGNED] if _has_unassigned else []) + _named_accts
     ov_filter = st.multiselect("แสดงพอร์ต", all_acct_names,
                                placeholder="Overall — แสดงทั้งหมด", key="ov_acct_filter")
 
@@ -655,9 +659,12 @@ def page_overview(trades: list, investments: list, cash: list, disp: str, rate: 
     wins          = [t for t in closed_trades if t.get("win_loss") == "Win"]
 
     if ov_filter:
-        open_inv    = [i for i in open_inv    if i.get("source_account_name") in ov_filter]
+        _show_unassigned = _UNASSIGNED in ov_filter
+        open_inv    = [i for i in open_inv    if i.get("source_account_name") in ov_filter
+                       or (_show_unassigned and not i.get("source_account_name"))]
         cash        = [a for a in cash        if a["name"] in ov_filter]
-        open_trades = [t for t in open_trades if t.get("source_account_name") in ov_filter]
+        open_trades = [t for t in open_trades if t.get("source_account_name") in ov_filter
+                       or (_show_unassigned and not t.get("source_account_name"))]
 
     # Portfolio Value = positions + cash
     cash_thb = sum(a["amount"] * rate if a["currency"] == "USD" else a["amount"] for a in cash)
@@ -852,15 +859,20 @@ def page_investment(investments: list, trades: list, cash: list, disp: str, rate
     sym = "฿" if disp == "THB" else "$"
 
     # ── Account Filter ────────────────────────────────────────────────────────
+    _UNASSIGNED     = "— ไม่ระบุ"
     inv_acct_names  = sorted({i.get("source_account_name","") for i in open_inv if i.get("source_account_name")})
     cash_acct_names = sorted({a["name"] for a in cash})
-    acct_opts   = sorted(set(inv_acct_names) | set(cash_acct_names))
+    _named_inv_opts = sorted(set(inv_acct_names) | set(cash_acct_names))
+    _has_unassigned_inv = any(not i.get("source_account_name") for i in open_inv)
+    acct_opts   = ([_UNASSIGNED] if _has_unassigned_inv else []) + _named_inv_opts
     acct_filter = st.multiselect("พอร์ต (เลือกได้หลายอัน)", acct_opts,
                                   placeholder="Overall — แสดงทั้งหมด", key="inv_acct_filter")
 
     if acct_filter:
-        open_inv      = [i for i in open_inv if i.get("source_account_name") in acct_filter]
-        filtered_cash = [a for a in cash      if a["name"] in acct_filter]
+        _show_unassigned_inv = _UNASSIGNED in acct_filter
+        open_inv      = [i for i in open_inv if i.get("source_account_name") in acct_filter
+                         or (_show_unassigned_inv and not i.get("source_account_name"))]
+        filtered_cash = [a for a in cash if a["name"] in acct_filter]
     else:
         filtered_cash = cash
 
