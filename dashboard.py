@@ -817,6 +817,157 @@ def page_overview(trades: list, investments: list, cash: list, disp: str, rate: 
             tickers = [i.get("ticker","") for i in open_inv + open_trades]
             st.markdown("  ·  ".join(tickers))
 
+    # ── All Positions Table ───────────────────────────────────────────────────
+    if open_inv or open_trades:
+        st.markdown("<div style='height:0.5rem'></div>", unsafe_allow_html=True)
+        sym_ov  = "฿" if disp == "THB" else "$"
+        _pc_col = f"P&L ({sym_ov})"
+        pos_rows = []
+        for item in open_inv:
+            price   = get_inv_price(item)
+            pnl_thb = calc_pnl_thb(item.get("entry_price"), price, get_shares(item),
+                                    get_currency(item), rate) if price else None
+            pnl_pct = calc_pnl_pct(item.get("entry_price"), price) if price else None
+            ref     = str(price) if price else item.get("entry_price")
+            pos_thb = calc_position_thb(ref, get_shares(item), get_currency(item), rate)
+            pos_rows.append({
+                "Type":    "💼 Invest",
+                "Ticker":  item.get("ticker","—"),
+                "Account": item.get("source_account_name","—") or "ไม่ระบุ",
+                "ถือมา":  days_held_str(item.get("entry_date","")),
+                "Shares":  get_shares(item),
+                "Avg Cost": item.get("entry_price","—"),
+                "Mkt Value": fmt_money(pos_thb, disp, rate, sign=False),
+                "P&L %":   fmt_pct(pnl_pct) if price else "—",
+                _pc_col:   fmt_money(pnl_thb, disp, rate) if price else "—",
+            })
+        for item in open_trades:
+            price     = get_price(item.get("ticker",""))
+            direction = item.get("direction","Long")
+            pnl_thb   = calc_pnl_thb(item.get("entry_price"), price, get_shares(item),
+                                      get_currency(item), rate, direction) if price else None
+            pnl_pct   = calc_pnl_pct(item.get("entry_price"), price, direction) if price else None
+            ref       = str(price) if price else item.get("entry_price")
+            pos_thb   = calc_position_thb(ref, get_shares(item), get_currency(item), rate)
+            arr       = "↑" if direction == "Long" else "↓"
+            pos_rows.append({
+                "Type":    f"📈 Trade {arr}",
+                "Ticker":  item.get("ticker","—"),
+                "Account": item.get("source_account_name","—") or "ไม่ระบุ",
+                "ถือมา":  days_held_str(item.get("open_date","")),
+                "Shares":  get_shares(item),
+                "Avg Cost": item.get("entry_price","—"),
+                "Mkt Value": fmt_money(pos_thb, disp, rate, sign=False),
+                "P&L %":   fmt_pct(pnl_pct) if price else "—",
+                _pc_col:   fmt_money(pnl_thb, disp, rate) if price else "—",
+            })
+
+        section(f"All Positions ({len(pos_rows)})")
+
+        def _col_pnl_ov(val):
+            if isinstance(val, str) and val.startswith("+"): return "color:#22c55e;font-weight:600"
+            if isinstance(val, str) and val.startswith("-"): return "color:#ef4444;font-weight:600"
+            return ""
+        df_ov = pd.DataFrame(pos_rows)
+        try:
+            styled_ov = df_ov.style.map(_col_pnl_ov, subset=["P&L %", _pc_col]).hide(axis="index")
+        except AttributeError:
+            styled_ov = df_ov.style.applymap(_col_pnl_ov, subset=["P&L %", _pc_col]).hide(axis="index")
+        st.dataframe(styled_ov, use_container_width=True, hide_index=True)
+
+        # Cash summary row
+        if cash:
+            cash_lines = []
+            for a in cash:
+                sym_c = "$" if a["currency"] == "USD" else "฿"
+                val_c = a["amount"] * rate if a["currency"] == "USD" else a["amount"]
+                cash_lines.append(
+                    f"**{a['name']}** · {sym_c}{a['amount']:,.2f}"
+                    + (f" (≈฿{val_c:,.0f})" if a["currency"] == "USD" else "")
+                )
+            st.caption("💵 Cash: " + "  ·  ".join(cash_lines))
+
+        # Quick Add
+        with st.expander("➕ เพิ่ม Position ใหม่"):
+            qa_type = st.radio("ประเภท", ["💼 Investment", "📈 Trade"], horizontal=True, key="qa_type")
+            if qa_type == "💼 Investment":
+                with st.form("ov_new_inv"):
+                    qa1, qa2, qa3, qa4 = st.columns(4)
+                    qa_ticker   = qa1.text_input("Ticker *", placeholder="เช่น AAPL, AOT.BK")
+                    qa_shares   = qa2.text_input("จำนวนหุ้น *")
+                    qa_currency = qa3.selectbox("ราคาเป็น", ["THB","USD"])
+                    qa_entry    = qa4.text_input("Entry Price *")
+                    qa5, qa6    = st.columns(2)
+                    qa_date     = qa5.date_input("วันที่ซื้อ", value=date.today())
+                    qa_thesis   = qa6.text_input("Thesis (optional)")
+                    st.markdown("---")
+                    src_id_qi, other_name_qi, other_curr_qi = source_selector(cash, "ov_inv")
+                    qa_import   = st.checkbox("📥 Import mode (ไม่หักเงิน)", key="qa_imp_inv")
+                    if st.form_submit_button("✅ เพิ่ม Investment"):
+                        e_qi, s_qi = parse(qa_entry), parse(qa_shares)
+                        if not qa_ticker or e_qi is None or s_qi is None:
+                            st.error("กรุณากรอก Ticker, จำนวนหุ้น และ Entry Price")
+                        else:
+                            pos_thb_qi = s_qi * e_qi * (rate if qa_currency == "USD" else 1)
+                            resolved_qi = resolve_source(cash, src_id_qi, other_name_qi, other_curr_qi)
+                            if not qa_import:
+                                cash_deduct(cash, resolved_qi, pos_thb_qi, rate)
+                                save_cash(cash)
+                            investments.append({
+                                "id": next_id(investments), "type": "investment", "status": "open",
+                                "ticker": qa_ticker.upper().strip(), "shares": qa_shares,
+                                "currency": qa_currency, "entry_price": qa_entry,
+                                "entry_date": str(qa_date), "thesis": qa_thesis,
+                                "position_thb": round(pos_thb_qi, 2),
+                                "source_account_id": resolved_qi,
+                                "source_account_name": next((a["name"] for a in cash if a["id"] == resolved_qi), ""),
+                                "buy_history": [{"date": str(qa_date), "shares": qa_shares,
+                                                 "price": qa_entry, "thb": round(pos_thb_qi, 2), "note": "เปิด position"}],
+                            })
+                            save_investments(investments)
+                            st.success(f"✅ เพิ่ม {qa_ticker.upper()}")
+                            st.rerun()
+            else:
+                qa_strat = strategy_input("ov_tr")
+                with st.form("ov_new_trade"):
+                    qt1, qt2, qt3, qt4 = st.columns(4)
+                    qt_ticker   = qt1.text_input("Ticker *", placeholder="เช่น AAPL, BTC-USD")
+                    qt_dir      = qt2.selectbox("Direction", ["Long","Short"])
+                    qt_currency = qt3.selectbox("ราคาเป็น", ["THB","USD"])
+                    qt_shares   = qt4.text_input("จำนวนหุ้น")
+                    qt5, qt6, qt7 = st.columns(3)
+                    qt_entry    = qt5.text_input("Entry Price *")
+                    qt_sl       = qt6.text_input("Stop Loss")
+                    qt_tp       = qt7.text_input("Take Profit")
+                    qt_date     = st.date_input("วันที่เปิด", value=date.today())
+                    st.markdown("---")
+                    src_id_qt, other_name_qt, other_curr_qt = source_selector(cash, "ov_tr")
+                    qt_import   = st.checkbox("📥 Import mode (ไม่หักเงิน)", key="qa_imp_tr")
+                    if st.form_submit_button("✅ เพิ่ม Trade"):
+                        e_qt = parse(qt_entry)
+                        if not qt_ticker or e_qt is None:
+                            st.error("กรุณากรอก Ticker และ Entry Price")
+                        else:
+                            s_qt = parse(qt_shares) or 0
+                            pos_thb_qt = s_qt * e_qt * (rate if qt_currency == "USD" else 1)
+                            resolved_qt = resolve_source(cash, src_id_qt, other_name_qt, other_curr_qt)
+                            if not qt_import:
+                                cash_deduct(cash, resolved_qt, pos_thb_qt, rate)
+                                save_cash(cash)
+                            trades.append({
+                                "id": next_id(trades), "type": "trade", "status": "open",
+                                "ticker": qt_ticker.upper().strip(), "direction": qt_dir,
+                                "currency": qt_currency, "shares": qt_shares or "1",
+                                "entry_price": qt_entry, "stop_loss": qt_sl, "take_profit": qt_tp,
+                                "open_date": str(qt_date), "strategy": qa_strat,
+                                "rr": auto_rr(qt_entry, qt_sl, qt_tp),
+                                "source_account_id": resolved_qt,
+                                "source_account_name": next((a["name"] for a in cash if a["id"] == resolved_qt), ""),
+                            })
+                            save_trades(trades)
+                            st.success(f"✅ เพิ่ม {qt_ticker.upper()}")
+                            st.rerun()
+
     # ── Recent Activity ───────────────────────────────────────────────────────
     recent_events = build_activity_log(investments, trades)
     if recent_events:
