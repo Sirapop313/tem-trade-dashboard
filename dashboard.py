@@ -1195,7 +1195,7 @@ def page_investment(investments: list, trades: list, cash: list, disp: str, rate
                          f"{get_shares(inv)} shares"
                          f"  |  :{_ihc}[{fmt_pct(pnl_pct)}  {fmt_money(pnl_thb, disp, rate)}]"
                          ).replace("$", r"\$")
-            with st.expander(inv_label):
+            with st.expander(inv_label, expanded=False):
                 # P&L banner
                 _pc2 = "#22c55e" if (pnl_thb or 0) >= 0 else "#ef4444"
                 _bg2 = "rgba(34,197,94,0.08)" if (pnl_thb or 0) >= 0 else "rgba(239,68,68,0.08)"
