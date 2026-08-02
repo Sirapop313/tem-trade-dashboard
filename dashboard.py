@@ -1897,41 +1897,54 @@ def page_cash(trades: list, investments: list, cash: list, disp: str, rate: floa
                             unsafe_allow_html=True
                         )
                         with st.expander("✏️ จัดการ", expanded=False):
-                            with st.form(f"edit_acc_{acc['id']}"):
-                                new_name   = st.text_input("ชื่อ", value=acc["name"])
-                                new_amount = st.text_input("ยอด", value=str(acc["amount"]),
-                                                           placeholder="เช่น 50000 หรือ 1500.50")
-                                if st.form_submit_button("💾 บันทึก"):
-                                    acc["name"]   = new_name.strip() or acc["name"]
-                                    acc["amount"] = round(parse(new_amount) or 0, 2)
-                                    save_cash(cash)
-                                    st.rerun()
-
                             other_accs = [a for a in cash if a["id"] != acc["id"]]
-                            if other_accs:
-                                st.caption("🔀 Reassign → รวมกับบัญชีอื่น")
-                                with st.form(f"reassign_{acc['id']}"):
-                                    t_idx = st.selectbox("ย้ายเข้า", range(len(other_accs)),
-                                                          format_func=lambda i: acc_label(other_accs[i]))
-                                    if st.form_submit_button("ยืนยัน Reassign"):
-                                        target  = other_accs[t_idx]
-                                        amt_thb = acc["amount"] * rate if acc["currency"] == "USD" else acc["amount"]
-                                        target["amount"] = round(target["amount"] + (amt_thb / rate if target["currency"] == "USD" else amt_thb), 2)
-                                        for item in trades + investments:
-                                            if item.get("source_account_id") == acc["id"]:
-                                                item["source_account_id"]   = target["id"]
-                                                item["source_account_name"] = target["name"]
-                                        cash[:] = [a for a in cash if a["id"] != acc["id"]]
+                            _ec1, _ec2, _ec3 = st.columns([3, 3, 2])
+
+                            with _ec1:
+                                st.caption("แก้ชื่อ / ยอด")
+                                with st.form(f"edit_acc_{acc['id']}"):
+                                    new_name   = st.text_input("ชื่อ", value=acc["name"],
+                                                               label_visibility="collapsed",
+                                                               placeholder="ชื่อบัญชี")
+                                    new_amount = st.text_input("ยอด", value=str(acc["amount"]),
+                                                               label_visibility="collapsed",
+                                                               placeholder="ยอดเงิน")
+                                    if st.form_submit_button("💾 บันทึก", use_container_width=True):
+                                        acc["name"]   = new_name.strip() or acc["name"]
+                                        acc["amount"] = round(parse(new_amount) or 0, 2)
                                         save_cash(cash)
-                                        save_trades(trades)
-                                        save_investments(investments)
-                                        st.success(f"ย้าย '{acc['name']}' → '{target['name']}' ✅")
                                         st.rerun()
 
-                            if st.button("🗑️ ลบบัญชีนี้", key=f"del_acc_{acc['id']}"):
-                                cash[:] = [a for a in cash if a["id"] != acc["id"]]
-                                save_cash(cash)
-                                st.rerun()
+                            if other_accs:
+                                with _ec2:
+                                    st.caption("🔀 Reassign")
+                                    with st.form(f"reassign_{acc['id']}"):
+                                        t_idx = st.selectbox("ย้ายเข้า", range(len(other_accs)),
+                                                              format_func=lambda i: acc_label(other_accs[i]),
+                                                              label_visibility="collapsed")
+                                        if st.form_submit_button("ยืนยัน", use_container_width=True):
+                                            target  = other_accs[t_idx]
+                                            amt_thb = acc["amount"] * rate if acc["currency"] == "USD" else acc["amount"]
+                                            target["amount"] = round(target["amount"] + (amt_thb / rate if target["currency"] == "USD" else amt_thb), 2)
+                                            for item in trades + investments:
+                                                if item.get("source_account_id") == acc["id"]:
+                                                    item["source_account_id"]   = target["id"]
+                                                    item["source_account_name"] = target["name"]
+                                            cash[:] = [a for a in cash if a["id"] != acc["id"]]
+                                            save_cash(cash)
+                                            save_trades(trades)
+                                            save_investments(investments)
+                                            st.success(f"ย้าย → '{target['name']}' ✅")
+                                            st.rerun()
+
+                            with _ec3:
+                                st.caption("ลบ")
+                                st.markdown("<div style='height:1.55rem'></div>", unsafe_allow_html=True)
+                                if st.button("🗑️ ลบ", key=f"del_acc_{acc['id']}",
+                                             use_container_width=True):
+                                    cash[:] = [a for a in cash if a["id"] != acc["id"]]
+                                    save_cash(cash)
+                                    st.rerun()
 
     st.markdown("<div style='height:0.5rem'></div>", unsafe_allow_html=True)
 
