@@ -1189,18 +1189,21 @@ def page_investment(investments: list, trades: list, cash: list, disp: str, rate
                 pnl_pct = calc_pnl_pct(inv.get("entry_price"), price) if price else None
                 icon    = "🟢" if (pnl_thb or 0) >= 0 else "🔴"
 
-                _ihc = "green" if (pnl_thb or 0) >= 0 else "red"
+                _ihc    = "green" if (pnl_thb or 0) >= 0 else "red"
+                _isv    = parse(get_shares(inv))
+                _icost  = calc_position_thb(inv.get("entry_price"), get_shares(inv), get_currency(inv), rate)
+                _imval  = (_isv * price * (rate if get_currency(inv) == "USD" else 1)) if price and _isv else None
+                _ics    = fmt_money(_icost, disp, rate, sign=False) if _icost else "—"
+                _ivs    = fmt_money(_imval, disp, rate, sign=False) if _imval else "—"
                 inv_label = (f"{icon} **{inv['ticker']}**  ·  "
-                             f"AVG {inv.get('entry_price','—')}  ·  "
-                             f"{get_shares(inv)} shares"
+                             f"AVG {inv.get('entry_price','—')} → {f'{price:.2f}' if price else '—'}  ·  "
+                             f"{_ics} → {_ivs}"
                              f"  |  :{_ihc}[{fmt_pct(pnl_pct)}  {fmt_money(pnl_thb, disp, rate)}]"
                              ).replace("$", r"\$")
                 with st.expander(inv_label, expanded=False):
                     # P&L banner
                     _pc2 = "#22c55e" if (pnl_thb or 0) >= 0 else "#ef4444"
                     _bg2 = "rgba(34,197,94,0.08)" if (pnl_thb or 0) >= 0 else "rgba(239,68,68,0.08)"
-                    _cp  = get_price(inv.get("ticker",""))
-                    _pos = calc_position_thb(str(_cp) if _cp else inv.get("entry_price"), get_shares(inv), get_currency(inv), rate)
                     st.markdown(
                         f"<div style='background:{_bg2};border-left:3px solid {_pc2};"
                         f"border-radius:0 6px 6px 0;padding:10px 14px;margin-bottom:10px'>"
@@ -1209,10 +1212,15 @@ def page_investment(investments: list, trades: list, cash: list, disp: str, rate
                         f"<span style='font-size:22px;font-weight:700;color:{_pc2}'>"
                         f"{fmt_money(pnl_thb, disp, rate) if pnl_thb is not None else '—'}</span>"
                         f"&nbsp;&nbsp;<span style='font-size:13px;color:{_pc2}'>{fmt_pct(pnl_pct)}</span>"
-                        f"&nbsp;&nbsp;&nbsp;<span style='font-size:11px;color:#64748b'>"
-                        f"Price {f'{_cp:.2f}' if _cp else '—'}  ·  Value {fmt_money(_pos, disp, rate, sign=False)}</span>"
                         f"</div>",
                         unsafe_allow_html=True)
+                    im1, im2, im3, im4 = st.columns(4)
+                    im1.metric("Cost Basis",    _ics)
+                    im2.metric("Mkt Value",     _ivs)
+                    im3.metric("AVG Price",     inv.get("entry_price","—"))
+                    im4.metric("Current Price", f"{price:.2f}" if price else "—",
+                               delta=fmt_pct(pnl_pct) if pnl_pct else None)
+                    st.caption(f"Shares: {get_shares(inv)}  ·  {get_currency(inv)}")
                     ca, cb, cc, _, cd = st.columns([2, 2, 2, 1, 1])
                     if ca.button("🔴 ขาย", key=f"ci_{inv['id']}"):
                         st.session_state[f"sell_inv_{inv['id']}"] = True
@@ -1518,17 +1526,22 @@ def page_trade(trades: list, cash: list, disp: str, rate: float):
                                     get_currency(t), rate, t.get("direction","Long")) if price else None
             pnl_pct = calc_pnl_pct(t.get("entry_price"), price, t.get("direction","Long")) if price else None
             pos_thb = calc_position_thb(t.get("entry_price"), get_shares(t), get_currency(t), rate)
-            tp_thb  = calc_pnl_thb(t.get("entry_price"), parse(t.get("take_profit","")) or 0,
-                                    get_shares(t), get_currency(t), rate, t.get("direction","Long"))
-            sl_thb  = calc_pnl_thb(t.get("entry_price"), parse(t.get("stop_loss","")) or 0,
-                                    get_shares(t), get_currency(t), rate, t.get("direction","Long"))
+            _tsv    = parse(get_shares(t))
+            mkt_val_thb = (_tsv * price * (rate if get_currency(t) == "USD" else 1)) if price and _tsv else None
+            tp_val  = parse(t.get("take_profit",""))
+            sl_val  = parse(t.get("stop_loss",""))
+            tp_thb  = calc_pnl_thb(t.get("entry_price"), tp_val, get_shares(t),
+                                    get_currency(t), rate, t.get("direction","Long")) if tp_val else None
+            sl_thb  = calc_pnl_thb(t.get("entry_price"), sl_val, get_shares(t),
+                                    get_currency(t), rate, t.get("direction","Long")) if sl_val else None
             icon  = "🟢" if (pnl_thb or 0) >= 0 else "🔴"
             arrow = "↑" if t.get("direction") == "Long" else "↓"
-
-            _hc = "green" if (pnl_thb or 0) >= 0 else "red"
+            _hc   = "green" if (pnl_thb or 0) >= 0 else "red"
+            _cs   = fmt_money(pos_thb, disp, rate, sign=False) if pos_thb else "—"
+            _vs   = fmt_money(mkt_val_thb, disp, rate, sign=False) if mkt_val_thb else "—"
             header = (f"{icon} **{t['ticker']}** {arrow}  ·  "
-                      f"AVG {t.get('entry_price','—')}  ·  "
-                      f"{get_shares(t)} shares  ·  {fmt_money(pos_thb, disp, rate, sign=False)}"
+                      f"AVG {t.get('entry_price','—')} → {f'{price:.2f}' if price else '—'}  ·  "
+                      f"{_cs} → {_vs}"
                       f"  |  :{_hc}[{fmt_pct(pnl_pct)}  {fmt_money(pnl_thb, disp, rate)}]"
                       ).replace("$", r"\$")
 
@@ -1548,11 +1561,12 @@ def page_trade(trades: list, cash: list, disp: str, rate: float):
                     unsafe_allow_html=True)
 
                 r1c1, r1c2, r1c3, r1c4 = st.columns(4)
-                r1c1.metric("AVG Price",     t.get("entry_price","—"))
-                r1c2.metric("Shares",        get_shares(t))
-                r1c3.metric("Amount",        fmt_money(pos_thb, disp, rate, sign=False))
+                r1c1.metric("Cost Basis",    fmt_money(pos_thb, disp, rate, sign=False) if pos_thb else "—")
+                r1c2.metric("Mkt Value",     fmt_money(mkt_val_thb, disp, rate, sign=False) if mkt_val_thb else "—")
+                r1c3.metric("AVG Price",     t.get("entry_price","—"))
                 r1c4.metric("Current Price", f"{price:.2f}" if price else "—",
                             delta=fmt_pct(pnl_pct) if pnl_pct else None)
+                st.caption(f"Shares: {get_shares(t)}  ·  {get_currency(t)}  ·  เปิด {t.get('open_date','—')}")
 
                 st.markdown("<div style='height:4px'></div>", unsafe_allow_html=True)
 
@@ -1562,14 +1576,14 @@ def page_trade(trades: list, cash: list, disp: str, rate: float):
                         f"<div style='font-size:12px;color:#64748b;margin-bottom:2px'>TP</div>"
                         f"<div style='font-size:18px;font-weight:600'>{t.get('take_profit','—')}</div>"
                         f"<div style='font-size:12px;color:#22c55e'>"
-                        f"Profit {fmt_money(tp_thb, disp, rate) if tp_thb else '—'}</div>",
+                        f"Profit {fmt_money(tp_thb, disp, rate) if tp_thb is not None else '—'}</div>",
                         unsafe_allow_html=True)
                 with r2c2:
                     st.markdown(
                         f"<div style='font-size:12px;color:#64748b;margin-bottom:2px'>SL</div>"
                         f"<div style='font-size:18px;font-weight:600'>{t.get('stop_loss','—')}</div>"
                         f"<div style='font-size:12px;color:#ef4444'>"
-                        f"Loss {fmt_money(sl_thb, disp, rate) if sl_thb else '—'}</div>",
+                        f"Loss {fmt_money(sl_thb, disp, rate) if sl_thb is not None else '—'}</div>",
                         unsafe_allow_html=True)
                 with r2c3:
                     st.markdown(
