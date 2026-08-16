@@ -1520,6 +1520,74 @@ def page_trade(trades: list, cash: list, disp: str, rate: float):
         st.info("ไม่มี Open Trade ในขณะนี้")
     else:
         section(f"Open Trades ({len(open_trades)})")
+
+        # ── Overview table ────────────────────────────────────────────────────
+        _tr_rows = []
+        _tr_total_cost, _tr_total_mv, _tr_total_pnl = 0.0, 0.0, 0.0
+        for _ti, _t in enumerate(open_trades):
+            _tp    = get_price(_t.get("ticker",""))
+            _tpnl  = calc_pnl_thb(_t.get("entry_price"), _tp, get_shares(_t),
+                                   get_currency(_t), rate, _t.get("direction","Long")) if _tp else None
+            _tpct  = calc_pnl_pct(_t.get("entry_price"), _tp, _t.get("direction","Long")) if _tp else None
+            _tcost = calc_position_thb(_t.get("entry_price"), get_shares(_t), get_currency(_t), rate)
+            _tsv2  = parse(get_shares(_t))
+            _tmv   = (_tsv2 * _tp * (rate if get_currency(_t) == "USD" else 1)) if _tp and _tsv2 else None
+            if _tp:
+                _tr_total_mv  += to_display(_tmv or 0, disp, rate)
+                _tr_total_pnl += to_display(_tpnl or 0, disp, rate)
+            _tr_total_cost += to_display(_tcost or 0, disp, rate)
+            _tr_rows.append({
+                "#":             _ti + 1,
+                "Dir":           "↑ Long" if _t.get("direction","Long") == "Long" else "↓ Short",
+                "Ticker":        _t.get("ticker","—"),
+                "Shares":        get_shares(_t),
+                "AVG Price":     _t.get("entry_price","—"),
+                "Current Price": f"{_tp:.2f}" if _tp else "—",
+                "Cost":          fmt_money(_tcost, disp, rate, sign=False) if _tcost else "—",
+                "Mkt Value":     fmt_money(_tmv, disp, rate, sign=False) if _tmv else "—",
+                "P&L %":         fmt_pct(_tpct) if _tpct is not None else "—",
+                f"P&L ({sym})":  fmt_money(_tpnl, disp, rate) if _tpnl is not None else "—",
+                "TP":            _t.get("take_profit","—"),
+                "SL":            _t.get("stop_loss","—"),
+            })
+        _sym_p = "฿" if disp == "THB" else "$"
+        _tr_pnl_pct_tot = _tr_total_pnl / (_tr_total_mv - _tr_total_pnl) * 100 if (_tr_total_mv - _tr_total_pnl) else 0
+        _tr_rows.append({
+            "#": "—", "Dir": "—", "Ticker": "📊 TOTAL", "Shares": "—",
+            "AVG Price": "—", "Current Price": "—",
+            "Cost":          f"{_sym_p}{_tr_total_cost:,.0f}",
+            "Mkt Value":     f"{_sym_p}{_tr_total_mv:,.0f}",
+            "P&L %":         fmt_pct(_tr_pnl_pct_tot),
+            f"P&L ({sym})":  f"{_sym_p}{_tr_total_pnl:,.0f}",
+            "TP": "—", "SL": "—",
+        })
+        _pnl_cols_t = ["P&L %", f"P&L ({sym})"]
+        def _color_pnl_t(val):
+            if isinstance(val, str) and val.startswith("+"):
+                return "color: #22c55e; font-weight: 600"
+            if isinstance(val, str) and val.startswith("-"):
+                return "color: #ef4444; font-weight: 600"
+            return ""
+        def _style_total_t(row):
+            if row["Ticker"] == "📊 TOTAL":
+                return ["background-color: rgba(88,101,242,0.12); font-weight: 700"] * len(row)
+            return [""] * len(row)
+        _df_tr = pd.DataFrame(_tr_rows)
+        try:
+            _styled_tr = (_df_tr.style
+                          .map(_color_pnl_t, subset=_pnl_cols_t)
+                          .apply(_style_total_t, axis=1)
+                          .hide(axis="index"))
+        except AttributeError:
+            _styled_tr = (_df_tr.style
+                          .applymap(_color_pnl_t, subset=_pnl_cols_t)
+                          .apply(_style_total_t, axis=1)
+                          .hide(axis="index"))
+        st.dataframe(_styled_tr, use_container_width=True, hide_index=True)
+
+        st.markdown("<div style='height:0.5rem'></div>", unsafe_allow_html=True)
+
+        # ── Per-trade action menus ─────────────────────────────────────────────
         for t in open_trades:
             price   = get_price(t.get("ticker",""))
             pnl_thb = calc_pnl_thb(t.get("entry_price"), price, get_shares(t),
