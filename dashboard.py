@@ -2189,6 +2189,12 @@ def main():
         subtitle = subtitles.get(page, ""),
     )
 
+    st.markdown(
+        "<script>const _m=window.parent.document.querySelector('[data-testid=\"stMain\"]');"
+        "if(_m)_m.scrollTop=0;</script>",
+        unsafe_allow_html=True,
+    )
+
     if   page == "📊 Overview":   page_overview(trades, investments, cash, disp, rate)
     elif page == "💼 Investment": page_investment(investments, trades, cash, disp, rate)
     elif page == "📈 Trade":      page_trade(trades, cash, disp, rate)
