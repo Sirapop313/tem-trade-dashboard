@@ -231,7 +231,9 @@ _DR_PATTERN = re.compile(r'^[A-Z]+\d{2}$')  # Thai DR: NINTENDO23, META24
 def _fetch_price(ticker: str) -> float | None:
     try:
         import yfinance as yf
-        return yf.Ticker(ticker).fast_info.last_price
+        fi = yf.Ticker(ticker).fast_info
+        price = fi.last_price or fi.previous_close
+        return float(price) if price and price > 0 else None
     except Exception:
         return None
 
