@@ -12,15 +12,6 @@ import requests as _req
 import streamlit as st
 import plotly.graph_objects as go
 
-try:
-    from extra_streamlit_components import CookieManager as _CM
-    _COOKIES_OK = True
-except ImportError:
-    _COOKIES_OK = False
-
-def _cm():
-    """Return a CookieManager instance (same key = same component)."""
-    return _CM(key="tfauth_v1") if _COOKIES_OK else None
 
 # ── Config ────────────────────────────────────────────────────────────────────
 st.set_page_config(page_title="Tim.fin OS", page_icon="📊", layout="wide")
@@ -250,14 +241,26 @@ def get_price(ticker: str) -> float | None:
         price = _fetch_price(ticker.upper() + ".BK")
     return price
 
-@st.cache_data(ttl=60)
+@st.cache_data(ttl=300)
 def get_usd_thb() -> float:
+    # Primary: lightweight exchange rate API (no key needed, fast)
+    try:
+        r = _req.get("https://open.er-api.com/v6/latest/USD", timeout=5)
+        if r.status_code == 200:
+            thb = r.json().get("rates", {}).get("THB")
+            if thb and thb > 1:
+                return float(thb)
+    except Exception:
+        pass
+    # Fallback: yfinance
     try:
         import yfinance as yf
         rate = yf.Ticker("THB=X").fast_info.last_price
-        return rate if rate and rate > 1 else 35.0
+        if rate and rate > 1:
+            return float(rate)
     except Exception:
-        return 35.0
+        pass
+    return 34.0
 
 
 # ── Math Helpers ──────────────────────────────────────────────────────────────
@@ -623,9 +626,8 @@ def page_login():
                             st.error("⚠️ เชื่อมต่อเซิร์ฟเวอร์ไม่ได้ กรุณารีเฟรชหน้าแล้วลองใหม่")
                         elif result and "access_token" in result:
                             st.session_state["sb_session"] = result
-                            cm = _cm()
-                            if cm and result.get("refresh_token"):
-                                cm.set("sb_rt", result["refresh_token"], key="cm_save")
+                            if result.get("refresh_token"):
+                                st.query_params["_s"] = result["refresh_token"]
                             st.rerun()
                         else:
                             st.error("Email หรือ Password ไม่ถูกต้อง")
@@ -654,9 +656,7 @@ def render_sidebar() -> str:
             st.caption(f"👤 {email}")
             if st.button("ออกจากระบบ", use_container_width=True):
                 del st.session_state["sb_session"]
-                cm = _cm()
-                if cm:
-                    cm.delete("sb_rt", key="cm_del")
+                st.query_params.pop("_s", None)
                 st.rerun()
         st.markdown("---")
         page = st.radio("", ["📊 Overview", "💼 Investment", "📈 Trade", "💵 Cash", "📓 Log"],
@@ -2194,17 +2194,15 @@ def page_log(trades: list, investments: list, disp: str, rate: float):
 
 # ── Main ──────────────────────────────────────────────────────────────────────
 def main():
-    # Restore session from browser cookie (survives page refresh)
+    # Restore session from URL param (survives page refresh)
     if _use_sb() and "sb_session" not in st.session_state:
-        cm = _cm()
-        if cm:
-            rt = cm.get("sb_rt")
-            if rt:
-                s = sb_refresh(rt)
-                if s and "access_token" in s:
-                    st.session_state["sb_session"] = s
-                    if s.get("refresh_token"):
-                        cm.set("sb_rt", s["refresh_token"], key="cm_renew")
+        rt = st.query_params.get("_s")
+        if rt:
+            s = sb_refresh(rt)
+            if s and "access_token" in s:
+                st.session_state["sb_session"] = s
+                if s.get("refresh_token"):
+                    st.query_params["_s"] = s["refresh_token"]
 
     if _use_sb() and not is_logged_in():
         page_login()
