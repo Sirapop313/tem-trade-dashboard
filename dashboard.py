@@ -191,9 +191,12 @@ def sb_refresh(refresh_token: str) -> dict | None:
         return None
 
 def sb_signup(email: str, password: str) -> tuple[dict | None, str]:
-    r = _req.post(f"{_sb_url()}/auth/v1/signup",
-                  headers={"apikey": st.secrets["SUPABASE_KEY"], "Content-Type": "application/json"},
-                  json={"email": email, "password": password})
+    try:
+        r = _req.post(f"{_sb_url()}/auth/v1/signup",
+                      headers={"apikey": st.secrets["SUPABASE_KEY"], "Content-Type": "application/json"},
+                      json={"email": email, "password": password}, timeout=10)
+    except Exception:
+        return None, "เชื่อมต่อเซิร์ฟเวอร์ไม่ได้"
     data = r.json()
     if r.status_code in (200, 201):
         return data, ""
@@ -2370,9 +2373,17 @@ def main():
         page_login()
         return
 
-    trades      = load_trades()
-    investments = load_investments()
-    cash        = load_cash()
+    try:
+        trades      = load_trades()
+        investments = load_investments()
+        cash        = load_cash()
+    except Exception as _e:
+        if "401" in str(_e) or "403" in str(_e):
+            st.session_state.pop("sb_session", None)
+            st.query_params.pop("_s", None)
+            st.rerun()
+        st.error(f"⚠️ โหลดข้อมูลไม่ได้: {_e}")
+        st.stop()
     page        = render_sidebar()
 
     subtitles = {
