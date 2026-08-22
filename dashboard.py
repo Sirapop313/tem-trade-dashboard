@@ -675,131 +675,157 @@ def page_login():
         st.session_state["login_theme"] = "dark"
     dark = st.session_state["login_theme"] == "dark"
 
-    # ── theme-dependent values ────────────────────────────────────────────────
     if dark:
-        page_bg   = "#060C18"
-        card_bg   = "rgba(8,15,28,0.88)"
-        card_bdr  = "rgba(124,58,237,0.32)"
-        txt       = "#E2E8F0"
-        sub       = "#64748B"
-        sep       = "rgba(255,255,255,0.07)"
-        blob1     = "rgba(124,58,237,0.22)"
-        blob2     = "rgba(37,99,235,0.18)"
-        blob3     = "rgba(20,184,166,0.12)"
-        dot       = "rgba(255,255,255,0.04)"
-        tog_lbl   = "☀️ Light"
+        page_bg  = "#060C18"
+        card_bg  = "rgba(8,15,28,0.88)"
+        card_bdr = "rgba(124,58,237,0.32)"
+        txt      = "#E2E8F0"
+        sub      = "#94A3B8"
+        sep      = "rgba(255,255,255,0.08)"
+        inp_bg   = "rgba(255,255,255,0.06)"
+        inp_clr  = "#E2E8F0"
+        inp_bdr  = "#192537"
+        blob1    = "rgba(124,58,237,0.22)"
+        blob2    = "rgba(37,99,235,0.18)"
+        blob3    = "rgba(20,184,166,0.12)"
+        dot      = "rgba(255,255,255,0.04)"
+        tog_lbl  = "☀️ Light"
     else:
-        page_bg   = "#EDF2F8"
-        card_bg   = "rgba(255,255,255,0.94)"
-        card_bdr  = "rgba(124,58,237,0.22)"
-        txt       = "#0F172A"
-        sub       = "#475569"
-        sep       = "rgba(0,0,0,0.07)"
-        blob1     = "rgba(124,58,237,0.14)"
-        blob2     = "rgba(37,99,235,0.12)"
-        blob3     = "rgba(20,184,166,0.08)"
-        dot       = "rgba(0,0,0,0.03)"
-        tog_lbl   = "🌙 Dark"
+        page_bg  = "#EDF2F8"
+        card_bg  = "rgba(255,255,255,0.96)"
+        card_bdr = "rgba(124,58,237,0.22)"
+        txt      = "#0F172A"
+        sub      = "#475569"
+        sep      = "rgba(0,0,0,0.08)"
+        inp_bg   = "#F1F5F9"
+        inp_clr  = "#0F172A"
+        inp_bdr  = "#CBD5E1"
+        blob1    = "rgba(124,58,237,0.14)"
+        blob2    = "rgba(37,99,235,0.12)"
+        blob3    = "rgba(20,184,166,0.08)"
+        dot      = "rgba(0,0,0,0.04)"
+        tog_lbl  = "🌙 Dark"
 
     st.markdown(f"""<style>
 [data-testid="stSidebar"]{{display:none!important}}
 header[data-testid="stHeader"]{{display:none!important}}
 [data-testid="stToolbar"]{{display:none!important}}
 .stApp{{background:{page_bg}!important}}
+/* block-container = the card */
 [data-testid="stMain"] .block-container{{
-    max-width:460px!important;padding:0 1.25rem 2rem!important;
-    margin:0 auto!important;
-}}
-.login-card{{
-    background:{card_bg};
-    border:1px solid {card_bdr};
-    border-radius:20px;
-    padding:2rem 1.75rem;
-    backdrop-filter:blur(24px);
-    -webkit-backdrop-filter:blur(24px);
-    box-shadow:0 0 60px rgba(124,58,237,0.14),0 20px 60px rgba(0,0,0,0.35);
-    margin-top:3.5rem;
+    max-width:440px!important;
+    margin:3rem auto 2rem!important;
+    padding:2rem 1.75rem 2.25rem!important;
+    background:{card_bg}!important;
+    border:1px solid {card_bdr}!important;
+    border-radius:20px!important;
+    backdrop-filter:blur(24px)!important;
+    -webkit-backdrop-filter:blur(24px)!important;
+    box-shadow:0 0 60px rgba(124,58,237,0.14),0 24px 64px rgba(0,0,0,0.28)!important;
     position:relative;z-index:1;
 }}
-.login-logo{{display:block;height:48px;margin:0 auto 0.6rem}}
-.login-title{{
-    text-align:center;font-family:'Syne',sans-serif;
-    font-size:1.55rem;font-weight:800;color:{txt};
-    margin:0 0 0.2rem;line-height:1.2;
+/* text */
+[data-testid="stMain"] .block-container p,
+[data-testid="stMain"] .block-container label,
+[data-testid="stMain"] .block-container .stMarkdown p{{
+    color:{sub}!important;
 }}
-.login-sub{{text-align:center;color:{sub};font-size:0.8rem;margin-bottom:0}}
-.login-sep{{border:none;border-top:1px solid {sep};margin:1.2rem 0}}
-.login-blobs{{position:fixed;inset:0;pointer-events:none;z-index:0;overflow:hidden}}
-.login-blobs .b1{{position:absolute;top:-12%;left:-18%;width:65%;height:65%;
-    background:radial-gradient(circle,{blob1} 0%,transparent 68%);filter:blur(50px)}}
-.login-blobs .b2{{position:absolute;top:25%;right:-12%;width:55%;height:55%;
-    background:radial-gradient(circle,{blob2} 0%,transparent 68%);filter:blur(44px)}}
-.login-blobs .b3{{position:absolute;bottom:-8%;left:28%;width:50%;height:50%;
-    background:radial-gradient(circle,{blob3} 0%,transparent 68%);filter:blur(38px)}}
-.login-blobs .dots{{position:absolute;inset:0;
-    background-image:radial-gradient(circle,{dot} 1px,transparent 1px);
-    background-size:22px 22px}}
+/* inputs */
+[data-testid="stTextInput"] input{{
+    background:{inp_bg}!important;
+    border:1px solid {inp_bdr}!important;
+    color:{inp_clr}!important;
+    border-radius:8px!important;
+    font-family:'Plus Jakarta Sans',sans-serif!important;
+}}
+[data-testid="stTextInput"] input:focus{{
+    border-color:#7C3AED!important;
+    box-shadow:0 0 0 2px rgba(124,58,237,0.25)!important;
+}}
+[data-testid="stTextInput"] label{{
+    color:{sub}!important;font-size:.82rem!important;font-weight:500!important;
+}}
+/* tabs */
+[data-baseweb="tab-list"]{{background:transparent!important;border-bottom:1px solid {sep}!important}}
+[data-baseweb="tab"]{{color:{sub}!important}}
+[data-baseweb="tab"][aria-selected="true"]{{color:{txt}!important}}
+/* theme toggle button */
 [data-testid="stMain"] [data-testid="stButton"] button{{
     background:transparent!important;border:1px solid {card_bdr}!important;
-    color:{sub}!important;border-radius:20px!important;font-size:0.75rem!important;
-    padding:0.25rem 1rem!important;font-family:'Plus Jakarta Sans',sans-serif!important;
+    color:{sub}!important;border-radius:20px!important;
+    font-size:.75rem!important;padding:.25rem 1rem!important;
+    font-family:'Plus Jakarta Sans',sans-serif!important;
+    width:auto!important;
 }}
+/* blobs */
+.lp-blobs{{position:fixed;inset:0;pointer-events:none;z-index:0;overflow:hidden}}
+.lp-blobs .b1{{position:absolute;top:-12%;left:-18%;width:65%;height:65%;
+    background:radial-gradient(circle,{blob1} 0%,transparent 68%);filter:blur(50px)}}
+.lp-blobs .b2{{position:absolute;top:25%;right:-12%;width:55%;height:55%;
+    background:radial-gradient(circle,{blob2} 0%,transparent 68%);filter:blur(44px)}}
+.lp-blobs .b3{{position:absolute;bottom:-8%;left:28%;width:50%;height:50%;
+    background:radial-gradient(circle,{blob3} 0%,transparent 68%);filter:blur(38px)}}
+.lp-blobs .dots{{position:absolute;inset:0;
+    background-image:radial-gradient(circle,{dot} 1px,transparent 1px);
+    background-size:22px 22px}}
 </style>
-<div class="login-blobs"><div class="b1"></div><div class="b2"></div><div class="b3"></div><div class="dots"></div></div>
+<div class="lp-blobs"><div class="b1"></div><div class="b2"></div><div class="b3"></div><div class="dots"></div></div>
 """, unsafe_allow_html=True)
 
-    _, mid, _ = st.columns([1, 8, 1])
-    with mid:
-        logo_html = (f'<img class="login-logo" src="data:image/png;base64,{_LOGO_B64}">'
-                     if _LOGO_B64 else "")
-        st.markdown(f"""<div class="login-card">
+    # Logo + title (inline styles to bypass Streamlit theme overrides)
+    logo_html = (f'<img src="data:image/png;base64,{_LOGO_B64}" '
+                 f'style="height:48px;display:block;margin:0 auto .6rem">'
+                 if _LOGO_B64 else "")
+    st.markdown(f"""
 {logo_html}
-<h1 class="login-title">Investment Tracker</h1>
-<p class="login-sub">ระบบติดตาม Portfolio ส่วนตัว</p>
-<hr class="login-sep">
-</div>""", unsafe_allow_html=True)
+<h1 style="text-align:center;font-family:'Syne',sans-serif;font-size:1.55rem;
+    font-weight:800;color:{txt};margin:0 0 .25rem;line-height:1.2">Investment Tracker</h1>
+<p style="text-align:center;color:{sub};font-size:.8rem;margin:0 0 1.1rem">
+    ระบบติดตาม Portfolio ส่วนตัว</p>
+<hr style="border:none;border-top:1px solid {sep};margin:0 0 1rem">
+""", unsafe_allow_html=True)
 
-        # Theme toggle
-        tc1, tc2, tc3 = st.columns([3, 2, 3])
-        with tc2:
-            if st.button(tog_lbl, key="login_theme_toggle"):
-                st.session_state["login_theme"] = "light" if dark else "dark"
-                st.rerun()
+    # Theme toggle centered
+    _c1, _c2, _c3 = st.columns([3, 2, 3])
+    with _c2:
+        if st.button(tog_lbl, key="login_theme_toggle"):
+            st.session_state["login_theme"] = "light" if dark else "dark"
+            st.rerun()
 
-        tab_in, tab_up = st.tabs(["เข้าสู่ระบบ", "สมัครสมาชิก"])
+    tab_in, tab_up = st.tabs(["เข้าสู่ระบบ", "สมัครสมาชิก"])
 
-        with tab_in:
-            with st.form("login_form"):
-                email    = st.text_input("Email")
-                password = st.text_input("Password", type="password")
-                if st.form_submit_button("เข้าสู่ระบบ", use_container_width=True):
-                    if not email or not password:
-                        st.error("กรุณากรอก Email และ Password")
+    with tab_in:
+        with st.form("login_form"):
+            email    = st.text_input("Email")
+            password = st.text_input("Password", type="password")
+            if st.form_submit_button("เข้าสู่ระบบ", use_container_width=True):
+                if not email or not password:
+                    st.error("กรุณากรอก Email และ Password")
+                else:
+                    result = sb_signin(email.strip(), password)
+                    if result == "connection_error":
+                        st.error("⚠️ เชื่อมต่อเซิร์ฟเวอร์ไม่ได้ กรุณารีเฟรชหน้าแล้วลองใหม่")
+                    elif result and "access_token" in result:
+                        st.session_state["sb_session"] = result
+                        if result.get("refresh_token"):
+                            st.query_params["_s"] = result["refresh_token"]
+                        st.rerun()
                     else:
-                        result = sb_signin(email.strip(), password)
-                        if result == "connection_error":
-                            st.error("⚠️ เชื่อมต่อเซิร์ฟเวอร์ไม่ได้ กรุณารีเฟรชหน้าแล้วลองใหม่")
-                        elif result and "access_token" in result:
-                            st.session_state["sb_session"] = result
-                            if result.get("refresh_token"):
-                                st.query_params["_s"] = result["refresh_token"]
-                            st.rerun()
-                        else:
-                            st.error("Email หรือ Password ไม่ถูกต้อง")
+                        st.error("Email หรือ Password ไม่ถูกต้อง")
 
-        with tab_up:
-            with st.form("signup_form"):
-                email    = st.text_input("Email")
-                password = st.text_input("Password (อย่างน้อย 6 ตัวอักษร)", type="password")
-                if st.form_submit_button("สมัครสมาชิก", use_container_width=True):
-                    if not email or len(password) < 6:
-                        st.error("กรุณากรอก Email และ Password อย่างน้อย 6 ตัว")
+    with tab_up:
+        with st.form("signup_form"):
+            email    = st.text_input("Email")
+            password = st.text_input("Password (อย่างน้อย 6 ตัวอักษร)", type="password")
+            if st.form_submit_button("สมัครสมาชิก", use_container_width=True):
+                if not email or len(password) < 6:
+                    st.error("กรุณากรอก Email และ Password อย่างน้อย 6 ตัว")
+                else:
+                    result, err = sb_signup(email.strip(), password)
+                    if result is not None:
+                        st.success("✅ สมัครสมาชิกสำเร็จ! กรุณาตรวจสอบ Email เพื่อยืนยันตัวตน แล้วกลับมา Login")
                     else:
-                        result, err = sb_signup(email.strip(), password)
-                        if result is not None:
-                            st.success("✅ สมัครสมาชิกสำเร็จ! กรุณาตรวจสอบ Email เพื่อยืนยันตัวตน แล้วกลับมา Login")
-                        else:
-                            st.error(f"สมัครไม่สำเร็จ: {err}")
+                        st.error(f"สมัครไม่สำเร็จ: {err}")
 
 
 # ── Sidebar ───────────────────────────────────────────────────────────────────
