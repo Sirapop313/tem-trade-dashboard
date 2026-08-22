@@ -90,6 +90,8 @@ st.markdown("""
 .page-sub { font-size: .82rem; color: var(--it-muted); margin-top: 2px; }
 #MainMenu, footer { visibility: hidden; }
 .main .block-container { max-width: 1400px; padding-top: 1.5rem; }
+[data-testid="stSidebarCollapseButton"] { display: none !important; }
+[data-testid="collapsedControl"] { display: none !important; }
 [data-testid="stTextInput"] input {
     background: rgba(6,12,24,.6) !important;
     border: 1px solid var(--it-border) !important;
@@ -2079,6 +2081,8 @@ def page_trade(trades: list, cash: list, disp: str, rate: float):
         st.dataframe([{
             "Ticker":       t.get("ticker","—"),
             "Strategy":     t.get("strategy","—"),
+            "เปิด":         t.get("open_date","—"),
+            "ปิด":          t.get("close_date","—"),
             "Entry":        t.get("entry_price","—"),
             "Exit":         t.get("exit_price","—"),
             "P&L %":        fmt_pct(t.get("pnl_pct")),
