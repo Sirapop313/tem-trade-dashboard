@@ -23,40 +23,101 @@ CASH_FILE        = os.path.join(DIR, "cash.json")
 STRATEGY_PRESETS = ["Breakout", "Swing", "Buy on dip", "Others"]
 
 # ── CSS ───────────────────────────────────────────────────────────────────────
-st.markdown("""<style>
+st.markdown("""
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap">
+<style>
+:root {
+  --it-bg: #080F1C;
+  --it-sidebar: #09111F;
+  --it-card: #0C1828;
+  --it-border: #192537;
+  --it-text: #E2E8F0;
+  --it-muted: #64748B;
+  --it-accent: #7C3AED;
+  --it-accent2: #1D4ED8;
+  --it-green: #22C55E;
+  --it-red: #EF4444;
+}
+.stApp {
+    background: var(--it-bg) !important;
+    font-family: 'Plus Jakarta Sans', sans-serif !important;
+}
+[data-testid="stSidebar"] {
+    background: var(--it-sidebar) !important;
+    border-right: 1px solid var(--it-border) !important;
+}
+[data-testid="stSidebar"] * { font-family: 'Plus Jakarta Sans', sans-serif !important; }
 [data-testid="stMetric"] {
-    background: rgba(255,255,255,0.03);
-    border: 1px solid rgba(255,255,255,0.07);
-    border-radius: 10px;
+    background: var(--it-card);
+    border: 1px solid var(--it-border);
+    border-radius: 12px;
     padding: 18px 20px;
 }
-[data-testid="stMetricValue"] { font-size: 1.5rem !important; font-weight: 700; }
+[data-testid="stMetricValue"] { font-size: 1.5rem !important; font-weight: 700 !important; }
 [data-testid="stMetricLabel"] {
     font-size: 0.72rem !important;
-    color: #64748b !important;
+    color: var(--it-muted) !important;
     text-transform: uppercase;
     letter-spacing: 0.06em;
 }
 [data-testid="stFormSubmitButton"] button {
-    background: #5865f2; color: white;
-    border-radius: 8px; font-weight: 600; width: 100%;
+    background: linear-gradient(135deg,#5B21B6,#1D4ED8) !important;
+    color: white !important;
+    border: none !important;
+    border-radius: 10px !important;
+    font-weight: 600 !important;
+    font-family: 'Plus Jakarta Sans', sans-serif !important;
+    width: 100%;
+    transition: transform .15s, box-shadow .15s;
 }
-[data-testid="stFormSubmitButton"] button:hover { background: #4752c4; }
+[data-testid="stFormSubmitButton"] button:hover {
+    background: linear-gradient(135deg,#4C1D95,#1E40AF) !important;
+    transform: translateY(-1px);
+    box-shadow: 0 6px 24px rgba(124,58,237,0.35) !important;
+}
 .section-label {
-    font-size: 0.68rem;
-    font-weight: 600;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-    color: #475569;
-    padding-bottom: 0.5rem;
-    border-bottom: 1px solid rgba(255,255,255,0.06);
-    margin-bottom: 0.75rem;
+    font-size: 0.68rem; font-weight: 600; letter-spacing: 0.1em;
+    text-transform: uppercase; color: var(--it-muted);
+    padding-bottom: .5rem;
+    border-bottom: 1px solid var(--it-border);
+    margin-bottom: .75rem;
 }
-.page-title   { font-size: 1.6rem; font-weight: 700; margin: 0; line-height: 1.2; }
-.page-sub     { font-size: 0.82rem; color: #64748b; margin-top: 2px; }
+.page-title {
+    font-size: 1.6rem; font-weight: 700; margin: 0; line-height: 1.2;
+    font-family: 'Syne', sans-serif !important; color: var(--it-text);
+}
+.page-sub { font-size: .82rem; color: var(--it-muted); margin-top: 2px; }
 #MainMenu, footer { visibility: hidden; }
 .main .block-container { max-width: 1400px; padding-top: 1.5rem; }
+[data-testid="stTextInput"] input {
+    background: rgba(6,12,24,.6) !important;
+    border: 1px solid var(--it-border) !important;
+    border-radius: 8px !important;
+    color: var(--it-text) !important;
+    font-family: 'Plus Jakarta Sans', sans-serif !important;
+}
+[data-testid="stTextInput"] input:focus {
+    border-color: var(--it-accent) !important;
+    box-shadow: 0 0 0 2px rgba(124,58,237,.25) !important;
+}
+[data-baseweb="tab"] { font-family: 'Plus Jakarta Sans', sans-serif !important; }
+[data-baseweb="tab-border"] { background: var(--it-accent) !important; }
+[data-baseweb="tab-list"] {
+    background: transparent !important;
+    border-bottom: 1px solid var(--it-border) !important;
+}
 </style>""", unsafe_allow_html=True)
+
+# ── Logo (Tim.fin) ────────────────────────────────────────────────────────────
+import base64 as _b64
+_logo_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                          "tim.fin", "Tim.fin Logo.png")
+try:
+    with open(_logo_path, "rb") as _f:
+        _LOGO_B64 = _b64.b64encode(_f.read()).decode()
+except Exception:
+    _LOGO_B64 = ""
 
 
 # ── Data Layer ────────────────────────────────────────────────────────────────
@@ -607,12 +668,101 @@ def page_header(title: str, subtitle: str = "") -> tuple[str, float]:
 
 # ── Login Page ────────────────────────────────────────────────────────────────
 def page_login():
-    col = st.columns([1, 2, 1])[1]
-    with col:
-        st.markdown("<div style='height:3rem'></div>", unsafe_allow_html=True)
-        st.markdown("## 📊 Tim.fin OS")
-        st.markdown("ระบบติดตาม Portfolio ส่วนตัว")
-        st.markdown("---")
+    if "login_theme" not in st.session_state:
+        st.session_state["login_theme"] = "dark"
+    dark = st.session_state["login_theme"] == "dark"
+
+    # ── theme-dependent values ────────────────────────────────────────────────
+    if dark:
+        page_bg   = "#060C18"
+        card_bg   = "rgba(8,15,28,0.88)"
+        card_bdr  = "rgba(124,58,237,0.32)"
+        txt       = "#E2E8F0"
+        sub       = "#64748B"
+        sep       = "rgba(255,255,255,0.07)"
+        blob1     = "rgba(124,58,237,0.22)"
+        blob2     = "rgba(37,99,235,0.18)"
+        blob3     = "rgba(20,184,166,0.12)"
+        dot       = "rgba(255,255,255,0.04)"
+        tog_lbl   = "☀️ Light"
+    else:
+        page_bg   = "#EDF2F8"
+        card_bg   = "rgba(255,255,255,0.94)"
+        card_bdr  = "rgba(124,58,237,0.22)"
+        txt       = "#0F172A"
+        sub       = "#475569"
+        sep       = "rgba(0,0,0,0.07)"
+        blob1     = "rgba(124,58,237,0.14)"
+        blob2     = "rgba(37,99,235,0.12)"
+        blob3     = "rgba(20,184,166,0.08)"
+        dot       = "rgba(0,0,0,0.03)"
+        tog_lbl   = "🌙 Dark"
+
+    st.markdown(f"""<style>
+[data-testid="stSidebar"]{{display:none!important}}
+header[data-testid="stHeader"]{{display:none!important}}
+[data-testid="stToolbar"]{{display:none!important}}
+.stApp{{background:{page_bg}!important}}
+[data-testid="stMain"] .block-container{{
+    max-width:460px!important;padding:0 1.25rem 2rem!important;
+    margin:0 auto!important;
+}}
+.login-card{{
+    background:{card_bg};
+    border:1px solid {card_bdr};
+    border-radius:20px;
+    padding:2rem 1.75rem;
+    backdrop-filter:blur(24px);
+    -webkit-backdrop-filter:blur(24px);
+    box-shadow:0 0 60px rgba(124,58,237,0.14),0 20px 60px rgba(0,0,0,0.35);
+    margin-top:3.5rem;
+    position:relative;z-index:1;
+}}
+.login-logo{{display:block;height:48px;margin:0 auto 0.6rem}}
+.login-title{{
+    text-align:center;font-family:'Syne',sans-serif;
+    font-size:1.55rem;font-weight:800;color:{txt};
+    margin:0 0 0.2rem;line-height:1.2;
+}}
+.login-sub{{text-align:center;color:{sub};font-size:0.8rem;margin-bottom:0}}
+.login-sep{{border:none;border-top:1px solid {sep};margin:1.2rem 0}}
+.login-blobs{{position:fixed;inset:0;pointer-events:none;z-index:0;overflow:hidden}}
+.login-blobs .b1{{position:absolute;top:-12%;left:-18%;width:65%;height:65%;
+    background:radial-gradient(circle,{blob1} 0%,transparent 68%);filter:blur(50px)}}
+.login-blobs .b2{{position:absolute;top:25%;right:-12%;width:55%;height:55%;
+    background:radial-gradient(circle,{blob2} 0%,transparent 68%);filter:blur(44px)}}
+.login-blobs .b3{{position:absolute;bottom:-8%;left:28%;width:50%;height:50%;
+    background:radial-gradient(circle,{blob3} 0%,transparent 68%);filter:blur(38px)}}
+.login-blobs .dots{{position:absolute;inset:0;
+    background-image:radial-gradient(circle,{dot} 1px,transparent 1px);
+    background-size:22px 22px}}
+[data-testid="stMain"] [data-testid="stButton"] button{{
+    background:transparent!important;border:1px solid {card_bdr}!important;
+    color:{sub}!important;border-radius:20px!important;font-size:0.75rem!important;
+    padding:0.25rem 1rem!important;font-family:'Plus Jakarta Sans',sans-serif!important;
+}}
+</style>
+<div class="login-blobs"><div class="b1"></div><div class="b2"></div><div class="b3"></div><div class="dots"></div></div>
+""", unsafe_allow_html=True)
+
+    _, mid, _ = st.columns([1, 8, 1])
+    with mid:
+        logo_html = (f'<img class="login-logo" src="data:image/png;base64,{_LOGO_B64}">'
+                     if _LOGO_B64 else "")
+        st.markdown(f"""<div class="login-card">
+{logo_html}
+<h1 class="login-title">Investment Tracker</h1>
+<p class="login-sub">ระบบติดตาม Portfolio ส่วนตัว</p>
+<hr class="login-sep">
+</div>""", unsafe_allow_html=True)
+
+        # Theme toggle
+        tc1, tc2, tc3 = st.columns([3, 2, 3])
+        with tc2:
+            if st.button(tog_lbl, key="login_theme_toggle"):
+                st.session_state["login_theme"] = "light" if dark else "dark"
+                st.rerun()
+
         tab_in, tab_up = st.tabs(["เข้าสู่ระบบ", "สมัครสมาชิก"])
 
         with tab_in:
@@ -652,7 +802,17 @@ def page_login():
 # ── Sidebar ───────────────────────────────────────────────────────────────────
 def render_sidebar() -> str:
     with st.sidebar:
-        st.markdown("### 📊 Tim.fin OS")
+        if _LOGO_B64:
+            st.markdown(
+                f'<img src="data:image/png;base64,{_LOGO_B64}" '
+                f'style="height:36px;display:block;margin:0.5rem auto 0.25rem">',
+                unsafe_allow_html=True,
+            )
+        st.markdown(
+            '<p style="text-align:center;font-family:Syne,sans-serif;'
+            'font-weight:700;font-size:0.95rem;color:#E2E8F0;margin:0 0 0.25rem">Investment Tracker</p>',
+            unsafe_allow_html=True,
+        )
         if is_logged_in():
             email = st.session_state["sb_session"]["user"]["email"]
             st.caption(f"👤 {email}")
