@@ -27,42 +27,196 @@ st.markdown("""
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap">
 <style>
+/* ── Tokens ──────────────────────────────────────────────────────────── */
 :root {
-  --it-bg: #080F1C;
+  --it-bg:      #080F1C;
   --it-sidebar: #09111F;
-  --it-card: #0C1828;
-  --it-border: #192537;
-  --it-text: #E2E8F0;
-  --it-muted: #64748B;
-  --it-accent: #7C3AED;
+  --it-card:    #0C1828;
+  --it-border:  #192537;
+  --it-text:    #E2E8F0;
+  --it-muted:   #64748B;
+  --it-accent:  #7C3AED;
   --it-accent2: #1D4ED8;
-  --it-green: #22C55E;
-  --it-red: #EF4444;
+  --it-green:   #22C55E;
+  --it-red:     #EF4444;
 }
+
+/* ── Base ────────────────────────────────────────────────────────────── */
+#MainMenu, footer { visibility: hidden; }
+[data-testid="stSidebarCollapseButton"],
+[data-testid="collapsedControl"],
+[data-testid="stToolbar"],
+[data-testid="stDecoration"] { display: none !important; }
+
 .stApp {
     background: var(--it-bg) !important;
     font-family: 'Plus Jakarta Sans', sans-serif !important;
 }
+/* Subtle purple glow at top of content */
+[data-testid="stMain"] {
+    background: linear-gradient(180deg, rgba(124,58,237,0.05) 0%, transparent 280px) !important;
+}
+.main .block-container { max-width: 1400px; padding-top: 1.5rem; }
+
+/* ── Sidebar ─────────────────────────────────────────────────────────── */
 [data-testid="stSidebar"] {
     background: var(--it-sidebar) !important;
     border-right: 1px solid var(--it-border) !important;
 }
 [data-testid="stSidebar"] * { font-family: 'Plus Jakarta Sans', sans-serif !important; }
-[data-testid="stMetric"] {
-    background: var(--it-card);
-    border: 1px solid var(--it-border);
-    border-radius: 12px;
-    padding: 18px 20px;
+/* Gradient accent bar at top of sidebar */
+[data-testid="stSidebarContent"]::before {
+    content: '';
+    display: block;
+    height: 3px;
+    background: linear-gradient(90deg, #7C3AED, #1D4ED8, #0D9488);
+    border-radius: 0 0 2px 2px;
+    margin-bottom: 1rem;
 }
-[data-testid="stMetricValue"] { font-size: 1.5rem !important; font-weight: 700 !important; }
-[data-testid="stMetricLabel"] {
-    font-size: 0.72rem !important;
+/* Sidebar nav items */
+[data-testid="stSidebar"] [data-baseweb="radio"] label {
+    border-radius: 8px !important;
+    padding: 5px 10px !important;
+    margin: 2px 0 !important;
+    transition: background .15s !important;
+}
+[data-testid="stSidebar"] [data-baseweb="radio"] label:hover {
+    background: rgba(124,58,237,0.1) !important;
+}
+[data-testid="stSidebar"] [data-baseweb="radio"] [data-checked="true"] ~ div {
+    color: #A78BFA !important;
+}
+/* Sidebar logout button */
+[data-testid="stSidebar"] [data-testid="stButton"] button {
+    background: transparent !important;
+    border: 1px solid rgba(124,58,237,0.28) !important;
     color: var(--it-muted) !important;
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
+    border-radius: 8px !important;
+    font-size: 0.82rem !important;
+    transition: all .15s !important;
 }
+[data-testid="stSidebar"] [data-testid="stButton"] button:hover {
+    background: rgba(124,58,237,0.1) !important;
+    border-color: var(--it-accent) !important;
+    color: var(--it-text) !important;
+}
+
+/* ── Page header ─────────────────────────────────────────────────────── */
+.page-title {
+    font-size: 1.8rem; font-weight: 800; margin: 0; line-height: 1.15;
+    font-family: 'Syne', sans-serif !important;
+    background: linear-gradient(135deg, #C4B5FD 0%, #93C5FD 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+.page-sub { font-size: .82rem; color: var(--it-muted); margin-top: 3px; }
+
+/* ── Section labels ──────────────────────────────────────────────────── */
+.section-label {
+    font-size: 0.65rem; font-weight: 700; letter-spacing: 0.14em;
+    text-transform: uppercase; color: var(--it-accent);
+    padding-bottom: .45rem;
+    border-bottom: 1px solid rgba(124,58,237,0.22);
+    margin-bottom: .75rem;
+}
+
+/* ── Metric cards ────────────────────────────────────────────────────── */
+[data-testid="stMetric"] {
+    background: linear-gradient(135deg, rgba(124,58,237,0.08) 0%, var(--it-card) 100%) !important;
+    border: 1px solid rgba(124,58,237,0.18) !important;
+    border-left: 3px solid rgba(124,58,237,0.7) !important;
+    border-radius: 12px !important;
+    padding: 18px 20px !important;
+    transition: transform .15s, box-shadow .15s !important;
+}
+[data-testid="stMetric"]:hover {
+    transform: translateY(-2px) !important;
+    box-shadow: 0 8px 28px rgba(124,58,237,0.18) !important;
+}
+[data-testid="stMetricValue"] {
+    font-size: 1.55rem !important;
+    font-weight: 700 !important;
+    color: var(--it-text) !important;
+    font-family: 'Syne', sans-serif !important;
+}
+[data-testid="stMetricLabel"] {
+    font-size: 0.65rem !important;
+    color: var(--it-muted) !important;
+    text-transform: uppercase !important;
+    letter-spacing: 0.09em !important;
+    font-weight: 600 !important;
+}
+
+/* ── Expanders ───────────────────────────────────────────────────────── */
+[data-testid="stExpander"] {
+    background: var(--it-card) !important;
+    border: 1px solid var(--it-border) !important;
+    border-left: 3px solid rgba(124,58,237,0.38) !important;
+    border-radius: 12px !important;
+    margin-bottom: .5rem !important;
+    transition: border-left-color .15s !important;
+}
+[data-testid="stExpander"]:hover {
+    border-left-color: var(--it-accent) !important;
+}
+[data-testid="stExpander"] summary {
+    padding: 10px 16px !important;
+    font-family: 'Plus Jakarta Sans', sans-serif !important;
+    font-weight: 600 !important;
+}
+
+/* ── Inputs ──────────────────────────────────────────────────────────── */
+[data-testid="stTextInput"] input,
+[data-testid="stNumberInput"] input,
+[data-testid="stTextArea"] textarea,
+[data-testid="stDateInput"] input {
+    background: rgba(6,12,24,.65) !important;
+    border: 1px solid var(--it-border) !important;
+    border-radius: 8px !important;
+    color: var(--it-text) !important;
+    font-family: 'Plus Jakarta Sans', sans-serif !important;
+}
+[data-testid="stTextInput"] input:focus,
+[data-testid="stNumberInput"] input:focus,
+[data-testid="stTextArea"] textarea:focus {
+    border-color: var(--it-accent) !important;
+    box-shadow: 0 0 0 2px rgba(124,58,237,.22) !important;
+}
+
+/* ── Select / Multiselect ────────────────────────────────────────────── */
+[data-baseweb="select"] > div {
+    background: rgba(6,12,24,.65) !important;
+    border: 1px solid var(--it-border) !important;
+    border-radius: 8px !important;
+}
+
+/* ── Tabs (inner pages) ──────────────────────────────────────────────── */
+[data-baseweb="tab-list"] {
+    background: rgba(12,24,40,0.6) !important;
+    border-radius: 10px !important;
+    padding: 4px !important;
+    border: none !important;
+    gap: 2px !important;
+}
+[data-baseweb="tab"] {
+    border-radius: 7px !important;
+    padding: 5px 16px !important;
+    color: var(--it-muted) !important;
+    font-weight: 500 !important;
+    font-family: 'Plus Jakarta Sans', sans-serif !important;
+    transition: background .15s !important;
+}
+[data-baseweb="tab"][aria-selected="true"] {
+    background: rgba(124,58,237,0.22) !important;
+    color: #C4B5FD !important;
+    font-weight: 600 !important;
+}
+[data-baseweb="tab-border"] { display: none !important; }
+
+/* ── Buttons (form submit) ───────────────────────────────────────────── */
 [data-testid="stFormSubmitButton"] button {
-    background: linear-gradient(135deg,#5B21B6,#1D4ED8) !important;
+    background: linear-gradient(135deg, #5B21B6, #1D4ED8) !important;
     color: white !important;
     border: none !important;
     border-radius: 10px !important;
@@ -72,43 +226,48 @@ st.markdown("""
     transition: transform .15s, box-shadow .15s;
 }
 [data-testid="stFormSubmitButton"] button:hover {
-    background: linear-gradient(135deg,#4C1D95,#1E40AF) !important;
+    background: linear-gradient(135deg, #4C1D95, #1E40AF) !important;
     transform: translateY(-1px);
-    box-shadow: 0 6px 24px rgba(124,58,237,0.35) !important;
+    box-shadow: 0 6px 24px rgba(124,58,237,0.38) !important;
 }
-.section-label {
-    font-size: 0.68rem; font-weight: 600; letter-spacing: 0.1em;
-    text-transform: uppercase; color: var(--it-muted);
-    padding-bottom: .5rem;
-    border-bottom: 1px solid var(--it-border);
-    margin-bottom: .75rem;
-}
-.page-title {
-    font-size: 1.6rem; font-weight: 700; margin: 0; line-height: 1.2;
-    font-family: 'Syne', sans-serif !important; color: var(--it-text);
-}
-.page-sub { font-size: .82rem; color: var(--it-muted); margin-top: 2px; }
-#MainMenu, footer { visibility: hidden; }
-.main .block-container { max-width: 1400px; padding-top: 1.5rem; }
-[data-testid="stSidebarCollapseButton"] { display: none !important; }
-[data-testid="collapsedControl"] { display: none !important; }
-[data-testid="stTextInput"] input {
-    background: rgba(6,12,24,.6) !important;
-    border: 1px solid var(--it-border) !important;
+
+/* ── Regular buttons (non-sidebar, non-login) ────────────────────────── */
+[data-testid="stMain"] [data-testid="stButton"] button {
+    background: rgba(124,58,237,0.12) !important;
+    border: 1px solid rgba(124,58,237,0.3) !important;
+    color: #C4B5FD !important;
     border-radius: 8px !important;
-    color: var(--it-text) !important;
     font-family: 'Plus Jakarta Sans', sans-serif !important;
+    font-weight: 500 !important;
+    transition: all .15s !important;
 }
-[data-testid="stTextInput"] input:focus {
+[data-testid="stMain"] [data-testid="stButton"] button:hover {
+    background: rgba(124,58,237,0.22) !important;
     border-color: var(--it-accent) !important;
-    box-shadow: 0 0 0 2px rgba(124,58,237,.25) !important;
+    color: #E2E8F0 !important;
+    transform: translateY(-1px) !important;
 }
-[data-baseweb="tab"] { font-family: 'Plus Jakarta Sans', sans-serif !important; }
-[data-baseweb="tab-border"] { background: var(--it-accent) !important; }
-[data-baseweb="tab-list"] {
-    background: transparent !important;
-    border-bottom: 1px solid var(--it-border) !important;
+
+/* ── Dataframes ──────────────────────────────────────────────────────── */
+[data-testid="stDataFrame"] {
+    border: 1px solid var(--it-border) !important;
+    border-radius: 12px !important;
+    overflow: hidden !important;
 }
+
+/* ── Alerts ──────────────────────────────────────────────────────────── */
+[data-testid="stAlert"] { border-radius: 10px !important; }
+
+/* ── Multiselect tags ────────────────────────────────────────────────── */
+[data-baseweb="tag"] {
+    background: rgba(124,58,237,0.2) !important;
+    border: 1px solid rgba(124,58,237,0.35) !important;
+    border-radius: 6px !important;
+    color: #C4B5FD !important;
+}
+
+/* ── Dividers ────────────────────────────────────────────────────────── */
+hr { border-color: var(--it-border) !important; }
 </style>""", unsafe_allow_html=True)
 
 # ── Logo (Tim.fin) ────────────────────────────────────────────────────────────
