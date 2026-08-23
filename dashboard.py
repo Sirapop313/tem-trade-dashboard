@@ -1,6 +1,7 @@
 """
 Tim.fin Personal OS — Investment & Trade Dashboard
 """
+import base64 as _b64
 import io
 import json
 import os
@@ -21,6 +22,55 @@ TRADES_FILE      = os.path.join(DIR, "trades.json")
 INVESTMENTS_FILE = os.path.join(DIR, "investments.json")
 CASH_FILE        = os.path.join(DIR, "cash.json")
 STRATEGY_PRESETS = ["Breakout", "Swing", "Buy on dip", "Others"]
+
+# -- Candlestick decorative BG (computed here so CSS can embed it directly) --
+_CDATA = [
+    ( 35,  70, 108, 188, 228, True),
+    ( 95,  85, 122, 202, 245, False),
+    (155,  65, 100, 212, 255, False),
+    (215,  80, 125, 235, 272, False),
+    (275,  85, 138, 258, 290, False),
+    (335,  92, 135, 242, 278, True),
+    (395,  75, 102, 205, 250, True),
+    (455,  52,  75, 175, 228, True),
+    (515,  35,  56, 148, 200, True),
+    (575,  25,  44, 115, 172, True),
+    (635,  30,  52, 135, 190, False),
+    (695,  20,  40, 105, 160, True),
+    (755,  10,  28,  85, 130, True),
+    (815,  15,  33,  88, 142, True),
+    (875,   8,  22,  72, 118, True),
+]
+_close_pts = " ".join(
+    f"{'M' if i == 0 else 'L'} {cx} {bt if bull else bb}"
+    for i, (cx, wt, bt, bb, wb, bull) in enumerate(_CDATA)
+)
+_c_svgs = "".join(
+    f'<line x1="{cx}" y1="{wt}" x2="{cx}" y2="{wb}" '
+    f'stroke="{"#7C3AED" if bull else "#94A3B8"}" stroke-width="1.5" '
+    f'stroke-opacity="{"0.28" if bull else "0.16"}"/>'
+    f'<rect x="{cx - 12}" y="{bt}" width="24" height="{bb - bt}" '
+    f'fill="{"url(#cb)" if bull else "url(#cr)"}" rx="2"/>'
+    for cx, wt, bt, bb, wb, bull in _CDATA
+)
+_svg_raw = (
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 910 310" opacity="0.28">'
+    '<defs>'
+    '<linearGradient id="cb" x1="0" y1="0" x2="0" y2="1">'
+    '<stop offset="0%" stop-color="#7C3AED" stop-opacity="0.9"/>'
+    '<stop offset="100%" stop-color="#7C3AED" stop-opacity="0.3"/>'
+    '</linearGradient>'
+    '<linearGradient id="cr" x1="0" y1="0" x2="0" y2="1">'
+    '<stop offset="0%" stop-color="#94A3B8" stop-opacity="0.7"/>'
+    '<stop offset="100%" stop-color="#94A3B8" stop-opacity="0.2"/>'
+    '</linearGradient>'
+    '</defs>'
+    + _c_svgs
+    + f'<path d="{_close_pts}" fill="none" stroke="#7C3AED" '
+    'stroke-width="2.5" stroke-opacity="0.7" stroke-dasharray="5 3"/>'
+    '</svg>'
+)
+_svg_b64 = _b64.b64encode(_svg_raw.encode()).decode()
 
 # -- CSS --
 st.markdown(
@@ -49,39 +99,31 @@ st.markdown("""<style>
 [data-testid="stToolbar"],
 [data-testid="stDecoration"] { display: none !important; }
 
-/* Sidebar collapse / expand buttons */
+/* Sidebar collapse / expand buttons — style only, never override display */
 [data-testid="stSidebarCollapseButton"] button,
 [data-testid="collapsedControl"] button {
     background: rgba(124,58,237,0.18) !important;
     border: 1px solid rgba(124,58,237,0.4) !important;
     border-radius: 8px !important;
     color: #C4B5FD !important;
-    width: 32px !important;
-    height: 32px !important;
-    display: flex !important;
-    align-items: center !important;
-    justify-content: center !important;
-    transition: background .15s, border-color .15s !important;
 }
 [data-testid="stSidebarCollapseButton"] button:hover,
 [data-testid="collapsedControl"] button:hover {
     background: rgba(124,58,237,0.35) !important;
     border-color: var(--it-accent) !important;
 }
-[data-testid="collapsedControl"] {
-    display: flex !important;
-    visibility: visible !important;
-    opacity: 1 !important;
-}
 
 .stApp {
     background-color: #060C18 !important;
     background-image:
+        url('data:image/svg+xml;base64,__CANDLE_SVG__'),
         linear-gradient(rgba(124,58,237,0.042) 1px, transparent 1px),
         linear-gradient(90deg, rgba(29,78,216,0.028) 1px, transparent 1px),
         radial-gradient(ellipse 100% 55% at 55% -10%, rgba(124,58,237,0.13) 0%, transparent 65%) !important;
-    background-size: 44px 44px, 44px 44px, 100% 100% !important;
-    background-attachment: fixed !important;
+    background-size: 72% 62%, 44px 44px, 44px 44px, 100% 100% !important;
+    background-position: bottom right, 0 0, 0 0, 0 0 !important;
+    background-repeat: no-repeat, repeat, repeat, no-repeat !important;
+    background-attachment: fixed, fixed, fixed, fixed !important;
     font-family: 'Plus Jakarta Sans', sans-serif !important;
 }
 /* Content area: no extra bg, let stApp grid show through */
@@ -301,10 +343,9 @@ st.markdown("""<style>
 
 /* Dividers */
 hr { border-color: var(--it-border) !important; }
-</style>""", unsafe_allow_html=True)
+</style>""".replace("__CANDLE_SVG__", _svg_b64), unsafe_allow_html=True)
 
 # -- Logo (Tim.fin) --
-import base64 as _b64
 _logo_path = os.path.join(DIR, "Tim.fin Logo.png")
 if not os.path.exists(_logo_path):
     _logo_path = os.path.join(os.path.dirname(DIR), "tim.fin", "Tim.fin Logo.png")
@@ -313,72 +354,6 @@ try:
         _LOGO_B64 = _b64.b64encode(_f.read()).decode()
 except Exception:
     _LOGO_B64 = ""
-
-# -- Candlestick decorative background --
-_CDATA = [
-    # (cx, wick_top, body_top, body_bot, wick_bot, bull)
-    ( 35,  70, 108, 188, 228, True),
-    ( 95,  85, 122, 202, 245, False),
-    (155,  65, 100, 212, 255, False),
-    (215,  80, 125, 235, 272, False),
-    (275,  85, 138, 258, 290, False),
-    (335,  92, 135, 242, 278, True),
-    (395,  75, 102, 205, 250, True),
-    (455,  52,  75, 175, 228, True),
-    (515,  35,  56, 148, 200, True),
-    (575,  25,  44, 115, 172, True),
-    (635,  30,  52, 135, 190, False),
-    (695,  20,  40, 105, 160, True),
-    (755,  10,  28,  85, 130, True),
-    (815,  15,  33,  88, 142, True),
-    (875,   8,  22,  72, 118, True),
-]
-_close_pts = " ".join(
-    f"{'M' if i == 0 else 'L'} {cx} {bt if bull else bb}"
-    for i, (cx, wt, bt, bb, wb, bull) in enumerate(_CDATA)
-)
-_c_svgs = "".join(
-    f'<line x1="{cx}" y1="{wt}" x2="{cx}" y2="{wb}" '
-    f'stroke="{"#7C3AED" if bull else "#94A3B8"}" stroke-width="1.5" '
-    f'stroke-opacity="{"0.28" if bull else "0.16"}"/>'
-    f'<rect x="{cx - 12}" y="{bt}" width="24" height="{bb - bt}" '
-    f'fill="{"url(#cb)" if bull else "url(#cr)"}" rx="2"/>'
-    for cx, wt, bt, bb, wb, bull in _CDATA
-)
-_svg_raw = (
-    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 910 310" opacity="0.22">'
-    '<defs>'
-    '<linearGradient id="cb" x1="0" y1="0" x2="0" y2="1">'
-    '<stop offset="0%" stop-color="#7C3AED" stop-opacity="0.65"/>'
-    '<stop offset="100%" stop-color="#7C3AED" stop-opacity="0.18"/>'
-    '</linearGradient>'
-    '<linearGradient id="cr" x1="0" y1="0" x2="0" y2="1">'
-    '<stop offset="0%" stop-color="#94A3B8" stop-opacity="0.5"/>'
-    '<stop offset="100%" stop-color="#94A3B8" stop-opacity="0.12"/>'
-    '</linearGradient>'
-    '</defs>'
-    + _c_svgs
-    + f'<path d="{_close_pts}" fill="none" stroke="#7C3AED" '
-    'stroke-width="2" stroke-opacity="0.45" stroke-dasharray="5 3"/>'
-    '</svg>'
-)
-_svg_b64 = _b64.b64encode(_svg_raw.encode()).decode()
-# Inject SVG as a background-image layer on .stApp — background-attachment:fixed
-# guarantees it never scrolls, unlike position:fixed inside Streamlit's scroll container
-_CANDLE_BG_HTML = (
-    "<style>"
-    ".stApp{"
-    f"background-image:url('data:image/svg+xml;base64,{_svg_b64}'),"
-    "linear-gradient(rgba(124,58,237,0.042) 1px,transparent 1px),"
-    "linear-gradient(90deg,rgba(29,78,216,0.028) 1px,transparent 1px),"
-    "radial-gradient(ellipse 100% 55% at 55% -10%,rgba(124,58,237,0.13) 0%,transparent 65%)!important;"
-    "background-size:72% 62%,44px 44px,44px 44px,100% 100%!important;"
-    "background-position:bottom right,0 0,0 0,0 0!important;"
-    "background-repeat:no-repeat,repeat,repeat,no-repeat!important;"
-    "background-attachment:fixed,fixed,fixed,fixed!important;"
-    "}"
-    "</style>"
-)
 
 
 # -- Data Layer --
@@ -2670,9 +2645,6 @@ def main():
     if _use_sb() and not is_logged_in():
         page_login()
         return
-
-    # Candlestick decorative background (inner pages only)
-    st.markdown(_CANDLE_BG_HTML, unsafe_allow_html=True)
 
     try:
         trades      = load_trades()
