@@ -13,7 +13,7 @@ import streamlit as st
 import plotly.graph_objects as go
 
 
-# ── Config ────────────────────────────────────────────────────────────────────
+# -- Config --
 st.set_page_config(page_title="Tim.fin OS", page_icon="📊", layout="wide")
 
 DIR = os.path.dirname(os.path.abspath(__file__))
@@ -22,12 +22,15 @@ INVESTMENTS_FILE = os.path.join(DIR, "investments.json")
 CASH_FILE        = os.path.join(DIR, "cash.json")
 STRATEGY_PRESETS = ["Breakout", "Swing", "Buy on dip", "Others"]
 
-# ── CSS ───────────────────────────────────────────────────────────────────────
-st.markdown("""
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap">
-<style>
-/* ── Tokens ──────────────────────────────────────────────────────────── */
+# -- CSS --
+st.markdown(
+    '<link rel="preconnect" href="https://fonts.googleapis.com">'
+    '<link rel="stylesheet" href="https://fonts.googleapis.com/css2?'
+    'family=Syne:wght@400;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap">',
+    unsafe_allow_html=True,
+)
+st.markdown("""<style>
+/* Tokens */
 :root {
   --it-bg:      #080F1C;
   --it-sidebar: #09111F;
@@ -41,7 +44,7 @@ st.markdown("""
   --it-red:     #EF4444;
 }
 
-/* ── Base ────────────────────────────────────────────────────────────── */
+/* Base */
 #MainMenu, footer { visibility: hidden; }
 [data-testid="stSidebarCollapseButton"],
 [data-testid="collapsedControl"],
@@ -58,7 +61,7 @@ st.markdown("""
 }
 .main .block-container { max-width: 1400px; padding-top: 1.5rem; }
 
-/* ── Sidebar ─────────────────────────────────────────────────────────── */
+/* Sidebar */
 [data-testid="stSidebar"] {
     background: var(--it-sidebar) !important;
     border-right: 1px solid var(--it-border) !important;
@@ -101,7 +104,7 @@ st.markdown("""
     color: var(--it-text) !important;
 }
 
-/* ── Page header ─────────────────────────────────────────────────────── */
+/* Page header */
 .page-title {
     font-size: 1.8rem; font-weight: 800; margin: 0; line-height: 1.15;
     font-family: 'Syne', sans-serif !important;
@@ -112,7 +115,7 @@ st.markdown("""
 }
 .page-sub { font-size: .82rem; color: var(--it-muted); margin-top: 3px; }
 
-/* ── Section labels ──────────────────────────────────────────────────── */
+/* Section labels */
 .section-label {
     font-size: 0.65rem; font-weight: 700; letter-spacing: 0.14em;
     text-transform: uppercase; color: var(--it-accent);
@@ -121,7 +124,7 @@ st.markdown("""
     margin-bottom: .75rem;
 }
 
-/* ── Metric cards ────────────────────────────────────────────────────── */
+/* Metric cards */
 [data-testid="stMetric"] {
     background: linear-gradient(135deg, rgba(124,58,237,0.08) 0%, var(--it-card) 100%) !important;
     border: 1px solid rgba(124,58,237,0.18) !important;
@@ -148,7 +151,7 @@ st.markdown("""
     font-weight: 600 !important;
 }
 
-/* ── Expanders ───────────────────────────────────────────────────────── */
+/* Expanders */
 [data-testid="stExpander"] {
     background: var(--it-card) !important;
     border: 1px solid var(--it-border) !important;
@@ -166,7 +169,7 @@ st.markdown("""
     font-weight: 600 !important;
 }
 
-/* ── Inputs ──────────────────────────────────────────────────────────── */
+/* Inputs */
 [data-testid="stTextInput"] input,
 [data-testid="stNumberInput"] input,
 [data-testid="stTextArea"] textarea,
@@ -184,14 +187,14 @@ st.markdown("""
     box-shadow: 0 0 0 2px rgba(124,58,237,.22) !important;
 }
 
-/* ── Select / Multiselect ────────────────────────────────────────────── */
+/* Select / Multiselect */
 [data-baseweb="select"] > div {
     background: rgba(6,12,24,.65) !important;
     border: 1px solid var(--it-border) !important;
     border-radius: 8px !important;
 }
 
-/* ── Tabs (inner pages) ──────────────────────────────────────────────── */
+/* Tabs (inner pages) */
 [data-baseweb="tab-list"] {
     background: rgba(12,24,40,0.6) !important;
     border-radius: 10px !important;
@@ -214,7 +217,7 @@ st.markdown("""
 }
 [data-baseweb="tab-border"] { display: none !important; }
 
-/* ── Buttons (form submit) ───────────────────────────────────────────── */
+/* Buttons (form submit) */
 [data-testid="stFormSubmitButton"] button {
     background: linear-gradient(135deg, #5B21B6, #1D4ED8) !important;
     color: white !important;
@@ -231,7 +234,7 @@ st.markdown("""
     box-shadow: 0 6px 24px rgba(124,58,237,0.38) !important;
 }
 
-/* ── Regular buttons (non-sidebar, non-login) ────────────────────────── */
+/* Regular buttons (non-sidebar, non-login) */
 [data-testid="stMain"] [data-testid="stButton"] button {
     background: rgba(124,58,237,0.12) !important;
     border: 1px solid rgba(124,58,237,0.3) !important;
@@ -248,17 +251,17 @@ st.markdown("""
     transform: translateY(-1px) !important;
 }
 
-/* ── Dataframes ──────────────────────────────────────────────────────── */
+/* Dataframes */
 [data-testid="stDataFrame"] {
     border: 1px solid var(--it-border) !important;
     border-radius: 12px !important;
     overflow: hidden !important;
 }
 
-/* ── Alerts ──────────────────────────────────────────────────────────── */
+/* Alerts */
 [data-testid="stAlert"] { border-radius: 10px !important; }
 
-/* ── Multiselect tags ────────────────────────────────────────────────── */
+/* Multiselect tags */
 [data-baseweb="tag"] {
     background: rgba(124,58,237,0.2) !important;
     border: 1px solid rgba(124,58,237,0.35) !important;
@@ -266,11 +269,11 @@ st.markdown("""
     color: #C4B5FD !important;
 }
 
-/* ── Dividers ────────────────────────────────────────────────────────── */
+/* Dividers */
 hr { border-color: var(--it-border) !important; }
 </style>""", unsafe_allow_html=True)
 
-# ── Logo (Tim.fin) ────────────────────────────────────────────────────────────
+# -- Logo (Tim.fin) --
 import base64 as _b64
 _logo_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
                           "tim.fin", "Tim.fin Logo.png")
@@ -281,7 +284,7 @@ except Exception:
     _LOGO_B64 = ""
 
 
-# ── Data Layer ────────────────────────────────────────────────────────────────
+# -- Data Layer --
 def _load(path: str) -> list:
     if not os.path.exists(path): return []
     with open(path, encoding="utf-8") as f: return json.load(f)
@@ -290,7 +293,7 @@ def _save(path: str, data: list) -> None:
     with open(path, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
 
-# ── Supabase + Auth ───────────────────────────────────────────────────────────
+# -- Supabase + Auth --
 def _use_sb() -> bool:
     try: return bool(st.secrets.get("SUPABASE_URL"))
     except Exception: return False
@@ -366,7 +369,7 @@ def sb_signup(email: str, password: str) -> tuple[dict | None, str]:
 def is_logged_in() -> bool:
     return "sb_session" in st.session_state
 
-# ── Public load/save ──────────────────────────────────────────────────────────
+# -- Public load/save --
 def load_trades() -> list:
     return _sb_load("trades") if _use_sb() else _load(TRADES_FILE)
 
@@ -449,7 +452,7 @@ def resolve_source(cash: list, source_id, other_name: str, other_currency: str) 
     return new_id
 
 
-# ── Live Prices ───────────────────────────────────────────────────────────────
+# -- Live Prices --
 _DR_PATTERN = re.compile(r'^[A-Z]+\d{2}$')  # Thai DR: NINTENDO23, META24
 
 @st.cache_data(ttl=300)
@@ -490,7 +493,7 @@ def get_usd_thb() -> float:
     return 34.0
 
 
-# ── Math Helpers ──────────────────────────────────────────────────────────────
+# -- Math Helpers --
 def parse(val) -> float | None:
     try: return float(str(val).replace(",", "").strip())
     except Exception: return None
@@ -560,7 +563,7 @@ def days_held_str(entry_date_str: str) -> str:
         return "—"
 
 
-# ── Chart Helpers ─────────────────────────────────────────────────────────────
+# -- Chart Helpers --
 CHART_LAYOUT = dict(
     plot_bgcolor="rgba(0,0,0,0)",
     paper_bgcolor="rgba(0,0,0,0)",
@@ -797,7 +800,7 @@ def pnl_bar_chart(labels, vals_thb, disp, rate, title, height=280):
     return fig
 
 
-# ── UI Helpers ────────────────────────────────────────────────────────────────
+# -- UI Helpers --
 def section(title: str):
     st.markdown(f'<div class="section-label">{title}</div>', unsafe_allow_html=True)
 
@@ -830,7 +833,7 @@ def page_header(title: str, subtitle: str = "") -> tuple[str, float]:
     return disp, rate
 
 
-# ── Login Page ────────────────────────────────────────────────────────────────
+# -- Login Page --
 def page_login():
     if "login_theme" not in st.session_state:
         st.session_state["login_theme"] = "dark"
@@ -989,7 +992,7 @@ header[data-testid="stHeader"]{{display:none!important}}
                         st.error(f"สมัครไม่สำเร็จ: {err}")
 
 
-# ── Sidebar ───────────────────────────────────────────────────────────────────
+# -- Sidebar --
 def render_sidebar() -> str:
     with st.sidebar:
         if _LOGO_B64:
@@ -1018,9 +1021,9 @@ def render_sidebar() -> str:
     return page
 
 
-# ── Page 1: Overview ──────────────────────────────────────────────────────────
+# -- Page 1: Overview --
 def page_overview(trades: list, investments: list, cash: list, disp: str, rate: float):
-    # ── Account Filter ────────────────────────────────────────────────────────
+    # -- Account Filter --
     _UNASSIGNED = "— ไม่ระบุ"
     _named_accts = sorted(set(
         i.get("source_account_name","") for i in investments if i.get("source_account_name")
@@ -1077,7 +1080,7 @@ def page_overview(trades: list, investments: list, cash: list, disp: str, rate: 
         if _s and _e:
             cost_basis_thb += _s * _e * (rate if get_currency(_item) == "USD" else 1)
 
-    # ── KPI Row ───────────────────────────────────────────────────────────────
+    # -- KPI Row --
     section("Portfolio Summary")
     k1, k2, k3, k4 = st.columns(4)
     k1.metric("Total Wealth (incl. Cash)",
@@ -1093,7 +1096,7 @@ def page_overview(trades: list, investments: list, cash: list, disp: str, rate: 
               fmt_money(realized_thb if closed_trades else None, disp, rate)
               if closed_trades else "No trades closed")
 
-    # ── Asset Allocation ──────────────────────────────────────────────────────
+    # -- Asset Allocation --
     open_all = open_trades + open_inv
     if open_all or cash_thb > 0:
         st.markdown("<div style='height:0.5rem'></div>", unsafe_allow_html=True)
@@ -1141,7 +1144,7 @@ def page_overview(trades: list, investments: list, cash: list, disp: str, rate: 
                         line += f" (≈฿{val_c:,.0f})"
                     st.caption(line)
 
-    # ── Portfolio Snapshot ────────────────────────────────────────────────────
+    # -- Portfolio Snapshot --
     if open_inv or open_trades:
         st.markdown("<div style='height:0.5rem'></div>", unsafe_allow_html=True)
         section("📋 Portfolio Snapshot")
@@ -1211,7 +1214,7 @@ def page_overview(trades: list, investments: list, cash: list, disp: str, rate: 
                 )
             st.caption("💵 Cash: " + "  ·  ".join(cash_lines))
 
-    # ── Charts (collapsible) ──────────────────────────────────────────────────
+    # -- Charts (collapsible) --
     if open_all:
         with st.expander("📊 ดู Charts"):
             rc1, rc2, rc3 = st.columns([3, 4, 3])
@@ -1235,7 +1238,7 @@ def page_overview(trades: list, investments: list, cash: list, disp: str, rate: 
             else:
                 st.info("ไม่มีข้อมูลราคาย้อนหลัง")
 
-    # ── Recent Activity ───────────────────────────────────────────────────────
+    # -- Recent Activity --
     recent_events = build_activity_log(investments, trades)
     if recent_events:
         st.markdown("<div style='height:0.5rem'></div>", unsafe_allow_html=True)
@@ -1247,13 +1250,13 @@ def page_overview(trades: list, investments: list, cash: list, disp: str, rate: 
             )
 
 
-# ── Page 2: Investment ────────────────────────────────────────────────────────
+# -- Page 2: Investment --
 def page_investment(investments: list, trades: list, cash: list, disp: str, rate: float):
     open_inv   = [i for i in investments if i.get("status") == "open"]
     closed_inv = [i for i in investments if i.get("status") == "closed"]
     sym = "฿" if disp == "THB" else "$"
 
-    # ── Account Filter ────────────────────────────────────────────────────────
+    # -- Account Filter --
     _UNASSIGNED     = "— ไม่ระบุ"
     inv_acct_names  = sorted({i.get("source_account_name","") for i in open_inv if i.get("source_account_name")})
     cash_acct_names = sorted({a["name"] for a in cash})
@@ -1271,7 +1274,7 @@ def page_investment(investments: list, trades: list, cash: list, disp: str, rate
     else:
         filtered_cash = cash
 
-    # ── Summary ───────────────────────────────────────────────────────────────
+    # -- Summary --
     section("Summary")
     total_val_thb, total_pnl_thb, total_cost_thb = 0.0, 0.0, 0.0
     best_ticker, best_pct = "—", None
@@ -1316,7 +1319,7 @@ def page_investment(investments: list, trades: list, cash: list, disp: str, rate
     <div style='font-size:16px;font-weight:700;color:#22c55e'>{_best_s}</div></div>
 </div>""", unsafe_allow_html=True)
 
-    # ── Cash + Account Total ──────────────────────────────────────────────────
+    # -- Cash + Account Total --
     cash_parts = []
     if cash_thb_total: cash_parts.append(f"฿{cash_thb_total:,.0f} THB")
     if cash_usd_total: cash_parts.append(f"${cash_usd_total:,.2f} USD")
@@ -1343,7 +1346,7 @@ def page_investment(investments: list, trades: list, cash: list, disp: str, rate
 
     st.markdown("<div style='height:1rem'></div>", unsafe_allow_html=True)
 
-    # ── Holdings Table ────────────────────────────────────────────────────────
+    # -- Holdings Table --
     if not open_inv:
         st.info("ยังไม่มี Investment — เพิ่มได้ด้านล่าง")
     else:
@@ -1392,7 +1395,7 @@ def page_investment(investments: list, trades: list, cash: list, disp: str, rate
             else:
                 st.info("ไม่มีข้อมูลราคาย้อนหลัง")
 
-        # ── Target Allocation ─────────────────────────────────────────────────────
+        # -- Target Allocation --
         inv_with_target = [r for r in raw if r["inv"].get("target_pct") is not None]
         if inv_with_target and total_val_thb:
             st.markdown("<div style='height:0.5rem'></div>", unsafe_allow_html=True)
@@ -1753,7 +1756,7 @@ def page_investment(investments: list, trades: list, cash: list, disp: str, rate
                                         st.success(f"ขาย {s_sell} หุ้น @ {ep} ✅  เหลือ {s_remain} หุ้น · P&L = {fmt_money(pnl_thb_p, disp, rate)}")
                                     st.rerun()
 
-    # ── Closed ────────────────────────────────────────────────────────────────
+    # -- Closed --
     if closed_inv:
         section(f"Closed ({len(closed_inv)})")
         st.dataframe([{
@@ -1763,7 +1766,7 @@ def page_investment(investments: list, trades: list, cash: list, disp: str, rate
             "ซื้อ": i.get("entry_date","—"), "ขาย": i.get("exit_date","—"),
         } for i in closed_inv], use_container_width=True, hide_index=True)
 
-    # ── Add Investment (collapsed) ────────────────────────────────────────────
+    # -- Add Investment (collapsed) --
     st.markdown("<div style='height:1rem'></div>", unsafe_allow_html=True)
     with st.expander("➕ เพิ่ม / ซื้อเพิ่ม Investment"):
         existing_tickers = sorted({inv["ticker"] for inv in open_inv})
@@ -1771,7 +1774,7 @@ def page_investment(investments: list, trades: list, cash: list, disp: str, rate
         selected_ticker  = st.selectbox("เลือก Ticker", ticker_options, key="new_inv_select")
 
         if selected_ticker != "➕ Ticker ใหม่":
-            # ── ซื้อเพิ่มใน position ที่มีอยู่ ──────────────────────────────
+            # -- ซื้อเพิ่มใน position ที่มีอยู่ --
             existing = next((inv for inv in investments
                              if inv["ticker"] == selected_ticker and inv["status"] == "open"), None)
             if existing:
@@ -1821,7 +1824,7 @@ def page_investment(investments: list, trades: list, cash: list, disp: str, rate
                             )
                             st.rerun()
         else:
-            # ── Ticker ใหม่ ──────────────────────────────────────────────────
+            # -- Ticker ใหม่ --
             with st.form("new_inv"):
                 c1, c2, c3 = st.columns(3)
                 ticker     = c1.text_input("Ticker *", placeholder="เช่น AOT.BK, AAPL")
@@ -1868,7 +1871,7 @@ def page_investment(investments: list, trades: list, cash: list, disp: str, rate
                         st.rerun()
 
 
-# ── Page 3: Trade ─────────────────────────────────────────────────────────────
+# -- Page 3: Trade --
 def page_trade(trades: list, cash: list, disp: str, rate: float):
     open_trades   = [t for t in trades if t.get("status") == "open"]
     closed_trades = [t for t in trades if t.get("status") == "closed"]
@@ -1882,7 +1885,7 @@ def page_trade(trades: list, cash: list, disp: str, rate: float):
     total_loss_thb = abs(sum(t.get("pnl_thb", 0) or 0 for t in losses))
     profit_factor  = round(total_win_thb / total_loss_thb, 2) if total_loss_thb > 0 else None
 
-    # ── Performance KPIs ──────────────────────────────────────────────────────
+    # -- Performance KPIs --
     section("Performance")
     k1, k2, k3, k4, k5 = st.columns(5)
     k1.metric("Open Trades",   len(open_trades))
@@ -1893,13 +1896,13 @@ def page_trade(trades: list, cash: list, disp: str, rate: float):
 
     st.markdown("<div style='height:1rem'></div>", unsafe_allow_html=True)
 
-    # ── Open Trades ───────────────────────────────────────────────────────────
+    # -- Open Trades --
     if not open_trades:
         st.info("ไม่มี Open Trade ในขณะนี้")
     else:
         section(f"Open Trades ({len(open_trades)})")
 
-        # ── Overview table ────────────────────────────────────────────────────
+        # -- Overview table --
         _tr_rows = []
         _tr_total_cost, _tr_total_mv, _tr_total_pnl = 0.0, 0.0, 0.0
         for _ti, _t in enumerate(open_trades):
@@ -1965,7 +1968,7 @@ def page_trade(trades: list, cash: list, disp: str, rate: float):
 
         st.markdown("<div style='height:0.5rem'></div>", unsafe_allow_html=True)
 
-        # ── Per-trade action menus ─────────────────────────────────────────────
+        # -- Per-trade action menus --
         for t in open_trades:
             price   = get_price(t.get("ticker",""))
             pnl_thb = calc_pnl_thb(t.get("entry_price"), price, get_shares(t),
@@ -2199,7 +2202,7 @@ def page_trade(trades: list, cash: list, disp: str, rate: float):
                                     st.success(f"ขาย {s_sell} shares @ {ep} ✅  เหลือ {s_remain} shares · P&L = {fmt_money(pnl_thb_p, disp, rate)}")
                                 st.rerun()
 
-    # ── Analytics ─────────────────────────────────────────────────────────────
+    # -- Analytics --
     closed_with_pnl = [t for t in closed_trades if t.get("pnl_thb") is not None]
     if not closed_with_pnl and open_trades:
         st.info("📊 กราฟ Analytics จะขึ้นหลังจากปิด Trade แรก")
@@ -2234,7 +2237,7 @@ def page_trade(trades: list, cash: list, disp: str, rate: float):
                                   disp, rate, "P&L by Strategy", height=240),
                     use_container_width=True)
 
-    # ── Closed Trades Table ───────────────────────────────────────────────────
+    # -- Closed Trades Table --
     if closed_trades:
         section(f"Closed Trades ({len(closed_trades)})")
         st.dataframe([{
@@ -2251,7 +2254,7 @@ def page_trade(trades: list, cash: list, disp: str, rate: float):
         } for t in sorted(closed_trades, key=lambda x: x.get("close_date",""), reverse=True)],
         use_container_width=True, hide_index=True)
 
-    # ── New Trade Form (collapsed) ────────────────────────────────────────────
+    # -- New Trade Form (collapsed) --
     st.markdown("<div style='height:1rem'></div>", unsafe_allow_html=True)
     with st.expander("➕ เปิด Trade ใหม่"):
         strategy = strategy_input("nt")
@@ -2300,10 +2303,10 @@ def page_trade(trades: list, cash: list, disp: str, rate: float):
                     st.rerun()
 
 
-# ── Page 4: Cash ──────────────────────────────────────────────────────────────
+# -- Page 4: Cash --
 def page_cash(trades: list, investments: list, cash: list, disp: str, rate: float):
 
-    # ── Summary metrics ───────────────────────────────────────────────────────
+    # -- Summary metrics --
     section("Summary")
     cash_usd = sum(a["amount"] for a in cash if a["currency"] == "USD")
     cash_thb = sum(a["amount"] for a in cash if a["currency"] == "THB")
@@ -2316,7 +2319,7 @@ def page_cash(trades: list, investments: list, cash: list, disp: str, rate: floa
 
     st.markdown("<div style='height:1rem'></div>", unsafe_allow_html=True)
 
-    # ── Pie + Account cards with inline management ────────────────────────────
+    # -- Pie + Account cards with inline management --
     if not cash:
         st.info("ยังไม่มีบัญชี Cash — เพิ่มได้ด้านล่าง")
     else:
@@ -2408,7 +2411,7 @@ def page_cash(trades: list, investments: list, cash: list, disp: str, rate: floa
 
     st.markdown("<div style='height:0.5rem'></div>", unsafe_allow_html=True)
 
-    # ── Add account ───────────────────────────────────────────────────────────
+    # -- Add account --
     with st.expander("➕ เพิ่มบัญชี Cash"):
         with st.form("add_cash_page"):
             fc1, fc2, fc3 = st.columns(3)
@@ -2425,7 +2428,7 @@ def page_cash(trades: list, investments: list, cash: list, disp: str, rate: floa
                 st.success(f"เพิ่ม {name} ({currency}) เรียบร้อย!")
                 st.rerun()
 
-    # ── Cash Flow History ─────────────────────────────────────────────────────
+    # -- Cash Flow History --
     st.markdown("<div style='height:1rem'></div>", unsafe_allow_html=True)
     section("Cash Flow History")
 
@@ -2478,11 +2481,11 @@ def page_cash(trades: list, investments: list, cash: list, disp: str, rate: floa
         st.caption("ยังไม่มีรายการ — จะแสดงเมื่อมี trade/investment ที่เลือก source account")
 
 
-# ── Page 5: Log ───────────────────────────────────────────────────────────────
+# -- Page 5: Log --
 def page_log(trades: list, investments: list, disp: str, rate: float):
     sym = "฿" if disp == "THB" else "$"
 
-    # ── Activity Log ──────────────────────────────────────────────────────────
+    # -- Activity Log --
     section("Activity Log")
     activity = build_activity_log(investments, trades)
     if activity:
@@ -2520,7 +2523,7 @@ def page_log(trades: list, investments: list, disp: str, rate: float):
         st.info("ยังไม่มีข้อมูล")
         return
 
-    # ── Filters ───────────────────────────────────────────────────────────────
+    # -- Filters --
     section("Filters")
     f1, f2, f3 = st.columns(3)
     tf = f1.selectbox("ประเภท", ["ทั้งหมด", "Trade", "Investment"])
@@ -2532,11 +2535,11 @@ def page_log(trades: list, investments: list, disp: str, rate: float):
     if sf != "ทั้งหมด": filtered = [r for r in filtered if r["Status"] == sf]
     if wf != "ทั้งหมด": filtered = [r for r in filtered if r["W/L"]    == wf]
 
-    # ── Table ─────────────────────────────────────────────────────────────────
+    # -- Table --
     section(f"History ({len(filtered)} entries)")
     st.dataframe(filtered, use_container_width=True, hide_index=True)
 
-    # ── Export CSV ────────────────────────────────────────────────────────────
+    # -- Export CSV --
     if filtered:
         csv = pd.DataFrame(filtered).to_csv(index=False).encode("utf-8-sig")
         st.download_button(
@@ -2546,7 +2549,7 @@ def page_log(trades: list, investments: list, disp: str, rate: float):
         )
 
 
-# ── Main ──────────────────────────────────────────────────────────────────────
+# -- Main --
 def main():
     # Restore session from URL param (survives page refresh)
     if _use_sb() and "sb_session" not in st.session_state:
