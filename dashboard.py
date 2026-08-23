@@ -97,23 +97,21 @@ st.markdown("""<style>
 /* Base */
 #MainMenu, footer { visibility: hidden; }
 [data-testid="stToolbar"],
-[data-testid="stDecoration"],
-[data-testid="stSidebar"],
-[data-testid="stSidebarCollapseButton"],
-[data-testid="collapsedControl"] { display: none !important; }
+[data-testid="stDecoration"] { display: none !important; }
 
-/* Active nav pill (markdown div replacing button when page is current) */
-.nav-active {
-    text-align:center; padding:6px 8px; border-radius:7px;
-    background:rgba(124,58,237,0.22); color:#C4B5FD;
-    font-weight:600; font-family:'Plus Jakarta Sans',sans-serif;
-    font-size:0.8rem; border:1px solid rgba(124,58,237,0.35);
-    white-space:nowrap; line-height:1.4;
+/* Sidebar collapse / expand buttons — style only, NO display override */
+[data-testid="stSidebarCollapseButton"] button,
+[data-testid="collapsedControl"] button {
+    background: rgba(124,58,237,0.15) !important;
+    border: 1px solid rgba(124,58,237,0.35) !important;
+    border-radius: 8px !important;
+    color: #C4B5FD !important;
+    transition: background .15s !important;
 }
-/* Tighten top bar columns gap */
-[data-testid="stHorizontalBlock"]:first-of-type { gap:0.4rem !important; align-items:center !important; }
-/* Nav separator line */
-.nav-divider { border:none; border-top:1px solid rgba(124,58,237,0.18); margin:0.25rem 0 1rem; }
+[data-testid="stSidebarCollapseButton"] button:hover,
+[data-testid="collapsedControl"] button:hover {
+    background: rgba(124,58,237,0.3) !important;
+}
 
 .stApp {
     background-color: #060C18 !important;
@@ -1067,46 +1065,32 @@ header[data-testid="stHeader"]{{display:none!important}}
 
 
 # -- Sidebar --
-_NAV_PAGES = ["📊 Overview", "💼 Investment", "📈 Trade", "💵 Cash", "📓 Log"]
-
-def render_topnav() -> str:
-    """Top navigation bar — one row of Streamlit columns. Returns selected page label."""
-    if "page" not in st.session_state:
-        st.session_state["page"] = _NAV_PAGES[0]
-    curr = st.session_state["page"]
-
-    # One row: [logo] [nav×5] [email] [logout]
-    c_logo, c_ov, c_inv, c_tr, c_ca, c_log, c_email, c_out = st.columns([2, 2, 2, 2, 2, 2, 3, 2])
-
-    with c_logo:
+def render_sidebar() -> str:
+    with st.sidebar:
         if _LOGO_B64:
             st.markdown(
                 f'<img src="data:image/png;base64,{_LOGO_B64}" '
-                'style="height:28px;display:block;margin-top:3px">',
+                f'style="height:36px;display:block;margin:0.5rem auto 0.25rem">',
                 unsafe_allow_html=True,
             )
-
-    for col, page in zip([c_ov, c_inv, c_tr, c_ca, c_log], _NAV_PAGES):
-        with col:
-            if page == curr:
-                st.markdown(f'<div class="nav-active">{page}</div>', unsafe_allow_html=True)
-            else:
-                if st.button(page, key=f"nav_{page}", use_container_width=True):
-                    st.session_state["page"] = page
-                    st.rerun()
-
-    if is_logged_in():
-        email = st.session_state["sb_session"]["user"]["email"]
-        with c_email:
+        st.markdown(
+            '<p style="text-align:center;font-family:Syne,sans-serif;'
+            'font-weight:700;font-size:0.95rem;color:#E2E8F0;margin:0 0 0.25rem">Investment Tracker</p>',
+            unsafe_allow_html=True,
+        )
+        if is_logged_in():
+            email = st.session_state["sb_session"]["user"]["email"]
             st.caption(f"👤 {email}")
-        with c_out:
-            if st.button("ออกจากระบบ", key="logout_top", use_container_width=True):
+            if st.button("ออกจากระบบ", use_container_width=True):
                 del st.session_state["sb_session"]
                 st.query_params.pop("_s", None)
                 st.rerun()
-
-    st.markdown('<hr class="nav-divider">', unsafe_allow_html=True)
-    return curr
+        st.markdown("---")
+        page = st.radio("", ["📊 Overview", "💼 Investment", "📈 Trade", "💵 Cash", "📓 Log"],
+                        label_visibility="collapsed")
+        st.markdown("---")
+        st.caption("Tim.fin Personal OS")
+    return page
 
 
 # -- Page 1: Overview --
@@ -2673,7 +2657,7 @@ def main():
             st.rerun()
         st.error(f"⚠️ โหลดข้อมูลไม่ได้: {_e}")
         st.stop()
-    page        = render_topnav()
+    page        = render_sidebar()
 
     subtitles = {
         "📊 Overview":   "How is my portfolio doing?",
