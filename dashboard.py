@@ -287,26 +287,29 @@ html body [data-testid="collapsedControl"] { display: flex !important; }
     border-radius: 8px !important;
 }
 
-/* Tabs (inner pages) */
+/* Tabs — main nav + inner pages */
 [data-baseweb="tab-list"] {
-    background: rgba(12,24,40,0.6) !important;
-    border-radius: 10px !important;
-    padding: 4px !important;
-    border: none !important;
-    gap: 2px !important;
+    background: rgba(12,24,40,0.75) !important;
+    border-radius: 12px !important;
+    padding: 5px !important;
+    border: 1px solid rgba(124,58,237,0.15) !important;
+    gap: 3px !important;
+    margin-bottom: 1rem !important;
 }
 [data-baseweb="tab"] {
-    border-radius: 7px !important;
-    padding: 5px 16px !important;
+    border-radius: 8px !important;
+    padding: 8px 18px !important;
     color: var(--it-muted) !important;
     font-weight: 500 !important;
+    font-size: 0.9rem !important;
     font-family: 'Plus Jakarta Sans', sans-serif !important;
     transition: background .15s !important;
 }
 [data-baseweb="tab"][aria-selected="true"] {
-    background: rgba(124,58,237,0.22) !important;
+    background: rgba(124,58,237,0.28) !important;
     color: #C4B5FD !important;
-    font-weight: 600 !important;
+    font-weight: 700 !important;
+    box-shadow: 0 0 12px rgba(124,58,237,0.25) !important;
 }
 [data-baseweb="tab-border"] { display: none !important; }
 
@@ -1084,8 +1087,8 @@ header[data-testid="stHeader"]{{display:none!important}}
                         st.error(f"สมัครไม่สำเร็จ: {err}")
 
 
-# -- Sidebar --
-def render_sidebar(logged_in: bool = True) -> str:
+# -- Sidebar (branding + account only, no nav) --
+def render_sidebar(logged_in: bool = True) -> None:
     with st.sidebar:
         if _LOGO_B64:
             st.markdown(
@@ -1098,22 +1101,15 @@ def render_sidebar(logged_in: bool = True) -> str:
             'font-weight:700;font-size:0.95rem;color:#E2E8F0;margin:0 0 0.25rem">Investment Tracker</p>',
             unsafe_allow_html=True,
         )
-        if not logged_in:
-            st.markdown("---")
-            st.caption("Tim.fin Personal OS")
-            return "📊 Overview"
-        email = st.session_state["sb_session"]["user"]["email"]
-        st.caption(f"👤 {email}")
-        if st.button("ออกจากระบบ", use_container_width=True):
-            del st.session_state["sb_session"]
-            st.query_params.pop("_s", None)
-            st.rerun()
         st.markdown("---")
-        page = st.radio("", ["📊 Overview", "💼 Investment", "📈 Trade", "💵 Cash", "📓 Log"],
-                        label_visibility="collapsed")
-        st.markdown("---")
+        if logged_in and "sb_session" in st.session_state:
+            email = st.session_state["sb_session"]["user"]["email"]
+            st.caption(f"👤 {email}")
+            if st.button("ออกจากระบบ", use_container_width=True):
+                del st.session_state["sb_session"]
+                st.query_params.pop("_s", None)
+                st.rerun()
         st.caption("Tim.fin Personal OS")
-    return page
 
 
 # -- Page 1: Overview --
@@ -2665,7 +2661,7 @@ def main():
                     st.query_params["_s"] = s["refresh_token"]
 
     _logged_in = not _use_sb() or is_logged_in()
-    page = render_sidebar(logged_in=_logged_in)
+    render_sidebar(logged_in=_logged_in)
 
     if not _logged_in:
         page_login()
@@ -2683,29 +2679,20 @@ def main():
         st.error(f"⚠️ โหลดข้อมูลไม่ได้: {_e}")
         st.stop()
 
-    subtitles = {
-        "📊 Overview":   "How is my portfolio doing?",
-        "💼 Investment": "What do I currently own?",
-        "📈 Trade":      "How am I performing as a trader?",
-        "💵 Cash":       "บัญชีเงินสดและ Cash Flow",
-        "📓 Log":        "What happened historically?",
-    }
-    disp, rate = page_header(
-        title    = page.split(" ", 1)[1] if " " in page else page,
-        subtitle = subtitles.get(page, ""),
-    )
+    # Currency toggle at top right (global, persists across tabs)
+    rate = get_usd_thb()
+    _c1, _c2 = st.columns([5, 1])
+    with _c2:
+        disp = st.radio("", ["THB", "USD"], horizontal=True,
+                        key="display_currency", label_visibility="collapsed")
+        st.caption(f"1 USD = ฿{rate:.2f}")
 
-    st.markdown(
-        "<script>const _m=window.parent.document.querySelector('[data-testid=\"stMain\"]');"
-        "if(_m)_m.scrollTop=0;</script>",
-        unsafe_allow_html=True,
-    )
-
-    if   page == "📊 Overview":   page_overview(trades, investments, cash, disp, rate)
-    elif page == "💼 Investment": page_investment(investments, trades, cash, disp, rate)
-    elif page == "📈 Trade":      page_trade(trades, cash, disp, rate)
-    elif page == "💵 Cash":       page_cash(trades, investments, cash, disp, rate)
-    elif page == "📓 Log":        page_log(trades, investments, disp, rate)
+    _tabs = st.tabs(["📊 Overview", "💼 Investment", "📈 Trade", "💵 Cash", "📓 Log"])
+    with _tabs[0]: page_overview(trades, investments, cash, disp, rate)
+    with _tabs[1]: page_investment(investments, trades, cash, disp, rate)
+    with _tabs[2]: page_trade(trades, cash, disp, rate)
+    with _tabs[3]: page_cash(trades, investments, cash, disp, rate)
+    with _tabs[4]: page_log(trades, investments, disp, rate)
 
 
 main()
