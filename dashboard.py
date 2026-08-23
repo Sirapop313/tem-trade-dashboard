@@ -99,6 +99,9 @@ st.markdown("""<style>
 #MainMenu, footer { visibility: hidden; }
 [data-testid="stToolbar"],
 [data-testid="stDecoration"] { display: none !important; }
+/* Sidebar always visible — higher specificity beats any injected display:none */
+html body [data-testid="stSidebar"] { display: flex !important; }
+html body [data-testid="collapsedControl"] { display: flex !important; }
 
 /* Sidebar collapse button (inside sidebar) */
 [data-testid="stSidebarCollapseButton"] button {
@@ -110,21 +113,25 @@ st.markdown("""<style>
 [data-testid="stSidebarCollapseButton"] button:hover {
     background: rgba(124,58,237,0.35) !important;
 }
-/* Expand button shown when sidebar is collapsed — make it very visible */
+/* Expand button shown when sidebar is collapsed — very visible purple pill */
 [data-testid="collapsedControl"] {
-    background: #09111F !important;
-    border-right: 2px solid rgba(124,58,237,0.5) !important;
-    border-bottom: 2px solid rgba(124,58,237,0.5) !important;
-    border-radius: 0 0 8px 0 !important;
+    position: fixed !important;
+    left: 0 !important;
+    top: 50% !important;
+    transform: translateY(-50%) !important;
+    z-index: 9999 !important;
+    background: #7C3AED !important;
+    border-radius: 0 12px 12px 0 !important;
+    box-shadow: 4px 0 16px rgba(124,58,237,0.5) !important;
+    padding: 6px 2px !important;
 }
 [data-testid="collapsedControl"] button {
-    background: rgba(124,58,237,0.35) !important;
-    border: 1px solid #7C3AED !important;
-    border-radius: 8px !important;
-    color: #E2E8F0 !important;
-    min-width: 36px !important;
-    min-height: 36px !important;
-    font-size: 1.1rem !important;
+    background: transparent !important;
+    border: none !important;
+    color: #fff !important;
+    min-width: 32px !important;
+    min-height: 48px !important;
+    font-size: 1.2rem !important;
 }
 
 .stApp {
