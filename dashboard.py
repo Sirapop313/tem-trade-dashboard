@@ -1367,7 +1367,7 @@ def page_investment(investments: list, trades: list, cash: list, disp: str, rate
         filtered_cash = cash
 
     # -- Summary --
-    section("Summary")
+    section("Investment Summary")
     total_val_thb, total_pnl_thb, total_cost_thb = 0.0, 0.0, 0.0
     best_ticker, best_pct = "—", None
 
@@ -1391,25 +1391,16 @@ def page_investment(investments: list, trades: list, cash: list, disp: str, rate
                 best_pct, best_ticker = pct, inv.get("ticker","—")
 
     total_pnl_pct = total_pnl_thb / total_cost_thb * 100 if total_cost_thb else None
-
-    _pnl_c  = "#22c55e" if (total_pnl_thb or 0) >= 0 else "#ef4444"
-    _cost_s = fmt_money(total_cost_thb or None, disp, rate, sign=False) if total_cost_thb else "No holdings yet"
-    _pnl_s  = fmt_money(total_pnl_thb or None, disp, rate) if open_inv else "No holdings yet"
-    _pct_s  = f"<span style='font-size:12px;color:{_pnl_c}'>{fmt_pct(total_pnl_pct)}</span>" if total_pnl_pct is not None else ""
     _best_s = f"{best_ticker} {fmt_pct(best_pct)}" if best_pct is not None else "—"
-    _card   = "background:rgba(30,41,59,0.6);border:1px solid rgba(148,163,184,0.12);border-radius:10px;padding:12px 16px"
-    _lbl    = "font-size:10px;color:#94a3b8;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:4px"
-    st.markdown(f"""
-<div style='display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:6px 0 10px 0'>
-  <div style='{_card}'><div style='{_lbl}'>Cost Basis (Deployed)</div>
-    <div style='font-size:20px;font-weight:700;color:#f1f5f9'>{_cost_s}</div></div>
-  <div style='{_card}'><div style='{_lbl}'>Unrealized Return</div>
-    <div style='font-size:20px;font-weight:700;color:{_pnl_c}'>{_pnl_s}</div>{_pct_s}</div>
-  <div style='{_card}'><div style='{_lbl}'>Holdings</div>
-    <div style='font-size:24px;font-weight:700;color:#f1f5f9'>{len(open_inv)}</div></div>
-  <div style='{_card}'><div style='{_lbl}'>Best Performer</div>
-    <div style='font-size:16px;font-weight:700;color:#22c55e'>{_best_s}</div></div>
-</div>""", unsafe_allow_html=True)
+
+    k1, k2, k3, k4 = st.columns(4)
+    k1.metric("Cost Basis (Deployed)",
+              fmt_money(total_cost_thb or None, disp, rate, sign=False) if total_cost_thb else "No holdings")
+    k2.metric("Unrealized Return",
+              fmt_money(total_pnl_thb or None, disp, rate) if open_inv else "No holdings",
+              delta=fmt_pct(total_pnl_pct))
+    k3.metric("Holdings", str(len(open_inv)))
+    k4.metric("Best Performer", _best_s)
 
     # -- Cash + Account Total --
     cash_parts = []
