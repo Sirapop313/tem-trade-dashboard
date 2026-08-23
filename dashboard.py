@@ -52,19 +52,23 @@ st.markdown("""<style>
 [data-testid="stDecoration"] { display: none !important; }
 
 .stApp {
-    background: var(--it-bg) !important;
+    background-color: #060C18 !important;
+    background-image:
+        linear-gradient(rgba(124,58,237,0.042) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(29,78,216,0.028) 1px, transparent 1px),
+        radial-gradient(ellipse 100% 55% at 55% -10%, rgba(124,58,237,0.13) 0%, transparent 65%) !important;
+    background-size: 44px 44px, 44px 44px, 100% 100% !important;
+    background-attachment: fixed !important;
     font-family: 'Plus Jakarta Sans', sans-serif !important;
 }
-/* Subtle purple glow at top of content */
-[data-testid="stMain"] {
-    background: linear-gradient(180deg, rgba(124,58,237,0.05) 0%, transparent 280px) !important;
-}
+/* Content area: no extra bg, let stApp grid show through */
+[data-testid="stMain"] { background: transparent !important; }
 .main .block-container { max-width: 1400px; padding-top: 1.5rem; }
 
 /* Sidebar */
 [data-testid="stSidebar"] {
-    background: var(--it-sidebar) !important;
-    border-right: 1px solid var(--it-border) !important;
+    background: #09111F !important;
+    border-right: 1px solid rgba(124,58,237,0.18) !important;
 }
 [data-testid="stSidebar"] * { font-family: 'Plus Jakarta Sans', sans-serif !important; }
 /* Gradient accent bar at top of sidebar */
@@ -138,17 +142,20 @@ st.markdown("""<style>
     box-shadow: 0 8px 28px rgba(124,58,237,0.18) !important;
 }
 [data-testid="stMetricValue"] {
-    font-size: 1.55rem !important;
+    font-size: 1.6rem !important;
     font-weight: 700 !important;
     color: var(--it-text) !important;
-    font-family: 'Syne', sans-serif !important;
+    font-family: 'Plus Jakarta Sans', sans-serif !important;
+    font-variant-numeric: tabular-nums !important;
+    letter-spacing: -0.01em !important;
 }
 [data-testid="stMetricLabel"] {
-    font-size: 0.65rem !important;
+    font-size: 0.62rem !important;
     color: var(--it-muted) !important;
     text-transform: uppercase !important;
-    letter-spacing: 0.09em !important;
-    font-weight: 600 !important;
+    letter-spacing: 0.1em !important;
+    font-weight: 700 !important;
+    font-family: 'Plus Jakarta Sans', sans-serif !important;
 }
 
 /* Expanders */
@@ -1216,7 +1223,7 @@ def page_overview(trades: list, investments: list, cash: list, disp: str, rate: 
 
     # -- Charts (collapsible) --
     if open_all:
-        with st.expander("📊 ดู Charts"):
+        with st.expander("📊 Charts", expanded=True):
             rc1, rc2, rc3 = st.columns([3, 4, 3])
             with rc1:
                 ret_view = st.radio("", ["Overall","Investment","Trade"], horizontal=True,
