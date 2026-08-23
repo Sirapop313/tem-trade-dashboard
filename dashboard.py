@@ -1400,7 +1400,8 @@ def page_investment(investments: list, trades: list, cash: list, disp: str, rate
               fmt_money(total_pnl_thb or None, disp, rate) if open_inv else "No holdings",
               delta=fmt_pct(total_pnl_pct))
     k3.metric("Holdings", str(len(open_inv)))
-    k4.metric("Best Performer", _best_s)
+    k4.metric("Best Performer", best_ticker if best_pct is not None else "—",
+              delta=fmt_pct(best_pct) if best_pct is not None else None)
 
     # -- Cash + Account Total --
     cash_parts = []
