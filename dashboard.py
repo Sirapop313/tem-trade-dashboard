@@ -102,46 +102,18 @@ st.markdown("""<style>
 [data-testid="stSidebarCollapseButton"],
 [data-testid="collapsedControl"] { display: none !important; }
 
-/* Top nav bar */
-.topnav {
-    display: flex;
-    align-items: center;
-    gap: 1rem;
-    background: rgba(9,17,31,0.95);
-    border-bottom: 1px solid rgba(124,58,237,0.22);
-    padding: 0.55rem 1.2rem;
-    margin: -4rem -4rem 1.5rem;
-    backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px);
-    position: sticky;
-    top: 0;
-    z-index: 999;
+/* Active nav pill (markdown div replacing button when page is current) */
+.nav-active {
+    text-align:center; padding:6px 8px; border-radius:7px;
+    background:rgba(124,58,237,0.22); color:#C4B5FD;
+    font-weight:600; font-family:'Plus Jakarta Sans',sans-serif;
+    font-size:0.8rem; border:1px solid rgba(124,58,237,0.35);
+    white-space:nowrap; line-height:1.4;
 }
-.topnav-logo { display:flex; align-items:center; gap:8px; min-width:170px; }
-.topnav-brand {
-    font-family:'Syne',sans-serif; font-weight:700; font-size:0.88rem; color:#E2E8F0;
-    white-space:nowrap;
-}
-.topnav-pills {
-    flex:1; display:flex; justify-content:center; gap:3px;
-    background:rgba(12,24,40,0.7);
-    border:1px solid rgba(124,58,237,0.18);
-    border-radius:10px; padding:4px;
-}
-.topnav-pill {
-    padding:5px 14px; border-radius:7px; cursor:pointer;
-    font-family:'Plus Jakarta Sans',sans-serif; font-size:0.82rem; font-weight:500;
-    color:var(--it-muted); background:transparent; border:none;
-    transition:background .15s, color .15s; white-space:nowrap;
-    text-decoration:none !important;
-}
-.topnav-pill:hover { background:rgba(124,58,237,0.1); color:#C4B5FD; }
-.topnav-pill.active { background:rgba(124,58,237,0.22); color:#C4B5FD; font-weight:600; }
-.topnav-user { display:flex; align-items:center; gap:8px; min-width:170px; justify-content:flex-end; }
-.topnav-email { font-size:0.72rem; color:var(--it-muted); white-space:nowrap; }
-
-/* Streamlit radio hidden under topnav (used for real state) */
-.topnav-radio { position:absolute; opacity:0; pointer-events:none; height:0; overflow:hidden; }
+/* Tighten top bar columns gap */
+[data-testid="stHorizontalBlock"]:first-of-type { gap:0.4rem !important; align-items:center !important; }
+/* Nav separator line */
+.nav-divider { border:none; border-top:1px solid rgba(124,58,237,0.18); margin:0.25rem 0 1rem; }
 
 .stApp {
     background-color: #060C18 !important;
@@ -1098,69 +1070,42 @@ header[data-testid="stHeader"]{{display:none!important}}
 _NAV_PAGES = ["📊 Overview", "💼 Investment", "📈 Trade", "💵 Cash", "📓 Log"]
 
 def render_topnav() -> str:
-    """Sticky top navigation bar. Returns selected page label."""
-    if "topnav_page" not in st.session_state:
-        st.session_state["topnav_page"] = _NAV_PAGES[0]
-    curr = st.session_state["topnav_page"]
+    """Top navigation bar — one row of Streamlit columns. Returns selected page label."""
+    if "page" not in st.session_state:
+        st.session_state["page"] = _NAV_PAGES[0]
+    curr = st.session_state["page"]
 
-    # Build pill HTML
-    logo_html = (
-        f'<img src="data:image/png;base64,{_LOGO_B64}" style="height:28px">'
-        if _LOGO_B64 else ''
-    )
-    pills = "".join(
-        f'<span class="topnav-pill {"active" if p == curr else ""}" '
-        f'data-page="{p}">{p}</span>'
-        for p in _NAV_PAGES
-    )
-    email_html = ""
+    # One row: [logo] [nav×5] [email] [logout]
+    c_logo, c_ov, c_inv, c_tr, c_ca, c_log, c_email, c_out = st.columns([2, 2, 2, 2, 2, 2, 3, 2])
+
+    with c_logo:
+        if _LOGO_B64:
+            st.markdown(
+                f'<img src="data:image/png;base64,{_LOGO_B64}" '
+                'style="height:28px;display:block;margin-top:3px">',
+                unsafe_allow_html=True,
+            )
+
+    for col, page in zip([c_ov, c_inv, c_tr, c_ca, c_log], _NAV_PAGES):
+        with col:
+            if page == curr:
+                st.markdown(f'<div class="nav-active">{page}</div>', unsafe_allow_html=True)
+            else:
+                if st.button(page, key=f"nav_{page}", use_container_width=True):
+                    st.session_state["page"] = page
+                    st.rerun()
+
     if is_logged_in():
         email = st.session_state["sb_session"]["user"]["email"]
-        email_html = f'<span class="topnav-email">👤 {email}</span>'
+        with c_email:
+            st.caption(f"👤 {email}")
+        with c_out:
+            if st.button("ออกจากระบบ", key="logout_top", use_container_width=True):
+                del st.session_state["sb_session"]
+                st.query_params.pop("_s", None)
+                st.rerun()
 
-    st.markdown(
-        f'<div class="topnav">'
-        f'  <div class="topnav-logo">{logo_html}'
-        f'      <span class="topnav-brand">Investment Tracker</span></div>'
-        f'  <div class="topnav-pills">{pills}</div>'
-        f'  <div class="topnav-user">{email_html}</div>'
-        f'</div>',
-        unsafe_allow_html=True,
-    )
-
-    # Real Streamlit radio (hidden via CSS class) drives actual page state
-    st.markdown('<div class="topnav-radio">', unsafe_allow_html=True)
-    selected = st.radio("nav", _NAV_PAGES,
-                        index=_NAV_PAGES.index(curr),
-                        key="topnav_radio",
-                        label_visibility="collapsed")
-    st.markdown('</div>', unsafe_allow_html=True)
-
-    if selected != curr:
-        st.session_state["topnav_page"] = selected
-        st.rerun()
-
-    # Streamlit buttons for each pill (zero-height, click-through the HTML pills)
-    st.markdown(
-        '<div style="display:flex;gap:0;margin:-38px 0 0;opacity:0;height:38px;'
-        'position:relative;z-index:1000">',
-        unsafe_allow_html=True,
-    )
-    btn_cols = st.columns(len(_NAV_PAGES))
-    for col, page in zip(btn_cols, _NAV_PAGES):
-        if col.button(page, key=f"nav_btn_{page}", use_container_width=True):
-            st.session_state["topnav_page"] = page
-            st.rerun()
-    st.markdown('</div>', unsafe_allow_html=True)
-
-    # Logout
-    if is_logged_in():
-        _, lcol = st.columns([9, 1])
-        if lcol.button("ออกจากระบบ", key="logout_top"):
-            del st.session_state["sb_session"]
-            st.query_params.pop("_s", None)
-            st.rerun()
-
+    st.markdown('<hr class="nav-divider">', unsafe_allow_html=True)
     return curr
 
 
