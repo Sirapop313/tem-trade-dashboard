@@ -282,13 +282,66 @@ hr { border-color: var(--it-border) !important; }
 
 # -- Logo (Tim.fin) --
 import base64 as _b64
-_logo_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-                          "tim.fin", "Tim.fin Logo.png")
+_logo_path = os.path.join(DIR, "Tim.fin Logo.png")
+if not os.path.exists(_logo_path):
+    _logo_path = os.path.join(os.path.dirname(DIR), "tim.fin", "Tim.fin Logo.png")
 try:
     with open(_logo_path, "rb") as _f:
         _LOGO_B64 = _b64.b64encode(_f.read()).decode()
 except Exception:
     _LOGO_B64 = ""
+
+# -- Candlestick decorative background --
+_CDATA = [
+    # (cx, wick_top, body_top, body_bot, wick_bot, bull)
+    ( 35,  70, 108, 188, 228, True),
+    ( 95,  85, 122, 202, 245, False),
+    (155,  65, 100, 212, 255, False),
+    (215,  80, 125, 235, 272, False),
+    (275,  85, 138, 258, 290, False),
+    (335,  92, 135, 242, 278, True),
+    (395,  75, 102, 205, 250, True),
+    (455,  52,  75, 175, 228, True),
+    (515,  35,  56, 148, 200, True),
+    (575,  25,  44, 115, 172, True),
+    (635,  30,  52, 135, 190, False),
+    (695,  20,  40, 105, 160, True),
+    (755,  10,  28,  85, 130, True),
+    (815,  15,  33,  88, 142, True),
+    (875,   8,  22,  72, 118, True),
+]
+_close_pts = " ".join(
+    f"{'M' if i == 0 else 'L'} {cx} {bt if bull else bb}"
+    for i, (cx, wt, bt, bb, wb, bull) in enumerate(_CDATA)
+)
+_c_svgs = "".join(
+    f'<line x1="{cx}" y1="{wt}" x2="{cx}" y2="{wb}" '
+    f'stroke="{"#7C3AED" if bull else "#94A3B8"}" stroke-width="1.5" '
+    f'stroke-opacity="{"0.28" if bull else "0.16"}"/>'
+    f'<rect x="{cx - 12}" y="{bt}" width="24" height="{bb - bt}" '
+    f'fill="{"url(#cb)" if bull else "url(#cr)"}" rx="2"/>'
+    for cx, wt, bt, bb, wb, bull in _CDATA
+)
+_CANDLE_BG_HTML = (
+    '<div style="position:fixed;bottom:0;right:0;width:72%;height:62%;'
+    'pointer-events:none;z-index:0;overflow:hidden;opacity:0.22">'
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 910 310" '
+    'width="100%" height="100%" preserveAspectRatio="xMaxYMax meet">'
+    '<defs>'
+    '<linearGradient id="cb" x1="0" y1="0" x2="0" y2="1">'
+    '<stop offset="0%" stop-color="#7C3AED" stop-opacity="0.65"/>'
+    '<stop offset="100%" stop-color="#7C3AED" stop-opacity="0.18"/>'
+    '</linearGradient>'
+    '<linearGradient id="cr" x1="0" y1="0" x2="0" y2="1">'
+    '<stop offset="0%" stop-color="#94A3B8" stop-opacity="0.5"/>'
+    '<stop offset="100%" stop-color="#94A3B8" stop-opacity="0.12"/>'
+    '</linearGradient>'
+    '</defs>'
+    + _c_svgs
+    + f'<path d="{_close_pts}" fill="none" stroke="#7C3AED" '
+    'stroke-width="2" stroke-opacity="0.45" stroke-dasharray="5 3"/>'
+    '</svg></div>'
+)
 
 
 # -- Data Layer --
@@ -2571,6 +2624,9 @@ def main():
     if _use_sb() and not is_logged_in():
         page_login()
         return
+
+    # Candlestick decorative background (inner pages only)
+    st.markdown(_CANDLE_BG_HTML, unsafe_allow_html=True)
 
     try:
         trades      = load_trades()
