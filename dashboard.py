@@ -49,6 +49,31 @@ st.markdown("""<style>
 [data-testid="stToolbar"],
 [data-testid="stDecoration"] { display: none !important; }
 
+/* Sidebar collapse / expand buttons */
+[data-testid="stSidebarCollapseButton"] button,
+[data-testid="collapsedControl"] button {
+    background: rgba(124,58,237,0.18) !important;
+    border: 1px solid rgba(124,58,237,0.4) !important;
+    border-radius: 8px !important;
+    color: #C4B5FD !important;
+    width: 32px !important;
+    height: 32px !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    transition: background .15s, border-color .15s !important;
+}
+[data-testid="stSidebarCollapseButton"] button:hover,
+[data-testid="collapsedControl"] button:hover {
+    background: rgba(124,58,237,0.35) !important;
+    border-color: var(--it-accent) !important;
+}
+[data-testid="collapsedControl"] {
+    display: flex !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+}
+
 .stApp {
     background-color: #060C18 !important;
     background-image:
@@ -321,7 +346,7 @@ _c_svgs = "".join(
     for cx, wt, bt, bb, wb, bull in _CDATA
 )
 _svg_raw = (
-    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 910 310">'
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 910 310" opacity="0.22">'
     '<defs>'
     '<linearGradient id="cb" x1="0" y1="0" x2="0" y2="1">'
     '<stop offset="0%" stop-color="#7C3AED" stop-opacity="0.65"/>'
@@ -338,22 +363,22 @@ _svg_raw = (
     '</svg>'
 )
 _svg_b64 = _b64.b64encode(_svg_raw.encode()).decode()
-_CANDLE_BG_HTML = f"""<style>
-.stApp::after {{
-    content: '';
-    position: fixed;
-    bottom: 0;
-    right: 0;
-    width: 72vw;
-    height: 62vh;
-    background-image: url('data:image/svg+xml;base64,{_svg_b64}');
-    background-size: 100% 100%;
-    background-repeat: no-repeat;
-    pointer-events: none;
-    z-index: 1;
-    opacity: 0.22;
-}}
-</style>"""
+# Inject SVG as a background-image layer on .stApp — background-attachment:fixed
+# guarantees it never scrolls, unlike position:fixed inside Streamlit's scroll container
+_CANDLE_BG_HTML = (
+    "<style>"
+    ".stApp{"
+    f"background-image:url('data:image/svg+xml;base64,{_svg_b64}'),"
+    "linear-gradient(rgba(124,58,237,0.042) 1px,transparent 1px),"
+    "linear-gradient(90deg,rgba(29,78,216,0.028) 1px,transparent 1px),"
+    "radial-gradient(ellipse 100% 55% at 55% -10%,rgba(124,58,237,0.13) 0%,transparent 65%)!important;"
+    "background-size:72% 62%,44px 44px,44px 44px,100% 100%!important;"
+    "background-position:bottom right,0 0,0 0,0 0!important;"
+    "background-repeat:no-repeat,repeat,repeat,no-repeat!important;"
+    "background-attachment:fixed,fixed,fixed,fixed!important;"
+    "}"
+    "</style>"
+)
 
 
 # -- Data Layer --
