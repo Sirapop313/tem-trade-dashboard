@@ -351,7 +351,6 @@ html body [data-testid="collapsedControl"] { display: flex !important; }
 [data-testid="stDataFrame"] {
     border: 1px solid var(--it-border) !important;
     border-radius: 12px !important;
-    overflow: hidden !important;
 }
 
 /* Alerts */
@@ -1648,16 +1647,22 @@ def page_investment(investments: list, trades: list, cash: list, disp: str, rate
             return [""] * len(row)
 
         df_inv = pd.DataFrame(rows)
+        _inv_all_cols = list(df_inv.columns)
+        _inv_default  = [c for c in ["Ticker", "Shares", "Entry Price", "Mkt Value", "P&L %", f"P&L ({sym})"] if c in _inv_all_cols]
+        _inv_sel      = st.multiselect("เลือกคอลัมน์", _inv_all_cols, default=_inv_default or _inv_all_cols, key="inv_cols")
+        _inv_show     = _inv_sel if _inv_sel else _inv_all_cols
+        _df_inv_show  = df_inv[_inv_show]
+        _pnl_sub_inv  = [c for c in pnl_cols if c in _inv_show]
         try:
-            styled = (df_inv.style
-                      .map(_color_pnl, subset=pnl_cols)
+            styled = (_df_inv_show.style
+                      .map(_color_pnl, subset=_pnl_sub_inv)
                       .apply(_style_total, axis=1)
-                      .hide(axis="index"))
+                      .hide(axis="index")) if _pnl_sub_inv else _df_inv_show.style.hide(axis="index")
         except AttributeError:
-            styled = (df_inv.style
-                      .applymap(_color_pnl, subset=pnl_cols)
+            styled = (_df_inv_show.style
+                      .applymap(_color_pnl, subset=_pnl_sub_inv)
                       .apply(_style_total, axis=1)
-                      .hide(axis="index"))
+                      .hide(axis="index")) if _pnl_sub_inv else _df_inv_show.style.hide(axis="index")
         st.dataframe(styled, use_container_width=True, hide_index=True)
 
         # Position actions (ปิด/ลบ)
@@ -2053,16 +2058,22 @@ def page_trade(trades: list, cash: list, disp: str, rate: float):
                 return ["background-color: rgba(88,101,242,0.12); font-weight: 700"] * len(row)
             return [""] * len(row)
         _df_tr = pd.DataFrame(_tr_rows)
+        _tr_all_cols = list(_df_tr.columns)
+        _tr_default  = [c for c in ["#", "Dir", "Ticker", "Shares", "P&L %", f"P&L ({sym})", "TP", "SL"] if c in _tr_all_cols]
+        _tr_sel      = st.multiselect("เลือกคอลัมน์", _tr_all_cols, default=_tr_default or _tr_all_cols, key="tr_open_cols")
+        _tr_show     = _tr_sel if _tr_sel else _tr_all_cols
+        _df_tr_show  = _df_tr[_tr_show]
+        _pnl_sub_tr  = [c for c in _pnl_cols_t if c in _tr_show]
         try:
-            _styled_tr = (_df_tr.style
-                          .map(_color_pnl_t, subset=_pnl_cols_t)
+            _styled_tr = (_df_tr_show.style
+                          .map(_color_pnl_t, subset=_pnl_sub_tr)
                           .apply(_style_total_t, axis=1)
-                          .hide(axis="index"))
+                          .hide(axis="index")) if _pnl_sub_tr else _df_tr_show.style.hide(axis="index")
         except AttributeError:
-            _styled_tr = (_df_tr.style
-                          .applymap(_color_pnl_t, subset=_pnl_cols_t)
+            _styled_tr = (_df_tr_show.style
+                          .applymap(_color_pnl_t, subset=_pnl_sub_tr)
                           .apply(_style_total_t, axis=1)
-                          .hide(axis="index"))
+                          .hide(axis="index")) if _pnl_sub_tr else _df_tr_show.style.hide(axis="index")
         st.dataframe(_styled_tr, use_container_width=True, hide_index=True)
 
         st.markdown("<div style='height:0.5rem'></div>", unsafe_allow_html=True)
@@ -2339,7 +2350,7 @@ def page_trade(trades: list, cash: list, disp: str, rate: float):
     # -- Closed Trades Table --
     if closed_trades:
         section(f"Closed Trades ({len(closed_trades)})")
-        st.dataframe([{
+        _ct_rows = [{
             "Ticker":       t.get("ticker","—"),
             "Strategy":     t.get("strategy","—"),
             "เปิด":         t.get("open_date","—"),
@@ -2350,8 +2361,13 @@ def page_trade(trades: list, cash: list, disp: str, rate: float):
             f"P&L ({sym})": fmt_money(t.get("pnl_thb"), disp, rate),
             "W/L":          t.get("win_loss","—"),
             "Lesson":       t.get("lesson","—"),
-        } for t in sorted(closed_trades, key=lambda x: x.get("close_date",""), reverse=True)],
-        use_container_width=True, hide_index=True)
+        } for t in sorted(closed_trades, key=lambda x: x.get("close_date",""), reverse=True)]
+        _ct_df   = pd.DataFrame(_ct_rows)
+        _ct_all  = list(_ct_df.columns)
+        _ct_def  = [c for c in ["Ticker", "Strategy", "เปิด", "ปิด", "Entry", "Exit", "P&L %", f"P&L ({sym})", "W/L"] if c in _ct_all]
+        _ct_sel  = st.multiselect("เลือกคอลัมน์", _ct_all, default=_ct_def or _ct_all, key="closed_tr_cols")
+        _ct_show = _ct_sel if _ct_sel else _ct_all
+        st.dataframe(_ct_df[_ct_show], use_container_width=True, hide_index=True)
 
     # -- New Trade Form (collapsed) --
     st.markdown("<div style='height:1rem'></div>", unsafe_allow_html=True)
@@ -2679,10 +2695,17 @@ def main():
         st.error(f"⚠️ โหลดข้อมูลไม่ได้: {_e}")
         st.stop()
 
-    # Currency toggle at top right (global, persists across tabs)
+    # Header: logo (left) + currency toggle (right)
     rate = get_usd_thb()
-    _c1, _c2 = st.columns([5, 1])
-    with _c2:
+    _hc1, _hc2 = st.columns([3, 1])
+    with _hc1:
+        if _LOGO_B64:
+            st.markdown(
+                f'<img src="data:image/png;base64,{_LOGO_B64}" '
+                f'style="height:44px;display:block;margin:0.25rem 0 0.25rem">',
+                unsafe_allow_html=True,
+            )
+    with _hc2:
         disp = st.radio("", ["THB", "USD"], horizontal=True,
                         key="display_currency", label_visibility="collapsed")
         st.caption(f"1 USD = ฿{rate:.2f}")
