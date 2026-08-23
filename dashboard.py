@@ -46,8 +46,6 @@ st.markdown("""<style>
 
 /* Base */
 #MainMenu, footer { visibility: hidden; }
-[data-testid="stSidebarCollapseButton"],
-[data-testid="collapsedControl"],
 [data-testid="stToolbar"],
 [data-testid="stDecoration"] { display: none !important; }
 
@@ -322,11 +320,8 @@ _c_svgs = "".join(
     f'fill="{"url(#cb)" if bull else "url(#cr)"}" rx="2"/>'
     for cx, wt, bt, bb, wb, bull in _CDATA
 )
-_CANDLE_BG_HTML = (
-    '<div style="position:fixed;bottom:0;right:0;width:72%;height:62%;'
-    'pointer-events:none;z-index:0;overflow:hidden;opacity:0.22">'
-    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 910 310" '
-    'width="100%" height="100%" preserveAspectRatio="xMaxYMax meet">'
+_svg_raw = (
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 910 310">'
     '<defs>'
     '<linearGradient id="cb" x1="0" y1="0" x2="0" y2="1">'
     '<stop offset="0%" stop-color="#7C3AED" stop-opacity="0.65"/>'
@@ -340,8 +335,25 @@ _CANDLE_BG_HTML = (
     + _c_svgs
     + f'<path d="{_close_pts}" fill="none" stroke="#7C3AED" '
     'stroke-width="2" stroke-opacity="0.45" stroke-dasharray="5 3"/>'
-    '</svg></div>'
+    '</svg>'
 )
+_svg_b64 = _b64.b64encode(_svg_raw.encode()).decode()
+_CANDLE_BG_HTML = f"""<style>
+.stApp::after {{
+    content: '';
+    position: fixed;
+    bottom: 0;
+    right: 0;
+    width: 72vw;
+    height: 62vh;
+    background-image: url('data:image/svg+xml;base64,{_svg_b64}');
+    background-size: 100% 100%;
+    background-repeat: no-repeat;
+    pointer-events: none;
+    z-index: 1;
+    opacity: 0.22;
+}}
+</style>"""
 
 
 # -- Data Layer --
@@ -1207,8 +1219,6 @@ def page_overview(trades: list, investments: list, cash: list, disp: str, rate: 
     # -- Portfolio Snapshot --
     if open_inv or open_trades:
         st.markdown("<div style='height:0.5rem'></div>", unsafe_allow_html=True)
-        section("📋 Portfolio Snapshot")
-        st.caption("แคปหน้าจอส่วนนี้เพื่อให้ Claude ช่วยวิเคราะห์พอร์ตได้เลย")
 
         sym_ov  = "฿" if disp == "THB" else "$"
         _pc_col = f"P&L ({sym_ov})"
@@ -1257,11 +1267,22 @@ def page_overview(trades: list, investments: list, cash: list, disp: str, rate: 
             if isinstance(val, str) and val.startswith("-"): return "color:#ef4444;font-weight:600"
             return ""
         df_ov = pd.DataFrame(pos_rows)
-        try:
-            styled_ov = df_ov.style.map(_col_pnl_ov, subset=["P&L %", _pc_col]).hide(axis="index")
-        except AttributeError:
-            styled_ov = df_ov.style.applymap(_col_pnl_ov, subset=["P&L %", _pc_col]).hide(axis="index")
-        st.dataframe(styled_ov, use_container_width=True, hide_index=True)
+        _all_cols_ov = list(df_ov.columns)
+
+        with st.expander("📋 Portfolio Snapshot", expanded=True):
+            st.caption("แคปหน้าจอส่วนนี้เพื่อให้ Claude ช่วยวิเคราะห์พอร์ตได้เลย")
+            _sel_cols_ov = st.multiselect(
+                "แสดงคอลัมน์", _all_cols_ov, default=_all_cols_ov,
+                key="snap_cols", label_visibility="collapsed"
+            )
+            _show_cols_ov = _sel_cols_ov if _sel_cols_ov else _all_cols_ov
+            _df_show = df_ov[_show_cols_ov]
+            _pnl_sub = [c for c in ["P&L %", _pc_col] if c in _show_cols_ov]
+            try:
+                styled_ov = _df_show.style.map(_col_pnl_ov, subset=_pnl_sub).hide(axis="index") if _pnl_sub else _df_show.style.hide(axis="index")
+            except AttributeError:
+                styled_ov = _df_show.style.applymap(_col_pnl_ov, subset=_pnl_sub).hide(axis="index") if _pnl_sub else _df_show.style.hide(axis="index")
+            st.dataframe(styled_ov, use_container_width=True, hide_index=True)
 
         if cash:
             cash_lines = []
