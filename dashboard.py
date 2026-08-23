@@ -957,7 +957,6 @@ def page_login():
         tog_lbl  = "🌙 Dark"
 
     st.markdown(f"""<style>
-[data-testid="stSidebar"]{{display:none!important}}
 header[data-testid="stHeader"]{{display:none!important}}
 [data-testid="stToolbar"]{{display:none!important}}
 .stApp{{background:{page_bg}!important}}
@@ -1079,16 +1078,7 @@ header[data-testid="stHeader"]{{display:none!important}}
 
 
 # -- Sidebar --
-def render_sidebar() -> str:
-    # Override any login-page CSS that may have hidden the sidebar across reruns
-    st.markdown(
-        "<style>"
-        "[data-testid='stSidebar']{display:flex!important}"
-        "[data-testid='stSidebarCollapseButton']{display:flex!important}"
-        "[data-testid='collapsedControl']{display:flex!important}"
-        "</style>",
-        unsafe_allow_html=True,
-    )
+def render_sidebar(logged_in: bool = True) -> str:
     with st.sidebar:
         if _LOGO_B64:
             st.markdown(
@@ -1101,13 +1091,16 @@ def render_sidebar() -> str:
             'font-weight:700;font-size:0.95rem;color:#E2E8F0;margin:0 0 0.25rem">Investment Tracker</p>',
             unsafe_allow_html=True,
         )
-        if is_logged_in():
-            email = st.session_state["sb_session"]["user"]["email"]
-            st.caption(f"👤 {email}")
-            if st.button("ออกจากระบบ", use_container_width=True):
-                del st.session_state["sb_session"]
-                st.query_params.pop("_s", None)
-                st.rerun()
+        if not logged_in:
+            st.markdown("---")
+            st.caption("Tim.fin Personal OS")
+            return "📊 Overview"
+        email = st.session_state["sb_session"]["user"]["email"]
+        st.caption(f"👤 {email}")
+        if st.button("ออกจากระบบ", use_container_width=True):
+            del st.session_state["sb_session"]
+            st.query_params.pop("_s", None)
+            st.rerun()
         st.markdown("---")
         page = st.radio("", ["📊 Overview", "💼 Investment", "📈 Trade", "💵 Cash", "📓 Log"],
                         label_visibility="collapsed")
@@ -2664,7 +2657,10 @@ def main():
                 if s.get("refresh_token"):
                     st.query_params["_s"] = s["refresh_token"]
 
-    if _use_sb() and not is_logged_in():
+    _logged_in = not _use_sb() or is_logged_in()
+    page = render_sidebar(logged_in=_logged_in)
+
+    if not _logged_in:
         page_login()
         return
 
@@ -2679,7 +2675,6 @@ def main():
             st.rerun()
         st.error(f"⚠️ โหลดข้อมูลไม่ได้: {_e}")
         st.stop()
-    page        = render_sidebar()
 
     subtitles = {
         "📊 Overview":   "How is my portfolio doing?",
