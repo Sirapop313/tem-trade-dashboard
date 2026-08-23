@@ -15,7 +15,8 @@ import plotly.graph_objects as go
 
 
 # -- Config --
-st.set_page_config(page_title="Tim.fin OS", page_icon="📊", layout="wide")
+st.set_page_config(page_title="Tim.fin OS", page_icon="📊", layout="wide",
+                   initial_sidebar_state="expanded")
 
 DIR = os.path.dirname(os.path.abspath(__file__))
 TRADES_FILE      = os.path.join(DIR, "trades.json")
@@ -99,18 +100,31 @@ st.markdown("""<style>
 [data-testid="stToolbar"],
 [data-testid="stDecoration"] { display: none !important; }
 
-/* Sidebar collapse / expand buttons — style only, NO display override */
-[data-testid="stSidebarCollapseButton"] button,
-[data-testid="collapsedControl"] button {
-    background: rgba(124,58,237,0.15) !important;
-    border: 1px solid rgba(124,58,237,0.35) !important;
+/* Sidebar collapse button (inside sidebar) */
+[data-testid="stSidebarCollapseButton"] button {
+    background: rgba(124,58,237,0.18) !important;
+    border: 1px solid rgba(124,58,237,0.4) !important;
     border-radius: 8px !important;
     color: #C4B5FD !important;
-    transition: background .15s !important;
 }
-[data-testid="stSidebarCollapseButton"] button:hover,
-[data-testid="collapsedControl"] button:hover {
-    background: rgba(124,58,237,0.3) !important;
+[data-testid="stSidebarCollapseButton"] button:hover {
+    background: rgba(124,58,237,0.35) !important;
+}
+/* Expand button shown when sidebar is collapsed — make it very visible */
+[data-testid="collapsedControl"] {
+    background: #09111F !important;
+    border-right: 2px solid rgba(124,58,237,0.5) !important;
+    border-bottom: 2px solid rgba(124,58,237,0.5) !important;
+    border-radius: 0 0 8px 0 !important;
+}
+[data-testid="collapsedControl"] button {
+    background: rgba(124,58,237,0.35) !important;
+    border: 1px solid #7C3AED !important;
+    border-radius: 8px !important;
+    color: #E2E8F0 !important;
+    min-width: 36px !important;
+    min-height: 36px !important;
+    font-size: 1.1rem !important;
 }
 
 .stApp {
@@ -126,8 +140,8 @@ st.markdown("""<style>
     background-attachment: fixed, fixed, fixed, fixed !important;
     font-family: 'Plus Jakarta Sans', sans-serif !important;
 }
-/* Content area: no extra bg, let stApp grid show through */
-[data-testid="stMain"] { background: transparent !important; }
+/* Content area: solid bg so SVG decoration doesn't bleed through content */
+[data-testid="stMain"] { background: #060C18 !important; }
 .main .block-container { max-width: 1400px; padding-top: 1.5rem; }
 
 /* Sidebar */
