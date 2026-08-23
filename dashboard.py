@@ -1080,6 +1080,15 @@ header[data-testid="stHeader"]{{display:none!important}}
 
 # -- Sidebar --
 def render_sidebar() -> str:
+    # Override any login-page CSS that may have hidden the sidebar across reruns
+    st.markdown(
+        "<style>"
+        "[data-testid='stSidebar']{display:flex!important}"
+        "[data-testid='stSidebarCollapseButton']{display:flex!important}"
+        "[data-testid='collapsedControl']{display:flex!important}"
+        "</style>",
+        unsafe_allow_html=True,
+    )
     with st.sidebar:
         if _LOGO_B64:
             st.markdown(
@@ -1284,10 +1293,9 @@ def page_overview(trades: list, investments: list, cash: list, disp: str, rate: 
         _all_cols_ov = list(df_ov.columns)
 
         with st.expander("📋 Portfolio Snapshot", expanded=True):
-            st.caption("แคปหน้าจอส่วนนี้เพื่อให้ Claude ช่วยวิเคราะห์พอร์ตได้เลย")
             _sel_cols_ov = st.multiselect(
-                "แสดงคอลัมน์", _all_cols_ov, default=_all_cols_ov,
-                key="snap_cols", label_visibility="collapsed"
+                "เลือกคอลัมน์", _all_cols_ov, default=_all_cols_ov,
+                key="snap_cols",
             )
             _show_cols_ov = _sel_cols_ov if _sel_cols_ov else _all_cols_ov
             _df_show = df_ov[_show_cols_ov]
