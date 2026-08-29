@@ -1695,9 +1695,10 @@ def page_investment(investments: list, trades: list, cash: list, disp: str, rate
                     if st.session_state.get(f"add_inv_{inv['id']}"):
                         st.markdown("**➕ ซื้อเพิ่ม**")
                         with st.form(f"form_add_inv_{inv['id']}"):
-                            aa1, aa2 = st.columns(2)
+                            aa1, aa2, aa3 = st.columns(3)
                             add_shares = aa1.text_input("จำนวนหุ้นที่ซื้อเพิ่ม *", placeholder="เช่น 5")
                             add_price  = aa2.text_input("ราคาที่ซื้อ *", placeholder="เช่น 80")
+                            add_date   = aa3.date_input("วันที่ซื้อ", value=date.today())
                             src_id, other_name, other_curr = source_selector(cash, f"add_inv_{inv['id']}")
                             if st.form_submit_button("✅ ซื้อเพิ่ม"):
                                 s_add = parse(add_shares)
@@ -1712,7 +1713,7 @@ def page_investment(investments: list, trades: list, cash: list, disp: str, rate
                                     cash_deduct(cash, resolved, add_thb, rate)
                                     save_cash(cash)
                                     _bh = inv.get("buy_history", [])
-                                    _bh.append({"date": str(date.today()), "shares": add_shares, "price": add_price, "note": "ซื้อเพิ่ม"})
+                                    _bh.append({"date": str(add_date), "shares": add_shares, "price": add_price, "note": "ซื้อเพิ่ม"})
                                     inv.update({
                                         "shares":       str(round(s_new, 8)),
                                         "entry_price":  str(round(p_avg, 4)),
@@ -2140,9 +2141,10 @@ def page_trade(trades: list, cash: list, disp: str, rate: float):
                 if st.session_state.get(f"show_add_{t['id']}"):
                     st.markdown("**➕ ซื้อเพิ่ม**")
                     with st.form(f"form_add_{t['id']}"):
-                        ta1, ta2 = st.columns(2)
+                        ta1, ta2, ta3 = st.columns(3)
                         add_shares = ta1.text_input("จำนวน Shares ที่ซื้อเพิ่ม *", placeholder="เช่น 2")
                         add_price  = ta2.text_input("ราคาที่ซื้อ *", placeholder="เช่น 420")
+                        add_date   = ta3.date_input("วันที่ซื้อ", value=date.today())
                         src_id, other_name, other_curr = source_selector(cash, f"add_trade_{t['id']}")
                         if st.form_submit_button("✅ ซื้อเพิ่ม"):
                             s_add = parse(add_shares)
@@ -2156,11 +2158,14 @@ def page_trade(trades: list, cash: list, disp: str, rate: float):
                                 resolved = resolve_source(cash, src_id, other_name, other_curr)
                                 cash_deduct(cash, resolved, add_thb, rate)
                                 save_cash(cash)
+                                _tbh = t.get("buy_history", [])
+                                _tbh.append({"date": str(add_date), "shares": add_shares, "price": add_price, "note": "ซื้อเพิ่ม"})
                                 t.update({
                                     "shares":      str(round(s_new, 8)),
                                     "entry_price": str(round(p_avg, 4)),
                                     "position_thb": round((t.get("position_thb") or 0) + add_thb, 2),
                                     "rr": auto_rr(str(round(p_avg, 4)), t.get("stop_loss",""), t.get("take_profit","")),
+                                    "buy_history": _tbh,
                                 })
                                 save_trades(trades)
                                 st.session_state.pop(f"show_add_{t['id']}", None)
