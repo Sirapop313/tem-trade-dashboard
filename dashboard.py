@@ -11,6 +11,7 @@ from datetime import date
 import pandas as pd
 import requests as _req
 import streamlit as st
+import streamlit.components.v1 as _components
 import plotly.graph_objects as go
 from PIL import Image as _PILImage
 
@@ -483,6 +484,7 @@ def sb_update_password(new_pass: str) -> tuple[bool, str]:
 
 
 def _build_navbar(logo_src: str, email: str, curr: str, rate: float) -> str:
+    """Returns the navbar HTML div only (no script — JS injected separately via components.html)."""
     thb_on = "on" if curr == "THB" else ""
     usd_on = "on" if curr == "USD" else ""
     logo_html = f'<img src="{logo_src}" class="tfin-brand-img">' if logo_src else "📊"
@@ -494,86 +496,106 @@ def _build_navbar(logo_src: str, email: str, curr: str, rate: float) -> str:
     <span class="tfin-brand-name">Tim.fin</span>
   </div>
   <div class="tfin-nav-tabs">
-    <button class="tfin-nt on" id="tnt0" onclick="goTab(0)">📊 Overview</button>
-    <button class="tfin-nt" id="tnt1" onclick="goTab(1)">💼 Investment</button>
-    <button class="tfin-nt" id="tnt2" onclick="goTab(2)">📈 Trade</button>
-    <button class="tfin-nt" id="tnt3" onclick="goTab(3)">💵 Cash</button>
-    <button class="tfin-nt" id="tnt4" onclick="goTab(4)">📓 Log</button>
+    <button class="tfin-nt on" id="tnt0">📊 Overview</button>
+    <button class="tfin-nt" id="tnt1">💼 Investment</button>
+    <button class="tfin-nt" id="tnt2">📈 Trade</button>
+    <button class="tfin-nt" id="tnt3">💵 Cash</button>
+    <button class="tfin-nt" id="tnt4">📓 Log</button>
   </div>
   <div class="tfin-nav-right">
     <span class="tfin-rate">฿{rate:.2f}/USD</span>
     <div class="tfin-curr-wrap">
-      <button class="tfin-cb {thb_on}" id="cb-thb" onclick="setCurr('THB')">THB</button>
-      <button class="tfin-cb {usd_on}" id="cb-usd" onclick="setCurr('USD')">USD</button>
+      <button class="tfin-cb {thb_on}" id="cb-thb">THB</button>
+      <button class="tfin-cb {usd_on}" id="cb-usd">USD</button>
     </div>
     <div class="tfin-aw">
-      <button class="tfin-ab" onclick="toggleAcct()" title="{email}">👤</button>
+      <button class="tfin-ab" id="tfin-acct-btn" title="{email}">👤</button>
       <div class="tfin-dd" id="tfin-acct-dd">
         <div class="tfin-dd-email">{email_short}</div>
         <hr class="tfin-dd-hr">
-        <button class="tfin-ddbtn" onclick="triggerCpw()">🔑 เปลี่ยนรหัสผ่าน</button>
-        <button class="tfin-ddbtn red" onclick="doLogout()">🚪 ออกจากระบบ</button>
+        <button class="tfin-ddbtn" id="tfin-cpw-btn">🔑 เปลี่ยนรหัสผ่าน</button>
+        <button class="tfin-ddbtn red" id="tfin-logout-btn">🚪 ออกจากระบบ</button>
       </div>
     </div>
   </div>
-</div>
-<script>
-(function(){{
-  function goTab(i){{
-    var tabs=document.querySelectorAll('[data-baseweb="tab-list"] [role="tab"]');
+</div>"""
+
+
+def _navbar_js() -> str:
+    """JS injected via components.html — uses window.parent to access main page DOM."""
+    return """<script>
+(function(){
+  var doc = window.parent.document;
+
+  function goTab(i){
+    var tabs = doc.querySelectorAll('[data-baseweb="tab-list"] [role="tab"]');
     if(tabs[i]) tabs[i].click();
-    document.querySelectorAll('.tfin-nt').forEach(function(b,j){{b.classList.toggle('on',i===j);}});
-  }}
-  window.goTab=goTab;
+    doc.querySelectorAll('.tfin-nt').forEach(function(b,j){ b.classList.toggle('on', i===j); });
+  }
 
-  window.setCurr=function(val){{
-    var anchor=document.getElementById('tfin-curr-a');
+  function setCurr(val){
+    var anchor = doc.getElementById('tfin-curr-a');
     if(!anchor) return;
-    var md=anchor.closest('[data-testid="stMarkdown"]')||anchor.parentElement;
-    var sib=md?md.nextElementSibling:null;
-    var labels=sib?sib.querySelectorAll('label'):document.querySelectorAll('[data-testid="stRadio"] label');
-    labels.forEach(function(l){{if(l.innerText.trim()===val) l.click();}});
-    document.getElementById('cb-thb').classList.toggle('on',val==='THB');
-    document.getElementById('cb-usd').classList.toggle('on',val==='USD');
-  }};
+    var md = anchor.closest('[data-testid="stMarkdown"]') || anchor.parentElement;
+    var sib = md ? md.nextElementSibling : null;
+    var labels = sib ? sib.querySelectorAll('label') : doc.querySelectorAll('[data-testid="stRadio"] label');
+    labels.forEach(function(l){ if(l.innerText.trim()===val) l.click(); });
+    var cbT = doc.getElementById('cb-thb'); if(cbT) cbT.classList.toggle('on', val==='THB');
+    var cbU = doc.getElementById('cb-usd'); if(cbU) cbU.classList.toggle('on', val==='USD');
+  }
 
-  window.toggleAcct=function(){{
-    var dd=document.getElementById('tfin-acct-dd');
-    if(dd) dd.style.display=dd.style.display==='block'?'none':'block';
-  }};
-  document.addEventListener('click',function(e){{
-    if(!e.target.closest('.tfin-aw')){{
-      var dd=document.getElementById('tfin-acct-dd');
-      if(dd) dd.style.display='none';
-    }}
-  }});
+  function toggleAcct(){
+    var dd = doc.getElementById('tfin-acct-dd');
+    if(dd) dd.style.display = dd.style.display==='block' ? 'none' : 'block';
+  }
 
-  window.doLogout=function(){{
-    var btns=document.querySelectorAll('button');
-    for(var i=0;i<btns.length;i++){{
-      if(btns[i].innerText.includes('ออกจากระบบ')){{btns[i].click();return;}}
-    }}
-  }};
+  function doLogout(){
+    var btns = doc.querySelectorAll('button');
+    for(var i=0;i<btns.length;i++){
+      if(btns[i].innerText.includes('ออกจากระบบ')){ btns[i].click(); return; }
+    }
+  }
 
-  window.triggerCpw=function(){{
-    var dd=document.getElementById('tfin-acct-dd');
+  function triggerCpw(){
+    var dd = doc.getElementById('tfin-acct-dd');
     if(dd) dd.style.display='none';
-    var anchor=document.getElementById('tfin-cpw-a');
+    var anchor = doc.getElementById('tfin-cpw-a');
     if(!anchor) return;
-    var md=anchor.closest('[data-testid="stMarkdown"]')||anchor.parentElement;
-    var sib=md?md.nextElementSibling:null;
-    if(sib){{var btn=sib.querySelector('button');if(btn) btn.click();}}
-  }};
+    var md = anchor.closest('[data-testid="stMarkdown"]') || anchor.parentElement;
+    var sib = md ? md.nextElementSibling : null;
+    if(sib){ var btn=sib.querySelector('button'); if(btn) btn.click(); }
+  }
 
-  // Sync active tab highlight
-  new MutationObserver(function(){{
-    var tabs=document.querySelectorAll('[data-baseweb="tab-list"] [role="tab"]');
-    tabs.forEach(function(t,i){{
-      var b=document.getElementById('tnt'+i);
-      if(b) b.classList.toggle('on',t.getAttribute('aria-selected')==='true');
-    }});
-  }}).observe(document.body,{{subtree:true,attributes:true,attributeFilter:['aria-selected']}});
-}})();
+  function wireNavbar(){
+    var tnt0=doc.getElementById('tnt0'); if(tnt0&&!tnt0._w){tnt0.onclick=function(){goTab(0);}; tnt0._w=1;}
+    var tnt1=doc.getElementById('tnt1'); if(tnt1&&!tnt1._w){tnt1.onclick=function(){goTab(1);}; tnt1._w=1;}
+    var tnt2=doc.getElementById('tnt2'); if(tnt2&&!tnt2._w){tnt2.onclick=function(){goTab(2);}; tnt2._w=1;}
+    var tnt3=doc.getElementById('tnt3'); if(tnt3&&!tnt3._w){tnt3.onclick=function(){goTab(3);}; tnt3._w=1;}
+    var tnt4=doc.getElementById('tnt4'); if(tnt4&&!tnt4._w){tnt4.onclick=function(){goTab(4);}; tnt4._w=1;}
+    var cbT=doc.getElementById('cb-thb'); if(cbT&&!cbT._w){cbT.onclick=function(){setCurr('THB');}; cbT._w=1;}
+    var cbU=doc.getElementById('cb-usd'); if(cbU&&!cbU._w){cbU.onclick=function(){setCurr('USD');}; cbU._w=1;}
+    var aBtn=doc.getElementById('tfin-acct-btn'); if(aBtn&&!aBtn._w){aBtn.onclick=function(e){e.stopPropagation();toggleAcct();}; aBtn._w=1;}
+    var cpwBtn=doc.getElementById('tfin-cpw-btn'); if(cpwBtn&&!cpwBtn._w){cpwBtn.onclick=function(){triggerCpw();}; cpwBtn._w=1;}
+    var loBtn=doc.getElementById('tfin-logout-btn'); if(loBtn&&!loBtn._w){loBtn.onclick=function(){doLogout();}; loBtn._w=1;}
+    doc.addEventListener('click', function(e){
+      if(!e.target.closest('.tfin-aw')){
+        var dd=doc.getElementById('tfin-acct-dd'); if(dd) dd.style.display='none';
+      }
+    }, {once: false, capture: true});
+  }
+
+  // MutationObserver: sync tab highlight + re-wire after Streamlit rerenders
+  new MutationObserver(function(){
+    wireNavbar();
+    var tabs=doc.querySelectorAll('[data-baseweb="tab-list"] [role="tab"]');
+    tabs.forEach(function(t,i){
+      var b=doc.getElementById('tnt'+i);
+      if(b) b.classList.toggle('on', t.getAttribute('aria-selected')==='true');
+    });
+  }).observe(doc.body, {subtree:true, attributes:true, childList:true, attributeFilter:['aria-selected']});
+
+  wireNavbar();
+})();
 </script>"""
 
 
@@ -2879,7 +2901,7 @@ def main():
         st.session_state["_show_cpw"] = not st.session_state.get("_show_cpw", False)
         st.rerun()
 
-    # -- Fixed navbar --
+    # -- Fixed navbar HTML (no script — safe for st.markdown) --
     st.markdown(
         _build_navbar(
             f'data:image/png;base64,{_LOGO_B64}' if _LOGO_B64 else "",
@@ -2887,6 +2909,9 @@ def main():
         ),
         unsafe_allow_html=True,
     )
+
+    # -- Navbar JS via components.html (window.parent reaches main page DOM) --
+    _components.html(_navbar_js(), height=0, scrolling=False)
 
     # Spacer so content starts below fixed navbar + sticky tabs
     st.markdown('<div style="height:58px;margin:0;padding:0;line-height:0;font-size:0"></div>',
