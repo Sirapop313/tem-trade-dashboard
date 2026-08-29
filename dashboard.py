@@ -1257,17 +1257,20 @@ def page_overview(trades: list, investments: list, cash: list, disp: str, rate: 
             pnl_pct = calc_pnl_pct(item.get("entry_price"), price) if price else None
             ref     = str(price) if price else item.get("entry_price")
             pos_thb = calc_position_thb(ref, get_shares(item), get_currency(item), rate)
+            _sv = parse(get_shares(item)); _ev = parse(item.get("entry_price",""))
+            cost_thb = _sv * _ev * (rate if get_currency(item) == "USD" else 1) if _sv and _ev else None
             pos_rows.append({
-                "_pnl_raw": pnl_thb or 0,
-                "Type":      "💼 Invest",
-                "Ticker":    item.get("ticker","—"),
-                "Account":   item.get("source_account_name","—") or "ไม่ระบุ",
-                "ถือมา":    days_held_str(item.get("entry_date","")),
-                "Shares":    get_shares(item),
-                "Avg Cost":  item.get("entry_price","—"),
-                "Mkt Value": fmt_money(pos_thb, disp, rate, sign=False),
-                "P&L %":     fmt_pct(pnl_pct) if price else "—",
-                _pc_col:     fmt_money(pnl_thb, disp, rate) if price else "—",
+                "_pnl_raw":       pnl_thb or 0,
+                "Type":           "💼 Invest",
+                "Ticker":         item.get("ticker","—"),
+                "Account":        item.get("source_account_name","—") or "ไม่ระบุ",
+                "Market Price":   f"{price:,.4f}" if price else "—",
+                "Shares":         get_shares(item),
+                "Avg Price":      item.get("entry_price","—"),
+                "Cost":           fmt_money(cost_thb, disp, rate, sign=False) if cost_thb else "—",
+                "Mkt Value":      fmt_money(pos_thb, disp, rate, sign=False),
+                _pc_col:          fmt_money(pnl_thb, disp, rate) if price else "—",
+                "P&L %":          fmt_pct(pnl_pct) if price else "—",
             })
         for item in open_trades:
             price     = get_price(item.get("ticker",""))
@@ -1278,17 +1281,20 @@ def page_overview(trades: list, investments: list, cash: list, disp: str, rate: 
             ref       = str(price) if price else item.get("entry_price")
             pos_thb   = calc_position_thb(ref, get_shares(item), get_currency(item), rate)
             arr       = "↑" if direction == "Long" else "↓"
+            _sv = parse(get_shares(item)); _ev = parse(item.get("entry_price",""))
+            cost_thb = _sv * _ev * (rate if get_currency(item) == "USD" else 1) if _sv and _ev else None
             pos_rows.append({
-                "_pnl_raw": pnl_thb or 0,
-                "Type":      f"📈 Trade {arr}",
-                "Ticker":    item.get("ticker","—"),
-                "Account":   item.get("source_account_name","—") or "ไม่ระบุ",
-                "ถือมา":    days_held_str(item.get("open_date","")),
-                "Shares":    get_shares(item),
-                "Avg Cost":  item.get("entry_price","—"),
-                "Mkt Value": fmt_money(pos_thb, disp, rate, sign=False),
-                "P&L %":     fmt_pct(pnl_pct) if price else "—",
-                _pc_col:     fmt_money(pnl_thb, disp, rate) if price else "—",
+                "_pnl_raw":       pnl_thb or 0,
+                "Type":           f"📈 Trade {arr}",
+                "Ticker":         item.get("ticker","—"),
+                "Account":        item.get("source_account_name","—") or "ไม่ระบุ",
+                "Market Price":   f"{price:,.4f}" if price else "—",
+                "Shares":         get_shares(item),
+                "Avg Price":      item.get("entry_price","—"),
+                "Cost":           fmt_money(cost_thb, disp, rate, sign=False) if cost_thb else "—",
+                "Mkt Value":      fmt_money(pos_thb, disp, rate, sign=False),
+                _pc_col:          fmt_money(pnl_thb, disp, rate) if price else "—",
+                "P&L %":          fmt_pct(pnl_pct) if price else "—",
             })
         pos_rows.sort(key=lambda r: -r["_pnl_raw"])
 
