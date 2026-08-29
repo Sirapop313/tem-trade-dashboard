@@ -1249,6 +1249,7 @@ def page_overview(trades: list, investments: list, cash: list, disp: str, rate: 
             ref     = str(price) if price else item.get("entry_price")
             pos_thb = calc_position_thb(ref, get_shares(item), get_currency(item), rate)
             pos_rows.append({
+                "_pnl_raw": pnl_thb or 0,
                 "Type":      "💼 Invest",
                 "Ticker":    item.get("ticker","—"),
                 "Account":   item.get("source_account_name","—") or "ไม่ระบุ",
@@ -1269,6 +1270,7 @@ def page_overview(trades: list, investments: list, cash: list, disp: str, rate: 
             pos_thb   = calc_position_thb(ref, get_shares(item), get_currency(item), rate)
             arr       = "↑" if direction == "Long" else "↓"
             pos_rows.append({
+                "_pnl_raw": pnl_thb or 0,
                 "Type":      f"📈 Trade {arr}",
                 "Ticker":    item.get("ticker","—"),
                 "Account":   item.get("source_account_name","—") or "ไม่ระบุ",
@@ -1279,12 +1281,13 @@ def page_overview(trades: list, investments: list, cash: list, disp: str, rate: 
                 "P&L %":     fmt_pct(pnl_pct) if price else "—",
                 _pc_col:     fmt_money(pnl_thb, disp, rate) if price else "—",
             })
+        pos_rows.sort(key=lambda r: -r["_pnl_raw"])
 
         def _col_pnl_ov(val):
             if isinstance(val, str) and val.startswith("+"): return "color:#22c55e;font-weight:600"
             if isinstance(val, str) and val.startswith("-"): return "color:#ef4444;font-weight:600"
             return ""
-        df_ov = pd.DataFrame(pos_rows)
+        df_ov = pd.DataFrame(pos_rows).drop(columns=["_pnl_raw"])
         _all_cols_ov = list(df_ov.columns)
 
         with st.expander("📋 Portfolio Snapshot", expanded=True):
@@ -1557,22 +1560,7 @@ def page_investment(investments: list, trades: list, cash: list, disp: str, rate
             if no_target:
                 st.caption(f"ยังไม่ตั้ง Target %: {', '.join(no_target)} — กดแก้ไขใน position เพื่อตั้งค่า")
 
-        # Sort selector (above table)
-        sort_by = st.selectbox("เรียงตาม", [
-            f"💰 P&L {sym} (มาก → น้อย)",
-            "📊 Size (ใหญ่ → เล็ก)",
-            "📈 Gain (มาก → น้อย)",
-            "📉 Loss (มาก → น้อย)",
-            "🔤 Ticker (A → Z)",
-        ], key="inv_sort")
-        sort_fns = {
-            "📊 Size (ใหญ่ → เล็ก)":    lambda r: -r["pos_thb"],
-            "📈 Gain (มาก → น้อย)":      lambda r: -r["pnl_pct"],
-            "📉 Loss (มาก → น้อย)":      lambda r:  r["pnl_pct"],
-            "🔤 Ticker (A → Z)":          lambda r:  r["inv"].get("ticker",""),
-            f"💰 P&L {sym} (มาก → น้อย)": lambda r: -r["pnl_thb"],
-        }
-        raw.sort(key=sort_fns.get(sort_by, lambda r: -r["pos_thb"]))
+        raw.sort(key=lambda r: -r["pnl_thb"])
 
         # Build display rows
         section(f"Current Holdings ({len(open_inv)})")
