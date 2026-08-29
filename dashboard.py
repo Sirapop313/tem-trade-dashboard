@@ -429,7 +429,7 @@ def _inject_navbar(logo_src: str, email: str, curr: str, rate: float) -> str:
 
     nav_html = (
         f'<div id="tfin-nav">'
-        f'<div class="tfin-brand">{logo_tag}<span class="tfin-brand-name">Tim.fin</span></div>'
+        f'<div class="tfin-brand">{logo_tag}<span class="tfin-brand-name">Investment Tracker</span></div>'
         f'<div class="tfin-nav-tabs">'
         f'<button class="tfin-nt on" id="tnt0">📊 Overview</button>'
         f'<button class="tfin-nt" id="tnt1">💼 Investment</button>'
@@ -508,7 +508,7 @@ def _inject_navbar(logo_src: str, email: str, curr: str, rate: float) -> str:
 (function(){{
   var doc = window.parent.document;
 
-  /* 1 — Inject navbar CSS into parent <head> */
+  /* 1 — Inject navbar CSS into parent <head> (once) */
   if(!doc.getElementById('tfin-nav-css')){{
     var s = doc.createElement('style');
     s.id = 'tfin-nav-css';
@@ -516,108 +516,109 @@ def _inject_navbar(logo_src: str, email: str, curr: str, rate: float) -> str:
     doc.head.appendChild(s);
   }}
 
-  /* 2 — Inject navbar HTML into parent <body> (only once) */
+  /* 2 — Inject navbar HTML into parent <body> (once) */
   if(!doc.getElementById('tfin-nav')){{
     var tmp = doc.createElement('div');
     tmp.innerHTML = {nav_html_js};
     doc.body.insertBefore(tmp.firstChild, doc.body.firstChild);
   }}
 
-  /* 3 — Sync dynamic state on every render */
+  /* 3 — Sync dynamic state (currency buttons + rate) on every render */
   var cbT = doc.getElementById('cb-thb'); if(cbT) cbT.classList.toggle('on', {thb_js});
   var cbU = doc.getElementById('cb-usd'); if(cbU) cbU.classList.toggle('on', {usd_js});
   var rEl = doc.querySelector('#tfin-nav .tfin-rate'); if(rEl) rEl.textContent = {rate_js};
 
-  /* 4 — Hide Streamlit helper widgets */
+  /* 4 — Hide Streamlit helper widgets by text content */
   function hideWidgets(){{
-    var anchors = [{{'id':'tfin-curr-a'}},{{'id':'tfin-cpw-a'}}];
-    anchors.forEach(function(a){{
-      var el = doc.getElementById(a.id);
-      if(!el) return;
-      var node = el;
-      while(node && node.getAttribute && !node.getAttribute('data-testid')) node = node.parentElement;
-      if(node && node.nextElementSibling){{
-        node.nextElementSibling.style.cssText = 'height:0!important;overflow:hidden!important;margin:0!important;padding:0!important;';
+    doc.querySelectorAll('[data-testid="stRadio"]').forEach(function(el){{
+      if((el.textContent||'').includes('THB')) el.style.display='none';
+    }});
+    doc.querySelectorAll('button').forEach(function(b){{
+      if((b.textContent||'').trim()==='__cpw__'){{
+        var p=b.parentElement;
+        while(p && p.tagName!=='BODY' && !(p.getAttribute && p.getAttribute('data-testid'))) p=p.parentElement;
+        if(p && p.tagName!=='BODY') p.style.display='none';
       }}
     }});
   }}
 
-  /* 5 — Wire click handlers (idempotent via _w flag) */
+  /* 5 — Helper functions */
+  function getStTabs(){{
+    return Array.from(doc.querySelectorAll('[role="tab"]')).filter(function(t){{return !t.closest('#tfin-nav');}});
+  }}
+
   function goTab(i){{
-    var tabs = doc.querySelectorAll('[data-baseweb="tab-list"] [role="tab"]');
-    if(tabs[i]) tabs[i].click();
-    doc.querySelectorAll('.tfin-nt').forEach(function(b,j){{ b.classList.toggle('on', i===j); }});
+    var tabs=getStTabs(); if(tabs[i]) tabs[i].click();
+    doc.querySelectorAll('.tfin-nt').forEach(function(b,j){{b.classList.toggle('on',j===i);}});
   }}
 
   function setCurr(val){{
-    var anchor = doc.getElementById('tfin-curr-a');
-    if(!anchor) return;
-    var node = anchor;
-    while(node && node.getAttribute && !node.getAttribute('data-testid')) node = node.parentElement;
-    var sib = node ? node.nextElementSibling : null;
-    var labels = sib ? sib.querySelectorAll('label') : [];
-    labels.forEach(function(l){{ if(l.innerText.trim()===val) l.click(); }});
+    doc.querySelectorAll('[data-testid="stRadio"] label').forEach(function(l){{
+      if((l.textContent||'').trim()===val) l.click();
+    }});
     var t=doc.getElementById('cb-thb'); if(t) t.classList.toggle('on',val==='THB');
     var u=doc.getElementById('cb-usd'); if(u) u.classList.toggle('on',val==='USD');
   }}
 
   function toggleAcct(){{
-    var dd = doc.getElementById('tfin-acct-dd');
-    if(dd) dd.style.display = dd.style.display==='block' ? 'none' : 'block';
+    var dd=doc.getElementById('tfin-acct-dd');
+    if(dd) dd.style.display=dd.style.display==='block'?'none':'block';
   }}
 
   function doLogout(){{
-    var btns = doc.querySelectorAll('button');
-    for(var i=0;i<btns.length;i++){{ if(btns[i].innerText.includes('ออกจากระบบ')){{ btns[i].click(); return; }} }}
+    var btns=doc.querySelectorAll('button');
+    for(var i=0;i<btns.length;i++){{if((btns[i].textContent||'').includes('ออกจากระบบ')){{btns[i].click();return;}}}}
   }}
 
   function triggerCpw(){{
-    var dd = doc.getElementById('tfin-acct-dd'); if(dd) dd.style.display='none';
-    var anchor = doc.getElementById('tfin-cpw-a'); if(!anchor) return;
-    var node = anchor;
-    while(node && node.getAttribute && !node.getAttribute('data-testid')) node = node.parentElement;
-    var sib = node ? node.nextElementSibling : null;
-    if(sib){{ var btn=sib.querySelector('button'); if(btn) btn.click(); }}
-  }}
-
-  function wireNavbar(){{
-    function wire(id, fn){{ var el=doc.getElementById(id); if(el&&!el._w){{el.onclick=fn;el._w=1;}} }}
-    wire('tnt0', function(){{goTab(0);}});
-    wire('tnt1', function(){{goTab(1);}});
-    wire('tnt2', function(){{goTab(2);}});
-    wire('tnt3', function(){{goTab(3);}});
-    wire('tnt4', function(){{goTab(4);}});
-    wire('cb-thb', function(){{setCurr('THB');}});
-    wire('cb-usd', function(){{setCurr('USD');}});
-    wire('tfin-acct-btn', function(e){{e.stopPropagation();toggleAcct();}});
-    wire('tfin-cpw-btn', function(){{triggerCpw();}});
-    wire('tfin-logout-btn', function(){{doLogout();}});
-    if(!doc._tfinClickWired){{
-      doc.addEventListener('click', function(e){{
-        if(!e.target.closest('.tfin-aw')){{
-          var dd=doc.getElementById('tfin-acct-dd'); if(dd) dd.style.display='none';
-        }}
-      }}, true);
-      doc._tfinClickWired = true;
-    }}
+    var dd=doc.getElementById('tfin-acct-dd'); if(dd) dd.style.display='none';
+    doc.querySelectorAll('button').forEach(function(b){{
+      if((b.textContent||'').trim()==='__cpw__') b.click();
+    }});
   }}
 
   function syncTabs(){{
-    var tabs=doc.querySelectorAll('[data-baseweb="tab-list"] [role="tab"]');
+    var tabs=getStTabs();
     tabs.forEach(function(t,i){{
       var b=doc.getElementById('tnt'+i);
       if(b) b.classList.toggle('on', t.getAttribute('aria-selected')==='true');
     }});
   }}
 
-  /* 6 — MutationObserver keeps everything wired across Streamlit rerenders */
+  /* 6 — Event delegation on navbar (single listener, capture phase) */
+  var nav=doc.getElementById('tfin-nav');
+  if(nav && !nav._del){{
+    nav.addEventListener('click', function(e){{
+      var tgt=e.target;
+      var tntBtn=tgt.closest && tgt.closest('[id^="tnt"]');
+      if(tntBtn){{ var idx=parseInt(tntBtn.id.substring(3)); if(!isNaN(idx)) goTab(idx); e.stopPropagation(); return; }}
+      if(tgt.closest && tgt.closest('#cb-thb')){{ setCurr('THB'); e.stopPropagation(); return; }}
+      if(tgt.closest && tgt.closest('#cb-usd')){{ setCurr('USD'); e.stopPropagation(); return; }}
+      if(tgt.closest && tgt.closest('#tfin-acct-btn')){{ e.stopPropagation(); toggleAcct(); return; }}
+      if(tgt.closest && tgt.closest('#tfin-cpw-btn')){{ triggerCpw(); e.stopPropagation(); return; }}
+      if(tgt.closest && tgt.closest('#tfin-logout-btn')){{ doLogout(); e.stopPropagation(); return; }}
+    }}, true);
+    nav._del = true;
+  }}
+
+  /* Close dropdown on outside click */
+  if(!doc._tfinOuter){{
+    doc.addEventListener('click', function(e){{
+      if(!(e.target.closest && e.target.closest('.tfin-aw'))){{
+        var dd=doc.getElementById('tfin-acct-dd'); if(dd) dd.style.display='none';
+      }}
+    }}, false);
+    doc._tfinOuter = true;
+  }}
+
+  /* 7 — MutationObserver: re-hide widgets + sync tabs on every Streamlit rerender */
   if(!window._tfinObserving){{
-    new MutationObserver(function(){{ wireNavbar(); hideWidgets(); syncTabs(); }})
+    new MutationObserver(function(){{ hideWidgets(); syncTabs(); }})
       .observe(doc.body, {{subtree:true, childList:true, attributes:true, attributeFilter:['aria-selected']}});
     window._tfinObserving = true;
   }}
 
-  wireNavbar(); hideWidgets(); syncTabs();
+  hideWidgets(); syncTabs();
 }})();
 </script>"""
 
@@ -2912,13 +2913,11 @@ def main():
     rate = get_usd_thb()
     _email = (st.session_state.get("sb_session") or {}).get("user", {}).get("email", "")
 
-    # -- Hidden currency radio (JS in navbar clicks it) --
-    st.markdown('<span id="tfin-curr-a"></span>', unsafe_allow_html=True)
+    # -- Hidden currency radio (JS finds it by label text and clicks it) --
     disp = st.radio("", ["THB", "USD"], horizontal=True,
                     key="display_currency", label_visibility="collapsed")
 
-    # -- Hidden change-password trigger (JS clicks this button) --
-    st.markdown('<span id="tfin-cpw-a"></span>', unsafe_allow_html=True)
+    # -- Hidden change-password trigger (JS finds button by text and clicks it) --
     _cpw_clicked = st.button("__cpw__", key="_cpw_btn")
     if _cpw_clicked:
         st.session_state["_show_cpw"] = not st.session_state.get("_show_cpw", False)
