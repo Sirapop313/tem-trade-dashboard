@@ -375,6 +375,80 @@ html body [data-testid="collapsedControl"] { display: flex !important; }
 
 /* Dividers */
 hr { border-color: var(--it-border) !important; }
+
+/* ── Fixed Top Navbar ──────────────────────────────── */
+#tfin-nav {
+    position: fixed !important; top:0 !important; left:0 !important; right:0 !important;
+    height:58px !important; background:rgba(6,11,22,0.97) !important;
+    backdrop-filter:blur(20px) !important; -webkit-backdrop-filter:blur(20px) !important;
+    border-bottom:1px solid rgba(124,58,237,0.18) !important;
+    display:flex !important; align-items:center !important;
+    justify-content:space-between !important; padding:0 20px !important;
+    z-index:9999 !important; box-shadow:0 2px 28px rgba(0,0,0,0.5) !important;
+    font-family:'Plus Jakarta Sans','Syne',sans-serif !important; gap:10px !important;
+}
+.tfin-brand { display:flex; align-items:center; gap:8px; flex-shrink:0; }
+.tfin-brand-img { height:30px; width:30px; border-radius:6px; object-fit:cover; }
+.tfin-brand-name { font-size:0.88rem; font-weight:700; color:#E2E8F0; letter-spacing:-0.02em; }
+.tfin-nav-tabs { display:flex; align-items:center; gap:2px; flex:1; justify-content:center; }
+.tfin-nt {
+    background:transparent; border:none; cursor:pointer;
+    color:rgba(148,163,184,0.7); font-size:0.8rem; font-weight:500;
+    padding:6px 13px; border-radius:8px; transition:all .15s; white-space:nowrap;
+    font-family:'Plus Jakarta Sans',sans-serif; line-height:1;
+}
+.tfin-nt:hover { background:rgba(124,58,237,0.12); color:#e2e8f0; }
+.tfin-nt.on { background:rgba(124,58,237,0.22); color:#C4B5FD; font-weight:700;
+    box-shadow:0 0 0 1px rgba(124,58,237,0.3) inset; }
+.tfin-nav-right { display:flex; align-items:center; gap:10px; flex-shrink:0; }
+.tfin-rate { font-size:0.7rem; color:rgba(148,163,184,0.5); }
+.tfin-curr-wrap { display:flex; background:rgba(255,255,255,0.05); border-radius:7px; padding:3px; }
+.tfin-cb {
+    background:transparent; border:none; cursor:pointer; font-size:0.75rem; font-weight:600;
+    padding:4px 10px; border-radius:5px; transition:all .14s; color:rgba(148,163,184,0.6);
+    font-family:'Plus Jakarta Sans',sans-serif;
+}
+.tfin-cb.on { background:rgba(124,58,237,0.38); color:#C4B5FD; }
+.tfin-aw { position:relative; }
+.tfin-ab {
+    background:rgba(124,58,237,0.1); border:1px solid rgba(124,58,237,0.28);
+    border-radius:50%; width:33px; height:33px; cursor:pointer; color:#C4B5FD;
+    font-size:0.9rem; display:flex; align-items:center; justify-content:center;
+    transition:all .15s; padding:0;
+}
+.tfin-ab:hover { background:rgba(124,58,237,0.24); }
+.tfin-dd {
+    display:none; position:absolute; top:41px; right:0; min-width:192px;
+    background:#0C1828; border:1px solid rgba(124,58,237,0.22); border-radius:12px;
+    padding:10px; box-shadow:0 10px 40px rgba(0,0,0,0.65); z-index:10001;
+}
+.tfin-dd-email { font-size:0.74rem; color:rgba(148,163,184,0.65); padding:4px 8px 6px; word-break:break-all; }
+.tfin-dd-hr { border:none; border-top:1px solid rgba(124,58,237,0.14); margin:5px 0; }
+.tfin-ddbtn {
+    display:block; width:100%; text-align:left; background:transparent; border:none;
+    color:#E2E8F0; font-size:0.79rem; padding:7px 9px; border-radius:7px;
+    cursor:pointer; font-family:inherit; transition:background .12s;
+}
+.tfin-ddbtn:hover { background:rgba(124,58,237,0.14); }
+.tfin-ddbtn.red { color:#f87171; }
+.tfin-ddbtn.red:hover { background:rgba(239,68,68,0.1); }
+
+/* Main nav tab-list — sticky below fixed navbar */
+[data-testid="stVerticalBlock"] > [data-testid="stTabs"]:first-of-type > [data-baseweb="tab-list"] {
+    position: sticky !important; top: 58px !important; z-index: 996 !important;
+    background: rgba(6,11,22,0.98) !important; backdrop-filter:blur(12px) !important;
+    -webkit-backdrop-filter:blur(12px) !important;
+    border-radius: 0 !important; margin: 0 0 0.5rem !important;
+    padding: 6px 12px !important; border: none !important;
+    border-bottom: 1px solid rgba(124,58,237,0.1) !important;
+}
+
+/* Hide Streamlit hidden-widgets (currency radio + cpw trigger) via anchor sibling */
+[data-testid="stMarkdown"]:has(#tfin-curr-a) + div,
+[data-testid="stMarkdown"]:has(#tfin-cpw-a) + div {
+    height: 0 !important; overflow: hidden !important;
+    margin: 0 !important; padding: 0 !important;
+}
 </style>""".replace("__CANDLE_SVG__", _svg_b64), unsafe_allow_html=True)
 
 # -- Logo (Tim.fin) --
@@ -386,6 +460,121 @@ try:
         _LOGO_B64 = _b64.b64encode(_f.read()).decode()
 except Exception:
     _LOGO_B64 = ""
+
+
+# -- Navbar & Account helpers --
+
+def sb_update_password(new_pass: str) -> tuple[bool, str]:
+    """Update current user's password via Supabase."""
+    if not _use_sb():
+        return False, "ไม่ได้เชื่อม Supabase"
+    try:
+        resp = _req.put(
+            f"{_sb_url()}/auth/v1/user",
+            json={"password": new_pass},
+            headers=_sb_headers(),
+            timeout=10,
+        )
+        if resp.status_code == 200:
+            return True, ""
+        return False, resp.json().get("message", resp.text)
+    except Exception as e:
+        return False, str(e)
+
+
+def _build_navbar(logo_src: str, email: str, curr: str, rate: float) -> str:
+    thb_on = "on" if curr == "THB" else ""
+    usd_on = "on" if curr == "USD" else ""
+    logo_html = f'<img src="{logo_src}" class="tfin-brand-img">' if logo_src else "📊"
+    email_short = (email[:22] + "…") if len(email) > 24 else email
+    return f"""
+<div id="tfin-nav">
+  <div class="tfin-brand">
+    {logo_html}
+    <span class="tfin-brand-name">Tim.fin</span>
+  </div>
+  <div class="tfin-nav-tabs">
+    <button class="tfin-nt on" id="tnt0" onclick="goTab(0)">📊 Overview</button>
+    <button class="tfin-nt" id="tnt1" onclick="goTab(1)">💼 Investment</button>
+    <button class="tfin-nt" id="tnt2" onclick="goTab(2)">📈 Trade</button>
+    <button class="tfin-nt" id="tnt3" onclick="goTab(3)">💵 Cash</button>
+    <button class="tfin-nt" id="tnt4" onclick="goTab(4)">📓 Log</button>
+  </div>
+  <div class="tfin-nav-right">
+    <span class="tfin-rate">฿{rate:.2f}/USD</span>
+    <div class="tfin-curr-wrap">
+      <button class="tfin-cb {thb_on}" id="cb-thb" onclick="setCurr('THB')">THB</button>
+      <button class="tfin-cb {usd_on}" id="cb-usd" onclick="setCurr('USD')">USD</button>
+    </div>
+    <div class="tfin-aw">
+      <button class="tfin-ab" onclick="toggleAcct()" title="{email}">👤</button>
+      <div class="tfin-dd" id="tfin-acct-dd">
+        <div class="tfin-dd-email">{email_short}</div>
+        <hr class="tfin-dd-hr">
+        <button class="tfin-ddbtn" onclick="triggerCpw()">🔑 เปลี่ยนรหัสผ่าน</button>
+        <button class="tfin-ddbtn red" onclick="doLogout()">🚪 ออกจากระบบ</button>
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+(function(){{
+  function goTab(i){{
+    var tabs=document.querySelectorAll('[data-baseweb="tab-list"] [role="tab"]');
+    if(tabs[i]) tabs[i].click();
+    document.querySelectorAll('.tfin-nt').forEach(function(b,j){{b.classList.toggle('on',i===j);}});
+  }}
+  window.goTab=goTab;
+
+  window.setCurr=function(val){{
+    var anchor=document.getElementById('tfin-curr-a');
+    if(!anchor) return;
+    var md=anchor.closest('[data-testid="stMarkdown"]')||anchor.parentElement;
+    var sib=md?md.nextElementSibling:null;
+    var labels=sib?sib.querySelectorAll('label'):document.querySelectorAll('[data-testid="stRadio"] label');
+    labels.forEach(function(l){{if(l.innerText.trim()===val) l.click();}});
+    document.getElementById('cb-thb').classList.toggle('on',val==='THB');
+    document.getElementById('cb-usd').classList.toggle('on',val==='USD');
+  }};
+
+  window.toggleAcct=function(){{
+    var dd=document.getElementById('tfin-acct-dd');
+    if(dd) dd.style.display=dd.style.display==='block'?'none':'block';
+  }};
+  document.addEventListener('click',function(e){{
+    if(!e.target.closest('.tfin-aw')){{
+      var dd=document.getElementById('tfin-acct-dd');
+      if(dd) dd.style.display='none';
+    }}
+  }});
+
+  window.doLogout=function(){{
+    var btns=document.querySelectorAll('button');
+    for(var i=0;i<btns.length;i++){{
+      if(btns[i].innerText.includes('ออกจากระบบ')){{btns[i].click();return;}}
+    }}
+  }};
+
+  window.triggerCpw=function(){{
+    var dd=document.getElementById('tfin-acct-dd');
+    if(dd) dd.style.display='none';
+    var anchor=document.getElementById('tfin-cpw-a');
+    if(!anchor) return;
+    var md=anchor.closest('[data-testid="stMarkdown"]')||anchor.parentElement;
+    var sib=md?md.nextElementSibling:null;
+    if(sib){{var btn=sib.querySelector('button');if(btn) btn.click();}}
+  }};
+
+  // Sync active tab highlight
+  new MutationObserver(function(){{
+    var tabs=document.querySelectorAll('[data-baseweb="tab-list"] [role="tab"]');
+    tabs.forEach(function(t,i){{
+      var b=document.getElementById('tnt'+i);
+      if(b) b.classList.toggle('on',t.getAttribute('aria-selected')==='true');
+    }});
+  }}).observe(document.body,{{subtree:true,attributes:true,attributeFilter:['aria-selected']}});
+}})();
+</script>"""
 
 
 # -- Data Layer --
@@ -2675,21 +2864,60 @@ def main():
         st.error(f"⚠️ โหลดข้อมูลไม่ได้: {_e}")
         st.stop()
 
-    # Header: logo (left) + currency toggle (right)
     rate = get_usd_thb()
-    _hc1, _hc2 = st.columns([3, 1])
-    with _hc1:
-        if _LOGO_B64:
-            st.markdown(
-                f'<img src="data:image/png;base64,{_LOGO_B64}" '
-                f'style="height:44px;display:block;margin:0.25rem 0 0.25rem">',
-                unsafe_allow_html=True,
-            )
-    with _hc2:
-        disp = st.radio("", ["THB", "USD"], horizontal=True,
-                        key="display_currency", label_visibility="collapsed")
-        st.caption(f"1 USD = ฿{rate:.2f}")
+    _email = (st.session_state.get("sb_session") or {}).get("user", {}).get("email", "")
 
+    # -- Hidden currency radio (JS in navbar clicks it) --
+    st.markdown('<span id="tfin-curr-a"></span>', unsafe_allow_html=True)
+    disp = st.radio("", ["THB", "USD"], horizontal=True,
+                    key="display_currency", label_visibility="collapsed")
+
+    # -- Hidden change-password trigger (JS clicks this button) --
+    st.markdown('<span id="tfin-cpw-a"></span>', unsafe_allow_html=True)
+    _cpw_clicked = st.button("__cpw__", key="_cpw_btn")
+    if _cpw_clicked:
+        st.session_state["_show_cpw"] = not st.session_state.get("_show_cpw", False)
+        st.rerun()
+
+    # -- Fixed navbar --
+    st.markdown(
+        _build_navbar(
+            f'data:image/png;base64,{_LOGO_B64}' if _LOGO_B64 else "",
+            _email, st.session_state.get("display_currency", "THB"), rate,
+        ),
+        unsafe_allow_html=True,
+    )
+
+    # Spacer so content starts below fixed navbar + sticky tabs
+    st.markdown('<div style="height:58px;margin:0;padding:0;line-height:0;font-size:0"></div>',
+                unsafe_allow_html=True)
+
+    # -- Change-password panel --
+    if st.session_state.get("_show_cpw"):
+        with st.container(border=True):
+            st.subheader("🔑 เปลี่ยนรหัสผ่าน")
+            with st.form("form_change_pw"):
+                _np1 = st.text_input("รหัสผ่านใหม่", type="password", placeholder="อย่างน้อย 8 ตัวอักษร")
+                _np2 = st.text_input("ยืนยันรหัสผ่านใหม่", type="password")
+                _cpw_submit = st.form_submit_button("✅ เปลี่ยนรหัสผ่าน")
+                if _cpw_submit:
+                    if len(_np1) < 8:
+                        st.error("รหัสผ่านต้องมีอย่างน้อย 8 ตัวอักษร")
+                    elif _np1 != _np2:
+                        st.error("รหัสผ่านทั้งสองไม่ตรงกัน")
+                    else:
+                        _ok, _err = sb_update_password(_np1)
+                        if _ok:
+                            st.success("✅ เปลี่ยนรหัสผ่านสำเร็จ!")
+                            st.session_state["_show_cpw"] = False
+                            st.rerun()
+                        else:
+                            st.error(f"เปลี่ยนไม่สำเร็จ: {_err}")
+            if st.button("ยกเลิก", key="_cpw_cancel"):
+                st.session_state["_show_cpw"] = False
+                st.rerun()
+
+    # -- Tabs --
     _tabs = st.tabs(["📊 Overview", "💼 Investment", "📈 Trade", "💵 Cash", "📓 Log"])
     with _tabs[0]: page_overview(trades, investments, cash, disp, rate)
     with _tabs[1]: page_investment(investments, trades, cash, disp, rate)
