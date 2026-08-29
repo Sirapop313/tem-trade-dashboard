@@ -1559,11 +1559,11 @@ def page_investment(investments: list, trades: list, cash: list, disp: str, rate
 
         # Sort selector (above table)
         sort_by = st.selectbox("เรียงตาม", [
+            f"💰 P&L {sym} (มาก → น้อย)",
             "📊 Size (ใหญ่ → เล็ก)",
             "📈 Gain (มาก → น้อย)",
             "📉 Loss (มาก → น้อย)",
             "🔤 Ticker (A → Z)",
-            f"💰 P&L {sym} (มาก → น้อย)",
         ], key="inv_sort")
         sort_fns = {
             "📊 Size (ใหญ่ → เล็ก)":    lambda r: -r["pos_thb"],
