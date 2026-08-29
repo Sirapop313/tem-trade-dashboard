@@ -377,63 +377,6 @@ html body [data-testid="collapsedControl"] { display: flex !important; }
 /* Dividers */
 hr { border-color: var(--it-border) !important; }
 
-/* ── Fixed Top Navbar ──────────────────────────────── */
-#tfin-nav {
-    position: fixed !important; top:0 !important; left:0 !important; right:0 !important;
-    height:58px !important; background:rgba(6,11,22,0.97) !important;
-    backdrop-filter:blur(20px) !important; -webkit-backdrop-filter:blur(20px) !important;
-    border-bottom:1px solid rgba(124,58,237,0.18) !important;
-    display:flex !important; align-items:center !important;
-    justify-content:space-between !important; padding:0 20px !important;
-    z-index:9999 !important; box-shadow:0 2px 28px rgba(0,0,0,0.5) !important;
-    font-family:'Plus Jakarta Sans','Syne',sans-serif !important; gap:10px !important;
-}
-.tfin-brand { display:flex; align-items:center; gap:8px; flex-shrink:0; }
-.tfin-brand-img { height:30px; width:30px; border-radius:6px; object-fit:cover; }
-.tfin-brand-name { font-size:0.88rem; font-weight:700; color:#E2E8F0; letter-spacing:-0.02em; }
-.tfin-nav-tabs { display:flex; align-items:center; gap:2px; flex:1; justify-content:center; }
-.tfin-nt {
-    background:transparent; border:none; cursor:pointer;
-    color:rgba(148,163,184,0.7); font-size:0.8rem; font-weight:500;
-    padding:6px 13px; border-radius:8px; transition:all .15s; white-space:nowrap;
-    font-family:'Plus Jakarta Sans',sans-serif; line-height:1;
-}
-.tfin-nt:hover { background:rgba(124,58,237,0.12); color:#e2e8f0; }
-.tfin-nt.on { background:rgba(124,58,237,0.22); color:#C4B5FD; font-weight:700;
-    box-shadow:0 0 0 1px rgba(124,58,237,0.3) inset; }
-.tfin-nav-right { display:flex; align-items:center; gap:10px; flex-shrink:0; }
-.tfin-rate { font-size:0.7rem; color:rgba(148,163,184,0.5); }
-.tfin-curr-wrap { display:flex; background:rgba(255,255,255,0.05); border-radius:7px; padding:3px; }
-.tfin-cb {
-    background:transparent; border:none; cursor:pointer; font-size:0.75rem; font-weight:600;
-    padding:4px 10px; border-radius:5px; transition:all .14s; color:rgba(148,163,184,0.6);
-    font-family:'Plus Jakarta Sans',sans-serif;
-}
-.tfin-cb.on { background:rgba(124,58,237,0.38); color:#C4B5FD; }
-.tfin-aw { position:relative; }
-.tfin-ab {
-    background:rgba(124,58,237,0.1); border:1px solid rgba(124,58,237,0.28);
-    border-radius:50%; width:33px; height:33px; cursor:pointer; color:#C4B5FD;
-    font-size:0.9rem; display:flex; align-items:center; justify-content:center;
-    transition:all .15s; padding:0;
-}
-.tfin-ab:hover { background:rgba(124,58,237,0.24); }
-.tfin-dd {
-    display:none; position:absolute; top:41px; right:0; min-width:192px;
-    background:#0C1828; border:1px solid rgba(124,58,237,0.22); border-radius:12px;
-    padding:10px; box-shadow:0 10px 40px rgba(0,0,0,0.65); z-index:10001;
-}
-.tfin-dd-email { font-size:0.74rem; color:rgba(148,163,184,0.65); padding:4px 8px 6px; word-break:break-all; }
-.tfin-dd-hr { border:none; border-top:1px solid rgba(124,58,237,0.14); margin:5px 0; }
-.tfin-ddbtn {
-    display:block; width:100%; text-align:left; background:transparent; border:none;
-    color:#E2E8F0; font-size:0.79rem; padding:7px 9px; border-radius:7px;
-    cursor:pointer; font-family:inherit; transition:background .12s;
-}
-.tfin-ddbtn:hover { background:rgba(124,58,237,0.14); }
-.tfin-ddbtn.red { color:#f87171; }
-.tfin-ddbtn.red:hover { background:rgba(239,68,68,0.1); }
-
 /* Main nav tab-list — sticky below fixed navbar */
 [data-testid="stVerticalBlock"] > [data-testid="stTabs"]:first-of-type > [data-baseweb="tab-list"] {
     position: sticky !important; top: 58px !important; z-index: 996 !important;
@@ -442,13 +385,6 @@ hr { border-color: var(--it-border) !important; }
     border-radius: 0 !important; margin: 0 0 0.5rem !important;
     padding: 6px 12px !important; border: none !important;
     border-bottom: 1px solid rgba(124,58,237,0.1) !important;
-}
-
-/* Hide Streamlit hidden-widgets (currency radio + cpw trigger) via anchor sibling */
-[data-testid="stMarkdown"]:has(#tfin-curr-a) + div,
-[data-testid="stMarkdown"]:has(#tfin-cpw-a) + div {
-    height: 0 !important; overflow: hidden !important;
-    margin: 0 !important; padding: 0 !important;
 }
 </style>""".replace("__CANDLE_SVG__", _svg_b64), unsafe_allow_html=True)
 
@@ -483,119 +419,206 @@ def sb_update_password(new_pass: str) -> tuple[bool, str]:
         return False, str(e)
 
 
-def _build_navbar(logo_src: str, email: str, curr: str, rate: float) -> str:
-    """Returns the navbar HTML div only (no script — JS injected separately via components.html)."""
-    thb_on = "on" if curr == "THB" else ""
-    usd_on = "on" if curr == "USD" else ""
-    logo_html = f'<img src="{logo_src}" class="tfin-brand-img">' if logo_src else "📊"
-    email_short = (email[:22] + "…") if len(email) > 24 else email
-    return f"""
-<div id="tfin-nav">
-  <div class="tfin-brand">
-    {logo_html}
-    <span class="tfin-brand-name">Tim.fin</span>
-  </div>
-  <div class="tfin-nav-tabs">
-    <button class="tfin-nt on" id="tnt0">📊 Overview</button>
-    <button class="tfin-nt" id="tnt1">💼 Investment</button>
-    <button class="tfin-nt" id="tnt2">📈 Trade</button>
-    <button class="tfin-nt" id="tnt3">💵 Cash</button>
-    <button class="tfin-nt" id="tnt4">📓 Log</button>
-  </div>
-  <div class="tfin-nav-right">
-    <span class="tfin-rate">฿{rate:.2f}/USD</span>
-    <div class="tfin-curr-wrap">
-      <button class="tfin-cb {thb_on}" id="cb-thb">THB</button>
-      <button class="tfin-cb {usd_on}" id="cb-usd">USD</button>
-    </div>
-    <div class="tfin-aw">
-      <button class="tfin-ab" id="tfin-acct-btn" title="{email}">👤</button>
-      <div class="tfin-dd" id="tfin-acct-dd">
-        <div class="tfin-dd-email">{email_short}</div>
-        <hr class="tfin-dd-hr">
-        <button class="tfin-ddbtn" id="tfin-cpw-btn">🔑 เปลี่ยนรหัสผ่าน</button>
-        <button class="tfin-ddbtn red" id="tfin-logout-btn">🚪 ออกจากระบบ</button>
-      </div>
-    </div>
-  </div>
-</div>"""
+def _inject_navbar(logo_src: str, email: str, curr: str, rate: float) -> str:
+    """Inject navbar HTML+CSS+JS into the parent page via window.parent (components.html iframe)."""
+    thb_cls = "on" if curr == "THB" else ""
+    usd_cls = "on" if curr == "USD" else ""
+    logo_tag = f'<img src="{logo_src}" class="tfin-brand-img">' if logo_src else '<span style="font-size:1.3rem;line-height:1">📊</span>'
+    em_short = (email[:22] + "…") if len(email) > 24 else email
+    rate_str = f"{rate:.2f}"
 
+    nav_html = (
+        f'<div id="tfin-nav">'
+        f'<div class="tfin-brand">{logo_tag}<span class="tfin-brand-name">Tim.fin</span></div>'
+        f'<div class="tfin-nav-tabs">'
+        f'<button class="tfin-nt on" id="tnt0">📊 Overview</button>'
+        f'<button class="tfin-nt" id="tnt1">💼 Investment</button>'
+        f'<button class="tfin-nt" id="tnt2">📈 Trade</button>'
+        f'<button class="tfin-nt" id="tnt3">💵 Cash</button>'
+        f'<button class="tfin-nt" id="tnt4">📓 Log</button>'
+        f'</div>'
+        f'<div class="tfin-nav-right">'
+        f'<span class="tfin-rate">฿{rate_str}/USD</span>'
+        f'<div class="tfin-curr-wrap">'
+        f'<button class="tfin-cb {thb_cls}" id="cb-thb">THB</button>'
+        f'<button class="tfin-cb {usd_cls}" id="cb-usd">USD</button>'
+        f'</div>'
+        f'<div class="tfin-aw">'
+        f'<button class="tfin-ab" id="tfin-acct-btn" title="{email}">👤</button>'
+        f'<div class="tfin-dd" id="tfin-acct-dd">'
+        f'<div class="tfin-dd-email">{em_short}</div>'
+        f'<hr class="tfin-dd-hr">'
+        f'<button class="tfin-ddbtn" id="tfin-cpw-btn">🔑 เปลี่ยนรหัสผ่าน</button>'
+        f'<button class="tfin-ddbtn red" id="tfin-logout-btn">🚪 ออกจากระบบ</button>'
+        f'</div></div></div></div>'
+    )
 
-def _navbar_js() -> str:
-    """JS injected via components.html — uses window.parent to access main page DOM."""
-    return """<script>
-(function(){
+    nav_css = (
+        "#tfin-nav{position:fixed!important;top:0!important;left:0!important;right:0!important;"
+        "height:58px!important;background:rgba(6,11,22,0.97)!important;"
+        "backdrop-filter:blur(20px)!important;-webkit-backdrop-filter:blur(20px)!important;"
+        "border-bottom:1px solid rgba(124,58,237,0.18)!important;"
+        "display:flex!important;align-items:center!important;justify-content:space-between!important;"
+        "padding:0 20px!important;z-index:2147483647!important;"
+        "box-shadow:0 2px 28px rgba(0,0,0,0.5)!important;"
+        "font-family:'Plus Jakarta Sans','Syne',sans-serif!important;gap:10px!important;}"
+        ".tfin-brand{display:flex;align-items:center;gap:8px;flex-shrink:0;}"
+        ".tfin-brand-img{height:30px;width:30px;border-radius:6px;object-fit:cover;}"
+        ".tfin-brand-name{font-size:.88rem;font-weight:700;color:#E2E8F0;letter-spacing:-.02em;}"
+        ".tfin-nav-tabs{display:flex;align-items:center;gap:2px;flex:1;justify-content:center;}"
+        ".tfin-nt{background:transparent;border:none;cursor:pointer;color:rgba(148,163,184,.7);"
+        "font-size:.8rem;font-weight:500;padding:6px 13px;border-radius:8px;transition:all .15s;"
+        "white-space:nowrap;font-family:'Plus Jakarta Sans',sans-serif;line-height:1;}"
+        ".tfin-nt:hover{background:rgba(124,58,237,.12);color:#e2e8f0;}"
+        ".tfin-nt.on{background:rgba(124,58,237,.22);color:#C4B5FD;font-weight:700;"
+        "box-shadow:0 0 0 1px rgba(124,58,237,.3) inset;}"
+        ".tfin-nav-right{display:flex;align-items:center;gap:10px;flex-shrink:0;}"
+        ".tfin-rate{font-size:.7rem;color:rgba(148,163,184,.5);}"
+        ".tfin-curr-wrap{display:flex;background:rgba(255,255,255,.05);border-radius:7px;padding:3px;}"
+        ".tfin-cb{background:transparent;border:none;cursor:pointer;font-size:.75rem;font-weight:600;"
+        "padding:4px 10px;border-radius:5px;transition:all .14s;color:rgba(148,163,184,.6);"
+        "font-family:'Plus Jakarta Sans',sans-serif;}"
+        ".tfin-cb.on{background:rgba(124,58,237,.38);color:#C4B5FD;}"
+        ".tfin-aw{position:relative;}"
+        ".tfin-ab{background:rgba(124,58,237,.1);border:1px solid rgba(124,58,237,.28);"
+        "border-radius:50%;width:33px;height:33px;cursor:pointer;color:#C4B5FD;font-size:.9rem;"
+        "display:flex;align-items:center;justify-content:center;transition:all .15s;padding:0;}"
+        ".tfin-ab:hover{background:rgba(124,58,237,.24);}"
+        ".tfin-dd{display:none;position:fixed;top:58px;right:20px;min-width:192px;"
+        "background:#0C1828;border:1px solid rgba(124,58,237,.22);border-radius:12px;"
+        "padding:10px;box-shadow:0 10px 40px rgba(0,0,0,.65);z-index:2147483646;}"
+        ".tfin-dd-email{font-size:.74rem;color:rgba(148,163,184,.65);padding:4px 8px 6px;word-break:break-all;}"
+        ".tfin-dd-hr{border:none;border-top:1px solid rgba(124,58,237,.14);margin:5px 0;}"
+        ".tfin-ddbtn{display:block;width:100%;text-align:left;background:transparent;border:none;"
+        "color:#E2E8F0;font-size:.79rem;padding:7px 9px;border-radius:7px;"
+        "cursor:pointer;font-family:inherit;transition:background .12s;}"
+        ".tfin-ddbtn:hover{background:rgba(124,58,237,.14);}"
+        ".tfin-ddbtn.red{color:#f87171;}"
+        ".tfin-ddbtn.red:hover{background:rgba(239,68,68,.1);}"
+    )
+
+    # Use json.dumps to safely embed strings in JS
+    nav_html_js = json.dumps(nav_html)
+    nav_css_js = json.dumps(nav_css)
+    thb_js = "true" if curr == "THB" else "false"
+    usd_js = "true" if curr == "USD" else "false"
+    rate_js = json.dumps(f"฿{rate_str}/USD")
+
+    return f"""<script>
+(function(){{
   var doc = window.parent.document;
 
-  function goTab(i){
+  /* 1 — Inject navbar CSS into parent <head> */
+  if(!doc.getElementById('tfin-nav-css')){{
+    var s = doc.createElement('style');
+    s.id = 'tfin-nav-css';
+    s.textContent = {nav_css_js};
+    doc.head.appendChild(s);
+  }}
+
+  /* 2 — Inject navbar HTML into parent <body> (only once) */
+  if(!doc.getElementById('tfin-nav')){{
+    var tmp = doc.createElement('div');
+    tmp.innerHTML = {nav_html_js};
+    doc.body.insertBefore(tmp.firstChild, doc.body.firstChild);
+  }}
+
+  /* 3 — Sync dynamic state on every render */
+  var cbT = doc.getElementById('cb-thb'); if(cbT) cbT.classList.toggle('on', {thb_js});
+  var cbU = doc.getElementById('cb-usd'); if(cbU) cbU.classList.toggle('on', {usd_js});
+  var rEl = doc.querySelector('#tfin-nav .tfin-rate'); if(rEl) rEl.textContent = {rate_js};
+
+  /* 4 — Hide Streamlit helper widgets */
+  function hideWidgets(){{
+    var anchors = [{{'id':'tfin-curr-a'}},{{'id':'tfin-cpw-a'}}];
+    anchors.forEach(function(a){{
+      var el = doc.getElementById(a.id);
+      if(!el) return;
+      var node = el;
+      while(node && node.getAttribute && !node.getAttribute('data-testid')) node = node.parentElement;
+      if(node && node.nextElementSibling){{
+        node.nextElementSibling.style.cssText = 'height:0!important;overflow:hidden!important;margin:0!important;padding:0!important;';
+      }}
+    }});
+  }}
+
+  /* 5 — Wire click handlers (idempotent via _w flag) */
+  function goTab(i){{
     var tabs = doc.querySelectorAll('[data-baseweb="tab-list"] [role="tab"]');
     if(tabs[i]) tabs[i].click();
-    doc.querySelectorAll('.tfin-nt').forEach(function(b,j){ b.classList.toggle('on', i===j); });
-  }
+    doc.querySelectorAll('.tfin-nt').forEach(function(b,j){{ b.classList.toggle('on', i===j); }});
+  }}
 
-  function setCurr(val){
+  function setCurr(val){{
     var anchor = doc.getElementById('tfin-curr-a');
     if(!anchor) return;
-    var md = anchor.closest('[data-testid="stMarkdown"]') || anchor.parentElement;
-    var sib = md ? md.nextElementSibling : null;
-    var labels = sib ? sib.querySelectorAll('label') : doc.querySelectorAll('[data-testid="stRadio"] label');
-    labels.forEach(function(l){ if(l.innerText.trim()===val) l.click(); });
-    var cbT = doc.getElementById('cb-thb'); if(cbT) cbT.classList.toggle('on', val==='THB');
-    var cbU = doc.getElementById('cb-usd'); if(cbU) cbU.classList.toggle('on', val==='USD');
-  }
+    var node = anchor;
+    while(node && node.getAttribute && !node.getAttribute('data-testid')) node = node.parentElement;
+    var sib = node ? node.nextElementSibling : null;
+    var labels = sib ? sib.querySelectorAll('label') : [];
+    labels.forEach(function(l){{ if(l.innerText.trim()===val) l.click(); }});
+    var t=doc.getElementById('cb-thb'); if(t) t.classList.toggle('on',val==='THB');
+    var u=doc.getElementById('cb-usd'); if(u) u.classList.toggle('on',val==='USD');
+  }}
 
-  function toggleAcct(){
+  function toggleAcct(){{
     var dd = doc.getElementById('tfin-acct-dd');
     if(dd) dd.style.display = dd.style.display==='block' ? 'none' : 'block';
-  }
+  }}
 
-  function doLogout(){
+  function doLogout(){{
     var btns = doc.querySelectorAll('button');
-    for(var i=0;i<btns.length;i++){
-      if(btns[i].innerText.includes('ออกจากระบบ')){ btns[i].click(); return; }
-    }
-  }
+    for(var i=0;i<btns.length;i++){{ if(btns[i].innerText.includes('ออกจากระบบ')){{ btns[i].click(); return; }} }}
+  }}
 
-  function triggerCpw(){
-    var dd = doc.getElementById('tfin-acct-dd');
-    if(dd) dd.style.display='none';
-    var anchor = doc.getElementById('tfin-cpw-a');
-    if(!anchor) return;
-    var md = anchor.closest('[data-testid="stMarkdown"]') || anchor.parentElement;
-    var sib = md ? md.nextElementSibling : null;
-    if(sib){ var btn=sib.querySelector('button'); if(btn) btn.click(); }
-  }
+  function triggerCpw(){{
+    var dd = doc.getElementById('tfin-acct-dd'); if(dd) dd.style.display='none';
+    var anchor = doc.getElementById('tfin-cpw-a'); if(!anchor) return;
+    var node = anchor;
+    while(node && node.getAttribute && !node.getAttribute('data-testid')) node = node.parentElement;
+    var sib = node ? node.nextElementSibling : null;
+    if(sib){{ var btn=sib.querySelector('button'); if(btn) btn.click(); }}
+  }}
 
-  function wireNavbar(){
-    var tnt0=doc.getElementById('tnt0'); if(tnt0&&!tnt0._w){tnt0.onclick=function(){goTab(0);}; tnt0._w=1;}
-    var tnt1=doc.getElementById('tnt1'); if(tnt1&&!tnt1._w){tnt1.onclick=function(){goTab(1);}; tnt1._w=1;}
-    var tnt2=doc.getElementById('tnt2'); if(tnt2&&!tnt2._w){tnt2.onclick=function(){goTab(2);}; tnt2._w=1;}
-    var tnt3=doc.getElementById('tnt3'); if(tnt3&&!tnt3._w){tnt3.onclick=function(){goTab(3);}; tnt3._w=1;}
-    var tnt4=doc.getElementById('tnt4'); if(tnt4&&!tnt4._w){tnt4.onclick=function(){goTab(4);}; tnt4._w=1;}
-    var cbT=doc.getElementById('cb-thb'); if(cbT&&!cbT._w){cbT.onclick=function(){setCurr('THB');}; cbT._w=1;}
-    var cbU=doc.getElementById('cb-usd'); if(cbU&&!cbU._w){cbU.onclick=function(){setCurr('USD');}; cbU._w=1;}
-    var aBtn=doc.getElementById('tfin-acct-btn'); if(aBtn&&!aBtn._w){aBtn.onclick=function(e){e.stopPropagation();toggleAcct();}; aBtn._w=1;}
-    var cpwBtn=doc.getElementById('tfin-cpw-btn'); if(cpwBtn&&!cpwBtn._w){cpwBtn.onclick=function(){triggerCpw();}; cpwBtn._w=1;}
-    var loBtn=doc.getElementById('tfin-logout-btn'); if(loBtn&&!loBtn._w){loBtn.onclick=function(){doLogout();}; loBtn._w=1;}
-    doc.addEventListener('click', function(e){
-      if(!e.target.closest('.tfin-aw')){
-        var dd=doc.getElementById('tfin-acct-dd'); if(dd) dd.style.display='none';
-      }
-    }, {once: false, capture: true});
-  }
+  function wireNavbar(){{
+    function wire(id, fn){{ var el=doc.getElementById(id); if(el&&!el._w){{el.onclick=fn;el._w=1;}} }}
+    wire('tnt0', function(){{goTab(0);}});
+    wire('tnt1', function(){{goTab(1);}});
+    wire('tnt2', function(){{goTab(2);}});
+    wire('tnt3', function(){{goTab(3);}});
+    wire('tnt4', function(){{goTab(4);}});
+    wire('cb-thb', function(){{setCurr('THB');}});
+    wire('cb-usd', function(){{setCurr('USD');}});
+    wire('tfin-acct-btn', function(e){{e.stopPropagation();toggleAcct();}});
+    wire('tfin-cpw-btn', function(){{triggerCpw();}});
+    wire('tfin-logout-btn', function(){{doLogout();}});
+    if(!doc._tfinClickWired){{
+      doc.addEventListener('click', function(e){{
+        if(!e.target.closest('.tfin-aw')){{
+          var dd=doc.getElementById('tfin-acct-dd'); if(dd) dd.style.display='none';
+        }}
+      }}, true);
+      doc._tfinClickWired = true;
+    }}
+  }}
 
-  // MutationObserver: sync tab highlight + re-wire after Streamlit rerenders
-  new MutationObserver(function(){
-    wireNavbar();
+  function syncTabs(){{
     var tabs=doc.querySelectorAll('[data-baseweb="tab-list"] [role="tab"]');
-    tabs.forEach(function(t,i){
+    tabs.forEach(function(t,i){{
       var b=doc.getElementById('tnt'+i);
       if(b) b.classList.toggle('on', t.getAttribute('aria-selected')==='true');
-    });
-  }).observe(doc.body, {subtree:true, attributes:true, childList:true, attributeFilter:['aria-selected']});
+    }});
+  }}
 
-  wireNavbar();
-})();
+  /* 6 — MutationObserver keeps everything wired across Streamlit rerenders */
+  if(!window._tfinObserving){{
+    new MutationObserver(function(){{ wireNavbar(); hideWidgets(); syncTabs(); }})
+      .observe(doc.body, {{subtree:true, childList:true, attributes:true, attributeFilter:['aria-selected']}});
+    window._tfinObserving = true;
+  }}
+
+  wireNavbar(); hideWidgets(); syncTabs();
+}})();
 </script>"""
 
 
@@ -2901,19 +2924,16 @@ def main():
         st.session_state["_show_cpw"] = not st.session_state.get("_show_cpw", False)
         st.rerun()
 
-    # -- Fixed navbar HTML (no script — safe for st.markdown) --
-    st.markdown(
-        _build_navbar(
+    # -- Inject navbar (HTML + CSS + JS) into parent document via window.parent --
+    _components.html(
+        _inject_navbar(
             f'data:image/png;base64,{_LOGO_B64}' if _LOGO_B64 else "",
             _email, st.session_state.get("display_currency", "THB"), rate,
         ),
-        unsafe_allow_html=True,
+        height=0, scrolling=False,
     )
 
-    # -- Navbar JS via components.html (window.parent reaches main page DOM) --
-    _components.html(_navbar_js(), height=0, scrolling=False)
-
-    # Spacer so content starts below fixed navbar + sticky tabs
+    # Spacer so content starts below fixed navbar
     st.markdown('<div style="height:58px;margin:0;padding:0;line-height:0;font-size:0"></div>',
                 unsafe_allow_html=True)
 
