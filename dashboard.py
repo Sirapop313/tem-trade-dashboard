@@ -12,10 +12,19 @@ import pandas as pd
 import requests as _req
 import streamlit as st
 import plotly.graph_objects as go
+from PIL import Image as _PILImage
 
 
 # -- Config --
-st.set_page_config(page_title="Tim.fin OS", page_icon="📊", layout="wide",
+def _load_favicon():
+    _dir = os.path.dirname(os.path.abspath(__file__))
+    for _p in [os.path.join(_dir, "Tim.fin Logo.png"),
+               os.path.join(os.path.dirname(_dir), "tim.fin", "Tim.fin Logo.png")]:
+        if os.path.exists(_p):
+            return _PILImage.open(_p)
+    return "📊"
+
+st.set_page_config(page_title="Tim.fin OS", page_icon=_load_favicon(), layout="wide",
                    initial_sidebar_state="expanded")
 
 DIR = os.path.dirname(os.path.abspath(__file__))
