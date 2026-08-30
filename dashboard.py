@@ -377,15 +377,8 @@ html body [data-testid="collapsedControl"] { display: flex !important; }
 /* Dividers */
 hr { border-color: var(--it-border) !important; }
 
-/* Main nav tab-list — sticky below fixed navbar */
-[data-testid="stVerticalBlock"] > [data-testid="stTabs"]:first-of-type > [data-baseweb="tab-list"] {
-    position: sticky !important; top: 58px !important; z-index: 996 !important;
-    background: rgba(6,11,22,0.98) !important; backdrop-filter:blur(12px) !important;
-    -webkit-backdrop-filter:blur(12px) !important;
-    border-radius: 0 !important; margin: 0 0 0.5rem !important;
-    padding: 6px 12px !important; border: none !important;
-    border-bottom: 1px solid rgba(124,58,237,0.1) !important;
-}
+/* Hide the native Streamlit tab-list — navbar replaces it */
+[data-baseweb="tab-list"] { display: none !important; }
 </style>""".replace("__CANDLE_SVG__", _svg_b64), unsafe_allow_html=True)
 
 # -- Logo (Tim.fin) --
@@ -535,9 +528,8 @@ def _inject_navbar(logo_src: str, email: str, curr: str, rate: float) -> str:
     }});
     doc.querySelectorAll('button').forEach(function(b){{
       if((b.textContent||'').trim()==='__cpw__'){{
-        var p=b.parentElement;
-        while(p && p.tagName!=='BODY' && !(p.getAttribute && p.getAttribute('data-testid'))) p=p.parentElement;
-        if(p && p.tagName!=='BODY') p.style.display='none';
+        var wrapper = (b.closest && b.closest('[data-testid="stButton"]')) || b.parentElement;
+        if(wrapper) wrapper.style.display='none';
       }}
     }});
   }}
