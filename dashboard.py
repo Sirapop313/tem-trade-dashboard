@@ -488,6 +488,7 @@ def _inject_navbar(logo_src: str, email: str, curr: str, rate: float) -> str:
         ".tfin-ddbtn:hover{background:rgba(124,58,237,.14);}"
         ".tfin-ddbtn.red{color:#f87171;}"
         ".tfin-ddbtn.red:hover{background:rgba(239,68,68,.1);}"
+        "[data-baseweb='tab-list']{display:none!important;}"
     )
 
     # Use json.dumps to safely embed strings in JS
@@ -501,13 +502,10 @@ def _inject_navbar(logo_src: str, email: str, curr: str, rate: float) -> str:
 (function(){{
   var doc = window.parent.document;
 
-  /* 1 — Inject navbar CSS into parent <head> (once) */
-  if(!doc.getElementById('tfin-nav-css')){{
-    var s = doc.createElement('style');
-    s.id = 'tfin-nav-css';
-    s.textContent = {nav_css_js};
-    doc.head.appendChild(s);
-  }}
+  /* 1 — Inject/update navbar CSS in parent <head> (always overwrite to pick up latest) */
+  var s = doc.getElementById('tfin-nav-css');
+  if(!s){{ s=doc.createElement('style'); s.id='tfin-nav-css'; doc.head.appendChild(s); }}
+  s.textContent = {nav_css_js};
 
   /* 2 — Inject navbar HTML into parent <body> (once) */
   if(!doc.getElementById('tfin-nav')){{
@@ -521,15 +519,18 @@ def _inject_navbar(logo_src: str, email: str, curr: str, rate: float) -> str:
   var cbU = doc.getElementById('cb-usd'); if(cbU) cbU.classList.toggle('on', {usd_js});
   var rEl = doc.querySelector('#tfin-nav .tfin-rate'); if(rEl) rEl.textContent = {rate_js};
 
-  /* 4 — Hide Streamlit helper widgets by text content */
+  /* 4 — Hide Streamlit helper widgets */
   function hideWidgets(){{
     doc.querySelectorAll('[data-testid="stRadio"]').forEach(function(el){{
-      if((el.textContent||'').includes('THB')) el.style.display='none';
+      if((el.textContent||'').includes('THB')) el.style.cssText='display:none!important';
     }});
     doc.querySelectorAll('button').forEach(function(b){{
       if((b.textContent||'').trim()==='__cpw__'){{
-        var wrapper = (b.closest && b.closest('[data-testid="stButton"]')) || b.parentElement;
-        if(wrapper) wrapper.style.display='none';
+        var el=b;
+        for(var i=0;i<5&&el&&el.tagName!=='BODY';i++){{
+          el.style.cssText='display:none!important;height:0!important;margin:0!important;padding:0!important;overflow:hidden!important;';
+          el=el.parentElement;
+        }}
       }}
     }});
   }}
