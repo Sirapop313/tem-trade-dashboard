@@ -519,19 +519,27 @@ def _inject_navbar(logo_src: str, email: str, curr: str, rate: float) -> str:
   var cbU = doc.getElementById('cb-usd'); if(cbU) cbU.classList.toggle('on', {usd_js});
   var rEl = doc.querySelector('#tfin-nav .tfin-rate'); if(rEl) rEl.textContent = {rate_js};
 
-  /* 4 — Hide Streamlit helper widgets */
+  /* 4 — Hide Streamlit helper widgets (inline setProperty beats all CSS rules) */
+  function hide(el){{ if(el) el.style.setProperty('display','none','important'); }}
   function hideWidgets(){{
+    /* radio */
     doc.querySelectorAll('[data-testid="stRadio"]').forEach(function(el){{
-      if((el.textContent||'').includes('THB')) el.style.cssText='display:none!important';
+      if((el.textContent||'').includes('THB')) hide(el);
     }});
+    /* cpw button — hide button + 2 ancestors */
     doc.querySelectorAll('button').forEach(function(b){{
       if((b.textContent||'').trim()==='__cpw__'){{
-        var el=b;
-        for(var i=0;i<5&&el&&el.tagName!=='BODY';i++){{
-          el.style.cssText='display:none!important;height:0!important;margin:0!important;padding:0!important;overflow:hidden!important;';
-          el=el.parentElement;
-        }}
+        hide(b); hide(b.parentElement);
+        if(b.parentElement) hide(b.parentElement.parentElement);
       }}
+    }});
+    /* Streamlit tab navigation row */
+    doc.querySelectorAll('[data-baseweb="tab-list"],[data-baseweb="tab-bar"],[role="tablist"]').forEach(function(el){{
+      if(!el.closest('#tfin-nav')) hide(el);
+    }});
+    /* fallback: first child of stTabs wrapper */
+    doc.querySelectorAll('[data-testid="stTabs"]').forEach(function(wrap){{
+      var fc=wrap.firstElementChild; if(fc) hide(fc.firstElementChild||fc);
     }});
   }}
 
