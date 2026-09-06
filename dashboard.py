@@ -1549,7 +1549,7 @@ def page_overview(trades: list, investments: list, cash: list, disp: str, rate: 
                     f"**{a['name']}** · {sym_c}{a['amount']:,.2f}"
                     + (f" (≈฿{val_c:,.0f})" if a["currency"] == "USD" else "")
                 )
-            st.caption("💵 Cash: " + "  ·  ".join(cash_lines))
+            st.markdown("<small>💵 Cash: " + "  ·  ".join(cash_lines) + "</small>", unsafe_allow_html=True)
 
     # -- Charts (collapsible) --
     if open_all:
