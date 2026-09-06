@@ -441,7 +441,6 @@ def _inject_navbar(logo_src: str, email: str, curr: str, rate: float) -> str:
         f'<div class="tfin-dd" id="tfin-acct-dd">'
         f'<div class="tfin-dd-email">{em_short}</div>'
         f'<hr class="tfin-dd-hr">'
-        f'<button class="tfin-ddbtn" id="tfin-cpw-btn">🔑 เปลี่ยนรหัสผ่าน</button>'
         f'<button class="tfin-ddbtn red" id="tfin-logout-btn">🚪 ออกจากระบบ</button>'
         f'</div></div></div></div>'
     )
@@ -526,13 +525,13 @@ def _inject_navbar(logo_src: str, email: str, curr: str, rate: float) -> str:
     doc.querySelectorAll('[data-testid="stRadio"]').forEach(function(el){{
       if((el.textContent||'').includes('THB')) hide(el);
     }});
-    /* cpw button — hide button + 2 ancestors */
-    doc.querySelectorAll('button').forEach(function(b){{
-      if((b.textContent||'').trim()==='__cpw__'){{
-        hide(b); hide(b.parentElement);
-        if(b.parentElement) hide(b.parentElement.parentElement);
-      }}
-    }});
+    /* hide any stRadio that appears before the tabs wrapper */
+    var stTabsEl=doc.querySelector('[data-testid="stTabs"]');
+    if(stTabsEl){{
+      doc.querySelectorAll('[data-testid="stRadio"]').forEach(function(w){{
+        if(stTabsEl.compareDocumentPosition(w)&Node.DOCUMENT_POSITION_PRECEDING) hide(w);
+      }});
+    }}
     /* Streamlit tab navigation row */
     doc.querySelectorAll('[data-baseweb="tab-list"],[data-baseweb="tab-bar"],[role="tablist"]').forEach(function(el){{
       if(!el.closest('#tfin-nav')) hide(el);
@@ -571,13 +570,6 @@ def _inject_navbar(logo_src: str, email: str, curr: str, rate: float) -> str:
     for(var i=0;i<btns.length;i++){{if((btns[i].textContent||'').includes('ออกจากระบบ')){{btns[i].click();return;}}}}
   }}
 
-  function triggerCpw(){{
-    var dd=doc.getElementById('tfin-acct-dd'); if(dd) dd.style.display='none';
-    doc.querySelectorAll('button').forEach(function(b){{
-      if((b.textContent||'').trim()==='__cpw__') b.click();
-    }});
-  }}
-
   function syncTabs(){{
     var tabs=getStTabs();
     tabs.forEach(function(t,i){{
@@ -596,7 +588,6 @@ def _inject_navbar(logo_src: str, email: str, curr: str, rate: float) -> str:
       if(tgt.closest && tgt.closest('#cb-thb')){{ setCurr('THB'); e.stopPropagation(); return; }}
       if(tgt.closest && tgt.closest('#cb-usd')){{ setCurr('USD'); e.stopPropagation(); return; }}
       if(tgt.closest && tgt.closest('#tfin-acct-btn')){{ e.stopPropagation(); toggleAcct(); return; }}
-      if(tgt.closest && tgt.closest('#tfin-cpw-btn')){{ triggerCpw(); e.stopPropagation(); return; }}
       if(tgt.closest && tgt.closest('#tfin-logout-btn')){{ doLogout(); e.stopPropagation(); return; }}
     }}, true);
     nav._del = true;
@@ -2914,15 +2905,22 @@ def main():
     rate = get_usd_thb()
     _email = (st.session_state.get("sb_session") or {}).get("user", {}).get("email", "")
 
+    # -- CSS injected directly — hides helpers before page paint (no flash) --
+    st.markdown(
+        '<style>'
+        '[data-testid="stRadio"]{display:none!important;}'
+        '[data-baseweb="tab-list"]{display:none!important;}'
+        '[data-testid="stMainBlockContainer"]{padding-top:0!important;}'
+        '[data-testid="stMain"]>div{padding-top:0!important;}'
+        '.main .block-container{padding-top:0!important;}'
+        'div.block-container{padding-top:0!important;}'
+        '</style>',
+        unsafe_allow_html=True,
+    )
+
     # -- Hidden currency radio (JS finds it by label text and clicks it) --
     disp = st.radio("", ["THB", "USD"], horizontal=True,
                     key="display_currency", label_visibility="collapsed")
-
-    # -- Hidden change-password trigger (JS finds button by text and clicks it) --
-    _cpw_clicked = st.button("__cpw__", key="_cpw_btn")
-    if _cpw_clicked:
-        st.session_state["_show_cpw"] = not st.session_state.get("_show_cpw", False)
-        st.rerun()
 
     # -- Inject navbar (HTML + CSS + JS) into parent document via window.parent --
     _components.html(
@@ -2933,34 +2931,9 @@ def main():
         height=0, scrolling=False,
     )
 
-    # Spacer so content starts below fixed navbar
-    st.markdown('<div style="height:58px;margin:0;padding:0;line-height:0;font-size:0"></div>',
+    # Spacer so content starts below fixed navbar (navbar=58px, padding zeroed via CSS)
+    st.markdown('<div style="height:60px;margin:0;padding:0;line-height:0;font-size:0"></div>',
                 unsafe_allow_html=True)
-
-    # -- Change-password panel --
-    if st.session_state.get("_show_cpw"):
-        with st.container(border=True):
-            st.subheader("🔑 เปลี่ยนรหัสผ่าน")
-            with st.form("form_change_pw"):
-                _np1 = st.text_input("รหัสผ่านใหม่", type="password", placeholder="อย่างน้อย 8 ตัวอักษร")
-                _np2 = st.text_input("ยืนยันรหัสผ่านใหม่", type="password")
-                _cpw_submit = st.form_submit_button("✅ เปลี่ยนรหัสผ่าน")
-                if _cpw_submit:
-                    if len(_np1) < 8:
-                        st.error("รหัสผ่านต้องมีอย่างน้อย 8 ตัวอักษร")
-                    elif _np1 != _np2:
-                        st.error("รหัสผ่านทั้งสองไม่ตรงกัน")
-                    else:
-                        _ok, _err = sb_update_password(_np1)
-                        if _ok:
-                            st.success("✅ เปลี่ยนรหัสผ่านสำเร็จ!")
-                            st.session_state["_show_cpw"] = False
-                            st.rerun()
-                        else:
-                            st.error(f"เปลี่ยนไม่สำเร็จ: {_err}")
-            if st.button("ยกเลิก", key="_cpw_cancel"):
-                st.session_state["_show_cpw"] = False
-                st.rerun()
 
     # -- Tabs --
     _tabs = st.tabs(["📊 Overview", "💼 Investment", "📈 Trade", "💵 Cash", "📓 Log"])
