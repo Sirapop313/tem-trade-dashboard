@@ -603,14 +603,25 @@ def _inject_navbar(logo_src: str, email: str, curr: str, rate: float) -> str:
     doc._tfinOuter = true;
   }}
 
-  /* 7 — MutationObserver: re-hide widgets + sync tabs on every Streamlit rerender */
+  /* 7 — MutationObserver: re-hide widgets + sync tabs + fullscreen detection */
+  function syncNavVisibility(){{
+    var nav = doc.getElementById('tfin-nav');
+    if(!nav) return;
+    /* Hide navbar when Streamlit shows a dialog/modal (fullscreen chart or st.dialog) */
+    var hasOverlay = !!(
+      doc.querySelector('[role="dialog"]') ||
+      doc.querySelector('[data-testid="stModal"]') ||
+      doc.querySelector('[class*="ReactModalPortal"]')
+    );
+    nav.style.setProperty('display', hasOverlay ? 'none' : 'flex', 'important');
+  }}
   if(!window._tfinObserving){{
-    new MutationObserver(function(){{ hideWidgets(); syncTabs(); }})
+    new MutationObserver(function(){{ hideWidgets(); syncTabs(); syncNavVisibility(); }})
       .observe(doc.body, {{subtree:true, childList:true, attributes:true, attributeFilter:['aria-selected']}});
     window._tfinObserving = true;
   }}
 
-  hideWidgets(); syncTabs();
+  hideWidgets(); syncTabs(); syncNavVisibility();
 }})();
 </script>"""
 
@@ -1422,11 +1433,11 @@ def page_overview(trades: list, investments: list, cash: list, disp: str, rate: 
               fmt_money(realized_thb if closed_trades else None, disp, rate)
               if closed_trades else "No trades closed")
 
-    # -- Asset Allocation --
+    # -- Asset Allocation (pie) + Return Chart side by side --
     open_all = open_trades + open_inv
     if open_all or cash_thb > 0:
         st.markdown("<div style='height:0.5rem'></div>", unsafe_allow_html=True)
-        col_pie, col_stats = st.columns([5, 4])
+        col_pie, col_chart = st.columns([5, 7])
 
         with col_pie:
             pie_labels, pie_vals = [], []
@@ -1442,33 +1453,49 @@ def page_overview(trades: list, investments: list, cash: list, disp: str, rate: 
                 pie_vals.append(cash_thb)
             if pie_labels:
                 st.plotly_chart(allocation_pie(pie_labels, pie_vals, disp, rate,
-                                               "Asset Allocation", height=300),
+                                               "Asset Allocation", height=320),
                                 use_container_width=True)
 
-        with col_stats:
-            st.markdown("**Portfolio Stats**")
-            stats_data = [
-                ("💼 Investments",   len(open_inv)),
-                ("📈 Open Trades",   len(open_trades)),
-                ("🔒 Closed Trades", len(closed_trades)),
-            ]
-            if win_rate is not None:
-                stats_data.append(("🏆 Win Rate", f"{win_rate:.1f}%"))
-            for label, val in stats_data:
-                a, b = st.columns([3, 2])
-                a.caption(label)
-                b.markdown(f"**{val}**")
+        with col_chart:
+            if open_all:
+                cc1, cc2, cc3 = st.columns([3, 4, 4])
+                with cc1:
+                    ret_view = st.radio("", ["Overall","Investment","Trade"], horizontal=True,
+                                        key="ret_view", label_visibility="collapsed")
+                with cc2:
+                    ret_period = st.radio("", ["1D","1W","1M","1Y"], horizontal=True,
+                                          key="ret_period", index=2, label_visibility="collapsed")
+                with cc3:
+                    cspy = st.checkbox("S&P 500", key="cmp_spy")
+                    cqqq = st.checkbox("NASDAQ 100", key="cmp_qqq")
+                ret_items = (open_inv if ret_view == "Investment"
+                             else open_trades if ret_view == "Trade"
+                             else open_all)
+                fig_ret = portfolio_return_chart(ret_items, rate, disp, ret_period,
+                                                 show_spy=cspy, show_qqq=cqqq, height=270)
+                if fig_ret:
+                    st.caption("📊 การเปลี่ยนแปลงราคาในช่วงที่เลือก · ไม่ใช่ return จากต้นทุนจริง")
+                    st.plotly_chart(fig_ret, use_container_width=True)
+                else:
+                    st.info("ไม่มีข้อมูลราคาย้อนหลัง")
 
-            if cash:
-                st.divider()
-                st.caption("💵 Cash Accounts")
-                for acc in cash:
-                    sym_c = "$" if acc["currency"] == "USD" else "฿"
-                    val_c = acc["amount"] * rate if acc["currency"] == "USD" else acc["amount"]
-                    line  = f"**{acc['name']}** · {sym_c}{acc['amount']:,.2f}"
-                    if acc["currency"] == "USD":
-                        line += f" (≈฿{val_c:,.0f})"
-                    st.caption(line)
+    # -- Stats + Cash compact row --
+    if open_all or cash:
+        s1, s2, s3, s4 = st.columns(4)
+        s1.metric("💼 Investments",   len(open_inv))
+        s2.metric("📈 Open Trades",   len(open_trades))
+        s3.metric("🔒 Closed Trades", len(closed_trades))
+        s4.metric("🏆 Win Rate",      f"{win_rate:.1f}%" if win_rate is not None else "—")
+        if cash:
+            cash_parts = []
+            for a in cash:
+                sym_c = "$" if a["currency"] == "USD" else "฿"
+                val_c = a["amount"] * rate if a["currency"] == "USD" else a["amount"]
+                part  = f"**{a['name']}** · {sym_c}{a['amount']:,.2f}"
+                if a["currency"] == "USD":
+                    part += f" (≈฿{val_c:,.0f})"
+                cash_parts.append(part)
+            st.markdown("<small>💵 " + "  ·  ".join(cash_parts) + "</small>", unsafe_allow_html=True)
 
     # -- Portfolio Snapshot --
     if open_inv or open_trades:
@@ -1539,41 +1566,6 @@ def page_overview(trades: list, investments: list, cash: list, disp: str, rate: 
             except AttributeError:
                 styled_ov = df_ov.style.applymap(_col_pnl_ov, subset=_pnl_sub).hide(axis="index") if _pnl_sub else df_ov.style.hide(axis="index")
             st.dataframe(styled_ov, use_container_width=True, hide_index=True)
-
-        if cash:
-            cash_lines = []
-            for a in cash:
-                sym_c = "$" if a["currency"] == "USD" else "฿"
-                val_c = a["amount"] * rate if a["currency"] == "USD" else a["amount"]
-                cash_lines.append(
-                    f"**{a['name']}** · {sym_c}{a['amount']:,.2f}"
-                    + (f" (≈฿{val_c:,.0f})" if a["currency"] == "USD" else "")
-                )
-            st.markdown("<small>💵 Cash: " + "  ·  ".join(cash_lines) + "</small>", unsafe_allow_html=True)
-
-    # -- Charts (collapsible) --
-    if open_all:
-        with st.expander("📊 Charts", expanded=True):
-            rc1, rc2, rc3 = st.columns([3, 4, 3])
-            with rc1:
-                ret_view = st.radio("", ["Overall","Investment","Trade"], horizontal=True,
-                                    key="ret_view", label_visibility="collapsed")
-            with rc2:
-                ret_period = st.radio("", ["1D","1W","1M","1Y"], horizontal=True,
-                                      key="ret_period", index=2, label_visibility="collapsed")
-            with rc3:
-                cspy = st.checkbox("S&P 500", key="cmp_spy")
-                cqqq = st.checkbox("NASDAQ 100", key="cmp_qqq")
-            ret_items = (open_inv if ret_view == "Investment"
-                         else open_trades if ret_view == "Trade"
-                         else open_all)
-            fig_ret = portfolio_return_chart(ret_items, rate, disp, ret_period,
-                                             show_spy=cspy, show_qqq=cqqq, height=280)
-            if fig_ret:
-                st.caption("📊 วัดการเปลี่ยนแปลงราคาในช่วงเวลาที่เลือก · ไม่ใช่ return จากราคาต้นทุนจริง")
-                st.plotly_chart(fig_ret, use_container_width=True)
-            else:
-                st.info("ไม่มีข้อมูลราคาย้อนหลัง")
 
     # -- Recent Activity --
     recent_events = build_activity_log(investments, trades)
@@ -2916,12 +2908,6 @@ def main():
         '[data-testid="stMain"]>div{padding-top:0!important;}'
         '.main .block-container{padding-top:0!important;}'
         'div.block-container{padding-top:0!important;}'
-        # Hide custom navbar when Streamlit opens a fullscreen / dialog overlay
-        'body:has([data-testid="stDialog"]) #tfin-nav,'
-        'body:has([data-testid="stModal"]) #tfin-nav,'
-        'body:has([class*="overlayDialog"]) #tfin-nav,'
-        'body:has([data-testid="stFullScreenFrame"]) #tfin-nav'
-        '{display:none!important;}'
         '</style>',
         unsafe_allow_html=True,
     )
