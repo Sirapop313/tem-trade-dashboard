@@ -2908,12 +2908,20 @@ def main():
     # -- CSS injected directly — hides helpers before page paint (no flash) --
     st.markdown(
         '<style>'
-        '[data-testid="stRadio"]{display:none!important;}'
+        # Currency radio (key=display_currency) is hidden by JS text-match; remove the
+        # blanket stRadio hide that was also killing the 1D/1W/1M/1Y period selectors.
+        # Only hide tab-list (replaced by custom navbar) and strip top padding.
         '[data-baseweb="tab-list"]{display:none!important;}'
         '[data-testid="stMainBlockContainer"]{padding-top:0!important;}'
         '[data-testid="stMain"]>div{padding-top:0!important;}'
         '.main .block-container{padding-top:0!important;}'
         'div.block-container{padding-top:0!important;}'
+        # Hide custom navbar when Streamlit opens a fullscreen / dialog overlay
+        'body:has([data-testid="stDialog"]) #tfin-nav,'
+        'body:has([data-testid="stModal"]) #tfin-nav,'
+        'body:has([class*="overlayDialog"]) #tfin-nav,'
+        'body:has([data-testid="stFullScreenFrame"]) #tfin-nav'
+        '{display:none!important;}'
         '</style>',
         unsafe_allow_html=True,
     )
