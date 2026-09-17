@@ -603,45 +603,14 @@ def _inject_navbar(logo_src: str, email: str, curr: str, rate: float) -> str:
     doc._tfinOuter = true;
   }}
 
-  /* 7 — MutationObserver: re-hide widgets + sync tabs + fullscreen detection */
-  function syncNavVisibility(){{
-    var nav = doc.getElementById('tfin-nav');
-    if(!nav) return;
-    /*
-      Streamlit fullscreen uses React.createPortal — appends a div to body.
-      BUT Streamlit also appends small portals for tooltips/popovers/toasts.
-      We must only hide the navbar for LARGE portals that cover the viewport
-      (fullscreen chart/dataframe), not for small utility portals.
-
-      Strategy: walk direct body children; if any non-root/non-navbar child
-      has a bounding rect that covers >75% of viewport in both dimensions,
-      it is the fullscreen overlay → hide navbar.
-    */
-    var hasFullscreen = false;
-    var vw = doc.documentElement.clientWidth || 800;
-    var vh = doc.documentElement.clientHeight || 600;
-    var kids = doc.body.children;
-    for(var i=0; i<kids.length; i++){{
-      var el = kids[i];
-      if(el.id === 'root' || el.id === 'tfin-nav') continue;
-      try {{
-        var r = el.getBoundingClientRect();
-        if(r.width > vw * 0.75 && r.height > vh * 0.75) {{
-          hasFullscreen = true;
-          break;
-        }}
-      }} catch(e) {{}}
-    }}
-    nav.style.setProperty('display', hasFullscreen ? 'none' : 'flex', 'important');
-  }}
+  /* 7 — MutationObserver: re-hide widgets + sync tabs on every Streamlit rerender */
   if(!window._tfinObserving){{
-    /* Watch childList on body directly (catches portal add/remove) AND subtree for widget/tab changes */
-    new MutationObserver(function(){{ hideWidgets(); syncTabs(); syncNavVisibility(); }})
+    new MutationObserver(function(){{ hideWidgets(); syncTabs(); }})
       .observe(doc.body, {{subtree:true, childList:true, attributes:true, attributeFilter:['aria-selected']}});
     window._tfinObserving = true;
   }}
 
-  hideWidgets(); syncTabs(); syncNavVisibility();
+  hideWidgets(); syncTabs();
 }})();
 </script>"""
 
