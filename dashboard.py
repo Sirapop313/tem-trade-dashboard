@@ -603,14 +603,31 @@ def _inject_navbar(logo_src: str, email: str, curr: str, rate: float) -> str:
     doc._tfinOuter = true;
   }}
 
-  /* 7 — MutationObserver: re-hide widgets + sync tabs on every Streamlit rerender */
+  /* 7 — Fullscreen detection: hide navbar when any stFullScreenFrame covers viewport */
+  function syncNavVisibility(){{
+    var nav = doc.getElementById('tfin-nav');
+    if(!nav) return;
+    var vw = window.parent.innerWidth || 900;
+    var vh = window.parent.innerHeight || 700;
+    var frames = doc.querySelectorAll('[data-testid="stFullScreenFrame"]');
+    var isFS = false;
+    for(var i=0; i<frames.length; i++){{
+      try{{
+        var r = frames[i].getBoundingClientRect();
+        if(r.width > vw * 0.9 && r.height > vh * 0.9){{ isFS = true; break; }}
+      }}catch(e){{}}
+    }}
+    nav.style.setProperty('display', isFS ? 'none' : 'flex', 'important');
+  }}
+
+  /* 8 — MutationObserver: re-hide widgets + sync tabs + check fullscreen on every rerender */
   if(!window._tfinObserving){{
-    new MutationObserver(function(){{ hideWidgets(); syncTabs(); }})
-      .observe(doc.body, {{subtree:true, childList:true, attributes:true, attributeFilter:['aria-selected']}});
+    new MutationObserver(function(){{ hideWidgets(); syncTabs(); syncNavVisibility(); }})
+      .observe(doc.body, {{subtree:true, childList:true, attributes:true, attributeFilter:['aria-selected','style','class']}});
     window._tfinObserving = true;
   }}
 
-  hideWidgets(); syncTabs();
+  hideWidgets(); syncTabs(); syncNavVisibility();
 }})();
 </script>"""
 
