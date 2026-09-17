@@ -607,15 +607,27 @@ def _inject_navbar(logo_src: str, email: str, curr: str, rate: float) -> str:
   function syncNavVisibility(){{
     var nav = doc.getElementById('tfin-nav');
     if(!nav) return;
-    /* Hide navbar when Streamlit shows a dialog/modal (fullscreen chart or st.dialog) */
-    var hasOverlay = !!(
-      doc.querySelector('[role="dialog"]') ||
-      doc.querySelector('[data-testid="stModal"]') ||
-      doc.querySelector('[class*="ReactModalPortal"]')
-    );
-    nav.style.setProperty('display', hasOverlay ? 'none' : 'flex', 'important');
+    /*
+      Streamlit fullscreen works via React portals — it appends a new div
+      directly to document.body when the user expands a chart/dataframe.
+      Normal state: body only has #root + #tfin-nav (+ possibly the
+      components.html iframe which lives inside #root, not in body).
+      Fullscreen state: body gains an extra portal child.
+      We hide the navbar whenever any direct body child appears that
+      is not #root and not our own #tfin-nav.
+    */
+    var hasPortal = false;
+    var kids = doc.body.children;
+    for(var i=0; i<kids.length; i++){{
+      var el = kids[i];
+      if(el.id === 'root' || el.id === 'tfin-nav') continue;
+      hasPortal = true;
+      break;
+    }}
+    nav.style.setProperty('display', hasPortal ? 'none' : 'flex', 'important');
   }}
   if(!window._tfinObserving){{
+    /* Watch childList on body directly (catches portal add/remove) AND subtree for widget/tab changes */
     new MutationObserver(function(){{ hideWidgets(); syncTabs(); syncNavVisibility(); }})
       .observe(doc.body, {{subtree:true, childList:true, attributes:true, attributeFilter:['aria-selected']}});
     window._tfinObserving = true;
