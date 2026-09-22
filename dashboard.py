@@ -488,6 +488,47 @@ def _inject_navbar(logo_src: str, email: str, curr: str, rate: float) -> str:
         ".tfin-ddbtn.red{color:#f87171;}"
         ".tfin-ddbtn.red:hover{background:rgba(239,68,68,.1);}"
         "[data-baseweb='tab-list']{display:none!important;}"
+        # ---- Narrow screens. Streamlit already stacks st.columns on its own at 640px,
+        # so the navbar is the only thing that breaks: measured, its row needs ~860px and
+        # below that the currency toggle and account button end up past the right edge,
+        # unreachable. Up to 860px the 5 tabs therefore move to a bottom bar and the top
+        # row keeps only identity + currency + account. Pure CSS, DOM order untouched, so
+        # the navbar's click delegation keeps working exactly as it does on desktop.
+        "@media(max-width:860px){"
+        # backdrop-filter makes #tfin-nav a containing block for fixed-position
+        # descendants, which would anchor the tab bar to the navbar instead of the
+        # viewport. Drop the blur here (solid background reads the same, and skipping
+        # a full-width blur is cheaper on phones anyway).
+        "#tfin-nav{height:50px!important;padding:0 10px!important;gap:6px!important;"
+        "backdrop-filter:none!important;-webkit-backdrop-filter:none!important;"
+        "background:#070D19!important;}"
+        ".tfin-brand-name{display:none!important;}"
+        ".tfin-brand-img{height:26px!important;width:26px!important;}"
+        ".tfin-rate{font-size:.62rem!important;white-space:nowrap;}"
+        ".tfin-cb{padding:6px 11px!important;font-size:.72rem!important;}"
+        ".tfin-ab{width:36px!important;height:36px!important;}"
+        ".tfin-dd{top:54px!important;right:8px!important;}"
+        ".tfin-nav-tabs{position:fixed!important;left:0!important;right:0!important;"
+        "bottom:0!important;top:auto!important;height:54px!important;"
+        "background:rgba(6,11,22,0.98)!important;"
+        "backdrop-filter:blur(20px)!important;-webkit-backdrop-filter:blur(20px)!important;"
+        "border-top:1px solid rgba(124,58,237,0.18)!important;"
+        "justify-content:space-around!important;gap:0!important;"
+        "padding:0 2px env(safe-area-inset-bottom,0px)!important;"
+        "box-shadow:0 -2px 20px rgba(0,0,0,.5)!important;z-index:2147483647!important;}"
+        ".tfin-nt{flex:1 1 0!important;min-width:0!important;min-height:44px!important;"
+        "font-size:.56rem!important;font-weight:600!important;padding:4px 2px!important;"
+        "display:flex!important;align-items:center!important;justify-content:center!important;"
+        "border-radius:9px!important;overflow:hidden!important;text-overflow:ellipsis!important;}"
+        # keep the last rows clear of the bottom bar
+        "[data-testid='stMain']{padding-bottom:66px!important;}"
+        "}"
+        # iOS Safari zooms the whole page in whenever a focused field is under 16px,
+        # and never zooms back out. Touch widths only.
+        "@media(max-width:640px){"
+        "input,textarea,select{font-size:16px!important;}"
+        "[data-testid='stMain'] button{min-height:44px!important;}"
+        "}"
     )
 
     # Use json.dumps to safely embed strings in JS
