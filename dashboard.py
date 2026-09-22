@@ -566,8 +566,12 @@ def _inject_navbar(logo_src: str, email: str, curr: str, rate: float) -> str:
   }}
 
   function doLogout(){{
+    /* skip our own navbar button — it sits first in the DOM and would self-click */
     var btns=doc.querySelectorAll('button');
-    for(var i=0;i<btns.length;i++){{if((btns[i].textContent||'').includes('ออกจากระบบ')){{btns[i].click();return;}}}}
+    for(var i=0;i<btns.length;i++){{
+      if(btns[i].closest && btns[i].closest('#tfin-nav')) continue;
+      if((btns[i].textContent||'').includes('ออกจากระบบ')){{ btns[i].click(); return; }}
+    }}
   }}
 
   function syncTabs(){{
@@ -578,10 +582,15 @@ def _inject_navbar(logo_src: str, email: str, curr: str, rate: float) -> str:
     }});
   }}
 
-  /* 6 — Event delegation on navbar (single listener, capture phase) */
+  /* 6 — Event delegation on navbar (single listener, capture phase).
+     Re-attach on every load: the navbar element lives in the parent document and
+     survives reruns, but this iframe's JS context does not — a listener from a
+     torn-down iframe stays bound yet dead, so a once-only guard kills the navbar
+     after the first rerun that changes its HTML. Swap the old handler for a live one. */
   var nav=doc.getElementById('tfin-nav');
-  if(nav && !nav._del){{
-    nav.addEventListener('click', function(e){{
+  if(nav){{
+    if(nav._tfinH){{ try{{ nav.removeEventListener('click', nav._tfinH, true); }}catch(e){{}} }}
+    nav._tfinH = function(e){{
       var tgt=e.target;
       var tntBtn=tgt.closest && tgt.closest('[id^="tnt"]');
       if(tntBtn){{ var idx=parseInt(tntBtn.id.substring(3)); if(!isNaN(idx)) goTab(idx); e.stopPropagation(); return; }}
@@ -589,19 +598,18 @@ def _inject_navbar(logo_src: str, email: str, curr: str, rate: float) -> str:
       if(tgt.closest && tgt.closest('#cb-usd')){{ setCurr('USD'); e.stopPropagation(); return; }}
       if(tgt.closest && tgt.closest('#tfin-acct-btn')){{ e.stopPropagation(); toggleAcct(); return; }}
       if(tgt.closest && tgt.closest('#tfin-logout-btn')){{ doLogout(); e.stopPropagation(); return; }}
-    }}, true);
-    nav._del = true;
+    }};
+    nav.addEventListener('click', nav._tfinH, true);
   }}
 
-  /* Close dropdown on outside click */
-  if(!doc._tfinOuter){{
-    doc.addEventListener('click', function(e){{
-      if(!(e.target.closest && e.target.closest('.tfin-aw'))){{
-        var dd=doc.getElementById('tfin-acct-dd'); if(dd) dd.style.display='none';
-      }}
-    }}, false);
-    doc._tfinOuter = true;
-  }}
+  /* Close dropdown on outside click — same re-attach pattern */
+  if(doc._tfinOuterH){{ try{{ doc.removeEventListener('click', doc._tfinOuterH, false); }}catch(e){{}} }}
+  doc._tfinOuterH = function(e){{
+    if(!(e.target.closest && e.target.closest('.tfin-aw'))){{
+      var dd=doc.getElementById('tfin-acct-dd'); if(dd) dd.style.display='none';
+    }}
+  }};
+  doc.addEventListener('click', doc._tfinOuterH, false);
 
   /* 7 — Fullscreen detection: hide navbar when any stFullScreenFrame covers viewport */
   function syncNavVisibility(){{
