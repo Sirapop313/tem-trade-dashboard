@@ -412,7 +412,8 @@ def sb_update_password(new_pass: str) -> tuple[bool, str]:
         return False, str(e)
 
 
-def _inject_navbar(logo_src: str, email: str, curr: str, rate: float) -> str:
+def _inject_navbar(logo_src: str, email: str, curr: str, rate: float,
+                   hide_amt: bool = False) -> str:
     """Inject navbar HTML+CSS+JS into the parent page via window.parent (components.html iframe)."""
     thb_cls = "on" if curr == "THB" else ""
     usd_cls = "on" if curr == "USD" else ""
@@ -436,6 +437,9 @@ def _inject_navbar(logo_src: str, email: str, curr: str, rate: float) -> str:
         f'<button class="tfin-cb {thb_cls}" id="cb-thb">THB</button>'
         f'<button class="tfin-cb {usd_cls}" id="cb-usd">USD</button>'
         f'</div>'
+        f'<button class="tfin-eye{" off" if hide_amt else ""}" id="tfin-eye" '
+        f'title="{"แสดงยอดเงิน" if hide_amt else "ซ่อนยอดเงิน"}">'
+        f'{"🙈" if hide_amt else "👁"}</button>'
         f'<div class="tfin-aw">'
         f'<button class="tfin-ab" id="tfin-acct-btn" title="{email}">👤</button>'
         f'<div class="tfin-dd" id="tfin-acct-dd">'
@@ -471,6 +475,11 @@ def _inject_navbar(logo_src: str, email: str, curr: str, rate: float) -> str:
         "padding:4px 10px;border-radius:5px;transition:all .14s;color:rgba(148,163,184,.6);"
         "font-family:'Plus Jakarta Sans',sans-serif;}"
         ".tfin-cb.on{background:rgba(124,58,237,.38);color:#C4B5FD;}"
+        ".tfin-eye{background:rgba(255,255,255,.05);border:1px solid rgba(124,58,237,.2);"
+        "border-radius:7px;cursor:pointer;font-size:.82rem;line-height:1;padding:6px 9px;"
+        "transition:all .14s;flex-shrink:0;}"
+        ".tfin-eye:hover{background:rgba(124,58,237,.2);}"
+        ".tfin-eye.off{background:rgba(239,68,68,.14);border-color:rgba(239,68,68,.3);}"
         ".tfin-aw{position:relative;}"
         ".tfin-ab{background:rgba(124,58,237,.1);border:1px solid rgba(124,58,237,.28);"
         "border-radius:50%;width:33px;height:33px;cursor:pointer;color:#C4B5FD;font-size:.9rem;"
@@ -489,14 +498,15 @@ def _inject_navbar(logo_src: str, email: str, curr: str, rate: float) -> str:
         ".tfin-ddbtn.red:hover{background:rgba(239,68,68,.1);}"
         "[data-baseweb='tab-list']{display:none!important;}"
         # ---- Narrow screens. Streamlit already stacks st.columns on its own at 640px,
-        # so the navbar is the only thing that breaks: measured, its row stops fitting
-        # between 861 and 866px, and below that the currency toggle and account button
-        # end up past the right edge, unreachable. Breakpoint sits at 900 rather than
-        # right on the measured edge so a longer rate string or slightly wider font
-        # metrics cannot reopen the gap. Up to there the 5 tabs move to a bottom bar and
-        # the top row keeps only identity + currency + account. Pure CSS, DOM order
+        # so the navbar is the only thing that breaks: below its minimum width the
+        # currency toggle, privacy toggle and account button end up past the right edge
+        # and cannot be tapped. That minimum grows every time a control is added to the
+        # bar — it was ~865px, then the eye button pushed it past 900 — so this sits well
+        # clear of the measured edge rather than on it. ANY new control in tfin-nav-right
+        # means re-measuring this number. Up to here the 5 tabs move to a bottom bar and
+        # the top row keeps identity + currency + privacy + account. Pure CSS, DOM order
         # untouched, so the navbar's click delegation behaves as it does on desktop.
-        "@media(max-width:900px){"
+        "@media(max-width:960px){"
         # backdrop-filter makes #tfin-nav a containing block for fixed-position
         # descendants, which would anchor the tab bar to the navbar instead of the
         # viewport. Drop the blur here (solid background reads the same, and skipping
@@ -538,6 +548,7 @@ def _inject_navbar(logo_src: str, email: str, curr: str, rate: float) -> str:
     nav_css_js = json.dumps(nav_css)
     thb_js = "true" if curr == "THB" else "false"
     usd_js = "true" if curr == "USD" else "false"
+    hide_js = "true" if hide_amt else "false"
     rate_js = json.dumps(f"฿{rate_str}/USD")
 
     return f"""<script>
@@ -560,13 +571,20 @@ def _inject_navbar(logo_src: str, email: str, curr: str, rate: float) -> str:
   var cbT = doc.getElementById('cb-thb'); if(cbT) cbT.classList.toggle('on', {thb_js});
   var cbU = doc.getElementById('cb-usd'); if(cbU) cbU.classList.toggle('on', {usd_js});
   var rEl = doc.querySelector('#tfin-nav .tfin-rate'); if(rEl) rEl.textContent = {rate_js};
+  var eye = doc.getElementById('tfin-eye');
+  if(eye){{
+    eye.classList.toggle('off', {hide_js});
+    eye.textContent = {hide_js} ? '🙈' : '👁';
+    eye.title = {hide_js} ? 'แสดงยอดเงิน' : 'ซ่อนยอดเงิน';
+  }}
 
   /* 4 — Hide Streamlit helper widgets (inline setProperty beats all CSS rules) */
   function hide(el){{ if(el) el.style.setProperty('display','none','important'); }}
   function hideWidgets(){{
-    /* radio */
+    /* radio — the two that only exist to be driven by the navbar buttons */
     doc.querySelectorAll('[data-testid="stRadio"]').forEach(function(el){{
-      if((el.textContent||'').includes('THB')) hide(el);
+      var t = el.textContent||'';
+      if(t.includes('THB') || t.includes('ซ่อนยอด')) hide(el);
     }});
     /* hide any stRadio that appears before the tabs wrapper */
     var stTabsEl=doc.querySelector('[data-testid="stTabs"]');
@@ -601,6 +619,23 @@ def _inject_navbar(logo_src: str, email: str, curr: str, rate: float) -> str:
     }});
     var t=doc.getElementById('cb-thb'); if(t) t.classList.toggle('on',val==='THB');
     var u=doc.getElementById('cb-usd'); if(u) u.classList.toggle('on',val==='USD');
+  }}
+
+  /* Privacy toggle — drives the hidden "แสดงยอด/ซ่อนยอด" radio, same trick as setCurr */
+  function toggleEye(){{
+    var b = doc.getElementById('tfin-eye');
+    var want = (b && b.classList.contains('off')) ? 'แสดงยอด' : 'ซ่อนยอด';
+    var hit = false;
+    doc.querySelectorAll('[data-testid="stRadio"] label').forEach(function(l){{
+      if((l.textContent||'').trim()===want){{ l.click(); hit = true; }}
+    }});
+    /* optimistic flip so the icon responds before Streamlit finishes the rerun */
+    if(hit && b){{
+      var off = want === 'ซ่อนยอด';
+      b.classList.toggle('off', off);
+      b.textContent = off ? '🙈' : '👁';
+      b.title = off ? 'แสดงยอดเงิน' : 'ซ่อนยอดเงิน';
+    }}
   }}
 
   function toggleAcct(){{
@@ -639,6 +674,7 @@ def _inject_navbar(logo_src: str, email: str, curr: str, rate: float) -> str:
       if(tntBtn){{ var idx=parseInt(tntBtn.id.substring(3)); if(!isNaN(idx)) goTab(idx); e.stopPropagation(); return; }}
       if(tgt.closest && tgt.closest('#cb-thb')){{ setCurr('THB'); e.stopPropagation(); return; }}
       if(tgt.closest && tgt.closest('#cb-usd')){{ setCurr('USD'); e.stopPropagation(); return; }}
+      if(tgt.closest && tgt.closest('#tfin-eye')){{ toggleEye(); e.stopPropagation(); return; }}
       if(tgt.closest && tgt.closest('#tfin-acct-btn')){{ e.stopPropagation(); toggleAcct(); return; }}
       if(tgt.closest && tgt.closest('#tfin-logout-btn')){{ doLogout(); e.stopPropagation(); return; }}
     }};
@@ -826,7 +862,7 @@ def cash_credit(cash: list, account_id, amount_thb: float, rate: float):
 
 def acc_label(acc: dict) -> str:
     sym = "$" if acc["currency"] == "USD" else "฿"
-    return f"{acc['name']} ({acc['currency']} {sym}{acc['amount']:,.0f})"
+    return f"{acc['name']} ({acc['currency']} {money(acc['amount'], sym)})"
 
 def source_selector(cash: list, form_key: str) -> tuple:
     """Returns (selectbox_index, other_name_input, other_currency_input) inside a form."""
@@ -931,8 +967,29 @@ def fmt_pct(val) -> str:
     if not isinstance(val, (int, float)): return "—"
     return f"{'+' if val>=0 else ''}{val:.2f}%"
 
+MASK = "•••••"
+
+
+def hidden_amounts() -> bool:
+    """Privacy toggle: blank out anything that reveals portfolio size.
+
+    Masks absolute money only. Percentages, prices, tickers and share counts stay
+    readable so the app is still demonstrable with the amounts switched off.
+    """
+    return st.session_state.get("amount_visibility") == "ซ่อนยอด"
+
+
+def money(val: float | None, sym: str = "฿", dp: int = 0) -> str:
+    """Pre-converted amount with its own symbol — for the spots that do not go
+    through fmt_money(). Never use it for the FX rate: that is public, not wealth."""
+    if val is None: return "—"
+    if hidden_amounts(): return MASK
+    return f"{sym}{val:,.{dp}f}"
+
+
 def fmt_money(val_thb: float | None, disp: str, rate: float, sign: bool = True) -> str:
     if val_thb is None: return "—"
+    if hidden_amounts(): return MASK
     if disp == "USD":
         v = val_thb / rate
         prefix = ("+" if v >= 0 else "-") if sign else ("" if v >= 0 else "-")
@@ -991,7 +1048,7 @@ def allocation_pie(labels, vals_thb, disp, rate, title, height=320):
         "title": dict(text=title, font=dict(size=14, color="#94a3b8"), x=0),
         "height": height, "showlegend": True,
         "legend": dict(font=dict(color="#94a3b8", size=11), orientation="v"),
-        "annotations": [dict(text=f"{sym}{total:,.0f}", x=0.5, y=0.5,
+        "annotations": [dict(text=money(total, sym), x=0.5, y=0.5,
                               font=dict(size=15, color="#e2e8f0"), showarrow=False)],
     })
     return fig
@@ -1230,7 +1287,7 @@ def build_activity_log(investments: list, trades: list) -> list:
                 "Action": "➕ ซื้อเพิ่ม", "Ticker": ticker,
                 "รายละเอียด": f"+{bh.get('shares','?')} shares @ {bh.get('price','—')}"})
         for sh in inv.get("sell_history", []):
-            pnl_s = f"฿{sh.get('pnl_thb',0):,.0f}" if sh.get("pnl_thb") is not None else "—"
+            pnl_s = money(sh.get('pnl_thb'))
             events.append({"วันที่": sh.get("date",""), "ประเภท": "💼 Invest",
                 "Action": "🔴 ขายบางส่วน", "Ticker": ticker,
                 "รายละเอียด": f"-{sh.get('shares','?')} shares @ {sh.get('price','—')} · P&L {pnl_s}"})
@@ -1250,7 +1307,7 @@ def build_activity_log(investments: list, trades: list) -> list:
                 "Action": "➕ ซื้อเพิ่ม", "Ticker": f"{ticker} {arr}",
                 "รายละเอียด": f"+{bh.get('shares','?')} shares @ {bh.get('price','—')}"})
         for sh in t.get("sell_history", []):
-            pnl_s = f"฿{sh.get('pnl_thb',0):,.0f}" if sh.get("pnl_thb") is not None else "—"
+            pnl_s = money(sh.get('pnl_thb'))
             events.append({"วันที่": sh.get("date",""), "ประเภท": "📈 Trade",
                 "Action": "🔴 ขายบางส่วน", "Ticker": f"{ticker} {arr}",
                 "รายละเอียด": f"-{sh.get('shares','?')} shares @ {sh.get('price','—')} · P&L {pnl_s}"})
@@ -1656,9 +1713,9 @@ def page_overview(trades: list, investments: list, cash: list, disp: str, rate: 
             for a in cash:
                 sym_c = "$" if a["currency"] == "USD" else "฿"
                 val_c = a["amount"] * rate if a["currency"] == "USD" else a["amount"]
-                part  = f"**{a['name']}** · {sym_c}{a['amount']:,.2f}"
+                part  = f"**{a['name']}** · {money(a['amount'], sym_c, 2)}"
                 if a["currency"] == "USD":
-                    part += f" (≈฿{val_c:,.0f})"
+                    part += f" (≈{money(val_c)})"
                 cash_parts.append(part)
             st.markdown("<small>💵 " + "  ·  ".join(cash_parts) + "</small>", unsafe_allow_html=True)
 
@@ -1807,8 +1864,8 @@ def page_investment(investments: list, trades: list, cash: list, disp: str, rate
 
     # -- Cash + Account Total --
     cash_parts = []
-    if cash_thb_total: cash_parts.append(f"฿{cash_thb_total:,.0f} THB")
-    if cash_usd_total: cash_parts.append(f"${cash_usd_total:,.2f} USD")
+    if cash_thb_total: cash_parts.append(f"{money(cash_thb_total)} THB")
+    if cash_usd_total: cash_parts.append(f"{money(cash_usd_total, '$', 2)} USD")
     cash_inline    = " &nbsp;·&nbsp; ".join(cash_parts) if cash_parts else "฿0"
     acct_total_thb = total_val_thb + cash_total_thb
     acct_total_s   = fmt_money(acct_total_thb, disp, rate, sign=False)
@@ -1941,9 +1998,9 @@ def page_investment(investments: list, trades: list, cash: list, disp: str, rate
                 if tgt_p == 0:
                     action = "—"
                 elif delta > 3:
-                    action = f"🔴 ขายลด {sym_r}{action_disp:,.0f}"
+                    action = f"🔴 ขายลด {money(action_disp, sym_r)}"
                 elif delta < -3:
-                    action = f"🟢 ซื้อเพิ่ม {sym_r}{action_disp:,.0f}"
+                    action = f"🟢 ซื้อเพิ่ม {money(action_disp, sym_r)}"
                 else:
                     action = "✅ ใกล้เป้า"
                 rebal_rows.append({
@@ -1996,9 +2053,9 @@ def page_investment(investments: list, trades: list, cash: list, disp: str, rate
             "Ticker":        "📊 TOTAL",
             "Shares":        "—",
             "Avg Cost":      "—",
-            "Total Cost":    f"{sym_p}{total_cost_disp:,.0f}",
+            "Total Cost":    money(total_cost_disp, sym_p),
             "Current Price": "—",
-            "Market Value":  f"{sym_p}{total_mv:,.0f}",
+            "Market Value":  money(total_mv, sym_p),
             "ถือมา":         "—",
             "P&L %":         fmt_pct(total_pnl_pct_row),
             f"P&L ({sym})":  fmt_money(sum(r["pnl_thb"] for r in raw if r.get("price")), disp, rate),
@@ -2424,10 +2481,10 @@ def page_trade(trades: list, cash: list, disp: str, rate: float):
         _tr_rows.append({
             "#": "—", "Dir": "—", "Ticker": "📊 TOTAL", "Shares": "—",
             "AVG Price": "—", "Current Price": "—",
-            "Cost":          f"{_sym_p}{_tr_total_cost:,.0f}",
-            "Mkt Value":     f"{_sym_p}{_tr_total_mv:,.0f}",
+            "Cost":          money(_tr_total_cost, _sym_p),
+            "Mkt Value":     money(_tr_total_mv, _sym_p),
             "P&L %":         fmt_pct(_tr_pnl_pct_tot),
-            f"P&L ({sym})":  f"{_sym_p}{_tr_total_pnl:,.0f}",
+            f"P&L ({sym})":  money(_tr_total_pnl, _sym_p),
             "TP": "—", "SL": "—",
         })
         _pnl_cols_t = ["P&L %", f"P&L ({sym})"]
@@ -2814,8 +2871,8 @@ def page_cash(trades: list, investments: list, cash: list, disp: str, rate: floa
     cashout_thb  = sum(c["amount_thb"] or 0 for c in cashouts)
 
     m1, m2, m3, m4 = st.columns(4)
-    m1.metric("Cash THB รวม", f"฿{cash_thb:,.0f}")
-    m2.metric("Cash USD รวม", f"${cash_usd:,.2f}")
+    m1.metric("Cash THB รวม", money(cash_thb))
+    m2.metric("Cash USD รวม", money(cash_usd, "$", 2))
     m3.metric(f"Net Cash ({disp})", fmt_money(cash_total_thb, disp, rate, sign=False) if cash else "฿0")
     m4.metric("Cash Out",
               fmt_money(cashout_thb, disp, rate, sign=False) if cashouts else "—")
@@ -2849,9 +2906,9 @@ def page_cash(trades: list, investments: list, cash: list, disp: str, rate: floa
             for acc in cash:
                 clr     = "#22c55e" if acc["amount"] >= 0 else "#ef4444"
                 sym     = "$" if acc["currency"] == "USD" else "฿"
-                fmt     = f"{sym}{acc['amount']:,.2f}" if acc["currency"] == "USD" else f"{sym}{acc['amount']:,.0f}"
+                fmt     = money(acc['amount'], sym, 2 if acc["currency"] == "USD" else 0)
                 val_thb = acc["amount"] * rate if acc["currency"] == "USD" else acc["amount"]
-                sub     = f"≈฿{val_thb:,.0f}" if acc["currency"] == "USD" else acc["currency"]
+                sub     = f"≈{money(val_thb)}" if acc["currency"] == "USD" else acc["currency"]
 
                 st.markdown(
                     f"<div style='background:rgba(255,255,255,0.04);"
@@ -2949,8 +3006,8 @@ def page_cash(trades: list, investments: list, cash: list, disp: str, rate: floa
                     if not amt or amt <= 0:
                         st.error("ใส่ยอดถอนให้ถูกต้อง")
                     elif amt > _acc["amount"]:
-                        st.error(f"ยอดในบัญชีมีแค่ "
-                                 f"{'$' if _acc['currency']=='USD' else '฿'}{_acc['amount']:,.2f}")
+                        _s = "$" if _acc["currency"] == "USD" else "฿"
+                        st.error("ยอดในบัญชีมีแค่ " + money(_acc["amount"], _s, 2))
                     else:
                         amt_thb = amt * rate if _acc["currency"] == "USD" else amt
                         _acc.setdefault("cashouts", []).append({
@@ -2963,8 +3020,8 @@ def page_cash(trades: list, investments: list, cash: list, disp: str, rate: floa
                         })
                         _acc["amount"] = round(_acc["amount"] - amt, 2)
                         save_cash(cash)
-                        st.success(f"ถอนออก {'$' if _acc['currency']=='USD' else '฿'}"
-                                   f"{amt:,.2f} จาก {_acc['name']} ✅")
+                        _s = "$" if _acc["currency"] == "USD" else "฿"
+                        st.success(f"ถอนออก {money(amt, _s, 2)} จาก {_acc['name']} ✅")
                         st.rerun()
 
         if cashouts:
@@ -2973,9 +3030,9 @@ def page_cash(trades: list, investments: list, cash: list, disp: str, rate: floa
             st.dataframe([{
                 "วันที่":     c["date"],
                 "บัญชี":      c["account"],
-                "ยอด":        (f"{'$' if c['currency']=='USD' else '฿'}{c['amount']:,.2f}"
+                "ยอด":        (money(c['amount'], '$' if c['currency']=='USD' else '฿', 2)
                                if c["amount"] is not None else "—"),
-                "เป็นบาท":    f"฿{c['amount_thb']:,.2f}" if c["amount_thb"] is not None else "—",
+                "เป็นบาท":    money(c["amount_thb"], dp=2),
                 "เรต":        f"{c['fx_rate']:.4f}" if c["fx_rate"] else "—",
                 "นำเข้าไทย":  "✅" if c["remitted"] else ("—" if c["currency"] == "THB" else "ไม่"),
                 "บันทึก":     c["note"] or "—",
@@ -3134,8 +3191,8 @@ def page_log(trades: list, investments: list, cash: list, disp: str, rate: float
         "จำนวน":         e["shares"] or "—",
         "สกุล":          e["currency"],
         "เรต ณ วันขาย":  f"{e['fx_rate']:.4f}" if e["fx_rate"] else "—",
-        "ได้รับ (฿)":    f"{e['proceeds_thb']:,.2f}" if e["proceeds_thb"] is not None else "—",
-        "กำไร/ขาดทุน (฿)": f"{e['pnl_thb']:,.2f}" if e["pnl_thb"] is not None else "—",
+        "ได้รับ (฿)":    money(e["proceeds_thb"], "", 2),
+        "กำไร/ขาดทุน (฿)": money(e["pnl_thb"], "", 2),
         "บัญชี":         e["account"],
     } for e in yr_rows]
 
@@ -3202,15 +3259,18 @@ def main():
         unsafe_allow_html=True,
     )
 
-    # -- Hidden currency radio (JS finds it by label text and clicks it) --
+    # -- Hidden radios: the navbar buttons click these by label text --
     disp = st.radio("", ["THB", "USD"], horizontal=True,
                     key="display_currency", label_visibility="collapsed")
+    st.radio("", ["แสดงยอด", "ซ่อนยอด"], horizontal=True,
+             key="amount_visibility", label_visibility="collapsed")
 
     # -- Inject navbar (HTML + CSS + JS) into parent document via window.parent --
     _components.html(
         _inject_navbar(
             f'data:image/png;base64,{_LOGO_B64}' if _LOGO_B64 else "",
             _email, st.session_state.get("display_currency", "THB"), rate,
+            hidden_amounts(),
         ),
         height=0, scrolling=False,
     )
