@@ -1131,6 +1131,59 @@ def portfolio_return_chart(open_items: list, rate: float, disp: str, period_labe
     })
     return fig
 
+def build_realized_events(investments: list, trades: list) -> list:
+    """Every sale that locked in a gain or loss, from both investments and trades.
+
+    Three things produce one: a fully closed position, a partial sell recorded in
+    sell_history, and the same two on the trade side. The Overview KPI and the tax
+    summary both read this, so the two can never drift apart.
+
+    fx_rate / proceeds_thb are only present on records closed after they started
+    being saved; older rows leave them blank rather than guessing a rate.
+    """
+    out = []
+
+    def add(kind, item, date_s, shares, price, pnl_thb, proceeds_thb, fx, partial):
+        if not date_s:
+            return
+        out.append({
+            "kind":         kind,                       # "Invest" | "Trade"
+            "ticker":       item.get("ticker", "—"),
+            "currency":     get_currency(item),
+            "entry_date":   item.get("entry_date") or item.get("open_date") or "",
+            "entry_price":  item.get("entry_price"),
+            "sell_date":    date_s,
+            "sell_price":   price,
+            "shares":       shares,
+            "pnl_thb":      pnl_thb,
+            "proceeds_thb": proceeds_thb,
+            "fx_rate":      fx,
+            "partial":      partial,
+            "account":      item.get("source_account_name") or "—",
+        })
+
+    for inv in investments:
+        for sh in inv.get("sell_history", []):
+            add("Invest", inv, sh.get("date"), sh.get("shares"), sh.get("price"),
+                sh.get("pnl_thb"), sh.get("thb"), sh.get("fx_rate"), True)
+        if inv.get("status") == "closed":
+            add("Invest", inv, inv.get("exit_date"), get_shares(inv), inv.get("exit_price"),
+                inv.get("pnl_thb"), inv.get("proceeds_thb"),
+                inv.get("fx_rate_at_close"), False)
+
+    for t in trades:
+        for sh in t.get("sell_history", []):
+            add("Trade", t, sh.get("date"), sh.get("shares"), sh.get("price"),
+                sh.get("pnl_thb"), sh.get("thb"), sh.get("fx_rate"), True)
+        if t.get("status") == "closed":
+            add("Trade", t, t.get("close_date"), get_shares(t), t.get("exit_price"),
+                t.get("pnl_thb"), t.get("proceeds_thb"),
+                t.get("fx_rate_at_close"), False)
+
+    out.sort(key=lambda e: e["sell_date"], reverse=True)
+    return out
+
+
 def build_activity_log(investments: list, trades: list) -> list:
     events = []
     for inv in investments:
@@ -1462,7 +1515,14 @@ def page_overview(trades: list, investments: list, cash: list, disp: str, rate: 
             label = f"{item['ticker']} ({'Trade' if item.get('type')=='trade' else 'Hold'})"
             unreal_items.append({"label": label, "pnl_thb": pnl})
 
-    realized_thb = sum(t.get("pnl_thb", 0) or 0 for t in closed_trades)
+    # Realized covers every locked-in sale: closed trades, closed investments, and
+    # partial sells of either. It used to read closed_trades alone, so selling an
+    # investment or trimming a position produced a gain that showed up nowhere.
+    realized_events = build_realized_events(investments, trades)
+    realized_thb    = sum(e["pnl_thb"] or 0 for e in realized_events)
+    realized_trade  = sum(e["pnl_thb"] or 0 for e in realized_events if e["kind"] == "Trade")
+    realized_inv    = sum(e["pnl_thb"] or 0 for e in realized_events if e["kind"] == "Invest")
+    # Win rate stays a trading metric — long-term holds are not won or lost per sale.
     win_rate     = len(wins) / len(closed_trades) * 100 if closed_trades else None
 
     cost_basis_thb = 0.0
@@ -1485,8 +1545,11 @@ def page_overview(trades: list, investments: list, cash: list, disp: str, rate: 
               fmt_money(unreal_thb if unreal_items else None, disp, rate),
               delta=fmt_pct(_unreal_ret_pct))
     k4.metric("Realized P&L",
-              fmt_money(realized_thb if closed_trades else None, disp, rate)
-              if closed_trades else "No trades closed")
+              fmt_money(realized_thb, disp, rate) if realized_events else "ยังไม่มีการขาย")
+    if realized_events:
+        # a delta string gets clipped by the card width, a caption wraps instead
+        k4.caption(f"Trade {fmt_money(realized_trade, disp, rate)}  ·  "
+                   f"Invest {fmt_money(realized_inv, disp, rate)}")
 
     # -- Asset Allocation (pie) + Return Chart side by side --
     open_all = open_trades + open_inv
@@ -1922,8 +1985,13 @@ def page_investment(investments: list, trades: list, cash: list, disp: str, rate
                       .hide(axis="index"))
         st.dataframe(styled, use_container_width=True, hide_index=True)
 
-        # Position actions (ปิด/ลบ)
-        with st.expander(f"⚙️ Position Actions ({len(open_inv)})", expanded=False):
+        # Position actions (ปิด/ลบ). No wrapping expander: each position below is
+        # already its own expander, and Streamlit forbids nesting them — the pair
+        # raised StreamlitAPIException and killed everything under the table,
+        # so edit/close/delete was unreachable.
+        st.markdown("<div style='height:0.75rem'></div>", unsafe_allow_html=True)
+        section(f"⚙️ Position Actions ({len(open_inv)})")
+        with st.container():
             for inv in open_inv:
                 price   = get_price(inv.get("ticker",""))
                 pnl_thb = calc_pnl_thb(inv.get("entry_price"), price, get_shares(inv),
@@ -2090,6 +2158,11 @@ def page_investment(investments: list, trades: list, cash: list, disp: str, rate
                                         inv.update({"status": "closed", "exit_price": str(ep),
                                                     "exit_date": str(exit_d),
                                                     "pnl_pct": pnl_pct_v, "pnl_thb": pnl_thb_v,
+                                                    # pnl_thb is converted at today's rate; keep the
+                                                    # rate and the THB proceeds or the filed figure
+                                                    # can never be reproduced later
+                                                    "fx_rate_at_close": round(rate, 4),
+                                                    "proceeds_thb": round(exit_thb, 2),
                                                     "thesis_correct": thesis_ok,
                                                     "emotion": emotion, "lesson": lesson})
                                         if src_id:
@@ -2106,6 +2179,7 @@ def page_investment(investments: list, trades: list, cash: list, disp: str, rate
                                             "date": str(exit_d), "shares": str(s_sell),
                                             "price": str(ep), "thb": round(exit_thb, 2),
                                             "pnl_thb": round(pnl_thb_p or 0, 2),
+                                            "fx_rate": round(rate, 4),
                                         })
                                         new_pos_thb = (inv.get("position_thb") or 0) * (s_remain / s_current)
                                         inv.update({
@@ -2244,7 +2318,9 @@ def page_trade(trades: list, cash: list, disp: str, rate: float):
     losses = [t for t in closed_trades if t.get("win_loss") == "Loss"]
     sym    = "฿" if disp == "THB" else "$"
 
-    realized_thb   = sum(t.get("pnl_thb", 0) or 0 for t in closed_trades)
+    # trade side only, but via the shared builder so partial sells count here too
+    _tr_realized   = [e for e in build_realized_events([], trades)]
+    realized_thb   = sum(e["pnl_thb"] or 0 for e in _tr_realized)
     win_rate       = len(wins) / len(closed_trades) * 100 if closed_trades else None
     total_win_thb  = sum(t.get("pnl_thb", 0) or 0 for t in wins)
     total_loss_thb = abs(sum(t.get("pnl_thb", 0) or 0 for t in losses))
@@ -2256,7 +2332,7 @@ def page_trade(trades: list, cash: list, disp: str, rate: float):
     k1.metric("Open Trades",   len(open_trades))
     k2.metric("Win Rate",      f"{win_rate:.1f}%" if win_rate is not None else "—")
     k3.metric("Profit Factor", f"{profit_factor:.2f}" if profit_factor else "—")
-    k4.metric("Realized P&L",  fmt_money(realized_thb if closed_trades else None, disp, rate))
+    k4.metric("Realized P&L",  fmt_money(realized_thb, disp, rate) if _tr_realized else "—")
     k5.metric("Closed Trades", len(closed_trades))
 
     st.markdown("<div style='height:1rem'></div>", unsafe_allow_html=True)
@@ -2527,18 +2603,22 @@ def page_trade(trades: list, cash: list, disp: str, rate: float):
                                 if s_sell >= s_current:
                                     pnl_pct_v = calc_pnl_pct(t["entry_price"], ep, direction)
                                     pnl_thb_v = calc_pnl_thb(t["entry_price"], ep, str(s_current), currency, rate, direction)
+                                    # computed before the update so the filed THB figure and the
+                                    # rate behind it are stored, not just recomputed on display
+                                    exit_thb = s_current * ep * (rate if currency == "USD" else 1)
+                                    if direction == "Short":
+                                        entry_thb = s_current * (parse(t["entry_price"]) or 0) * (rate if currency == "USD" else 1)
+                                        exit_thb  = 2 * entry_thb - exit_thb
                                     t.update({
                                         "status": "closed", "exit_price": str(ep),
                                         "close_date": str(exit_d), "thesis_correct": thesis_ok,
                                         "emotion": emotion, "lesson": lesson,
                                         "pnl_pct": pnl_pct_v, "pnl_thb": pnl_thb_v,
+                                        "fx_rate_at_close": round(rate, 4),
+                                        "proceeds_thb": round(exit_thb, 2),
                                         "win_loss": "Win" if (pnl_thb_v or 0) > 0 else "Loss",
                                     })
                                     if src_id:
-                                        exit_thb = s_current * ep * (rate if currency == "USD" else 1)
-                                        if direction == "Short":
-                                            entry_thb = s_current * (parse(t["entry_price"]) or 0) * (rate if currency == "USD" else 1)
-                                            exit_thb  = 2 * entry_thb - exit_thb
                                         cash_credit(cash, src_id, exit_thb, rate)
                                         save_cash(cash)
                                     save_trades(trades)
@@ -2555,6 +2635,8 @@ def page_trade(trades: list, cash: list, disp: str, rate: float):
                                     sell_hist.append({
                                         "date": str(exit_d), "shares": str(s_sell),
                                         "price": str(ep), "pnl_thb": round(pnl_thb_p or 0, 2),
+                                        "thb": round(exit_thb_p, 2),
+                                        "fx_rate": round(rate, 4),
                                     })
                                     new_pos_thb = (t.get("position_thb") or 0) * (s_remain / s_current)
                                     t.update({
@@ -2851,71 +2933,100 @@ def page_cash(trades: list, investments: list, cash: list, disp: str, rate: floa
 
 
 # -- Page 5: Log --
+_TH_MONTHS = ["ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.",
+              "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."]
+
+
+def _month_label(ym: str) -> str:
+    """'2026-09' -> 'ก.ย. 2569'"""
+    try:
+        y, m = ym.split("-")
+        return f"{_TH_MONTHS[int(m) - 1]} {int(y) + 543}"
+    except (ValueError, IndexError):
+        return ym
+
+
 def page_log(trades: list, investments: list, disp: str, rate: float):
     sym = "฿" if disp == "THB" else "$"
 
-    # -- Activity Log --
+    # ============ Activity Log ============
     section("Activity Log")
     activity = build_activity_log(investments, trades)
-    if activity:
-        st.dataframe(activity, use_container_width=True, hide_index=True)
-    else:
+
+    if not activity:
         st.info("ยังไม่มี activity")
+    else:
+        months = sorted({e["วันที่"][:7] for e in activity if len(e.get("วันที่", "")) >= 7},
+                        reverse=True)
+        a1, a2 = st.columns([3, 2])
+        mo_pick = a1.selectbox("เดือน", ["ทั้งหมด"] + [_month_label(m) for m in months],
+                               key="log_month")
+        ty_pick = a2.selectbox("ประเภท", ["ทั้งหมด", "💼 Invest", "📈 Trade"], key="log_type")
 
-    st.markdown("<div style='height:1rem'></div>", unsafe_allow_html=True)
+        shown = activity
+        if mo_pick != "ทั้งหมด":
+            ym = months[[_month_label(m) for m in months].index(mo_pick)]
+            shown = [e for e in shown if e.get("วันที่", "").startswith(ym)]
+        if ty_pick != "ทั้งหมด":
+            shown = [e for e in shown if e.get("ประเภท") == ty_pick]
 
-    rows = []
-    for t in trades:
-        rows.append({
-            "Type": "Trade", "Ticker": t.get("ticker","—"),
-            "Dir": t.get("direction","—"), "Strategy": t.get("strategy","—"),
-            "Entry": t.get("entry_price","—"), "Exit": t.get("exit_price","—"),
-            "P&L %": fmt_pct(t.get("pnl_pct")),
-            f"P&L ({sym})": fmt_money(t.get("pnl_thb"), disp, rate),
-            "W/L": t.get("win_loss", "open" if t.get("status")=="open" else "—"),
-            "วันที่": t.get("open_date","—"), "Status": t.get("status","—"),
-            "Lesson": t.get("lesson","—"),
-        })
-    for inv in investments:
-        rows.append({
-            "Type": "Investment", "Ticker": inv.get("ticker","—"),
-            "Dir": "Long", "Strategy": "—",
-            "Entry": inv.get("entry_price","—"), "Exit": inv.get("exit_price","—"),
-            "P&L %": fmt_pct(inv.get("pnl_pct")),
-            f"P&L ({sym})": fmt_money(inv.get("pnl_thb"), disp, rate),
-            "W/L": "open" if inv.get("status")=="open" else fmt_pct(inv.get("pnl_pct")),
-            "วันที่": inv.get("entry_date","—"), "Status": inv.get("status","—"),
-            "Lesson": "—",
-        })
+        st.caption(f"{len(shown)} รายการ")
+        if shown:
+            st.dataframe(shown, use_container_width=True, hide_index=True)
+            st.download_button(
+                "⬇️ Export CSV", key="dl_activity",
+                data=pd.DataFrame(shown).to_csv(index=False).encode("utf-8-sig"),
+                file_name=f"timfin_activity_{date.today()}.csv", mime="text/csv",
+            )
+        else:
+            st.info("ไม่มีรายการในช่วงที่เลือก")
 
-    if not rows:
-        st.info("ยังไม่มีข้อมูล")
+    # ============ Tax summary (replaces the old History dump) ============
+    st.markdown("<div style='height:1.5rem'></div>", unsafe_allow_html=True)
+    section("สรุปภาษี")
+
+    realized = build_realized_events(investments, trades)
+    if not realized:
+        st.info("ยังไม่มีการขาย — ตารางนี้จะขึ้นเมื่อปิด position หรือขายบางส่วน")
         return
 
-    # -- Filters --
-    section("Filters")
-    f1, f2, f3 = st.columns(3)
-    tf = f1.selectbox("ประเภท", ["ทั้งหมด", "Trade", "Investment"])
-    sf = f2.selectbox("Status",  ["ทั้งหมด", "open", "closed"])
-    wf = f3.selectbox("W/L",     ["ทั้งหมด", "Win", "Loss", "open"])
+    years = sorted({e["sell_date"][:4] for e in realized if len(e["sell_date"]) >= 4},
+                   reverse=True)
+    yr = st.selectbox("ปีภาษี", [f"{int(y) + 543} ({y})" for y in years], key="tax_year")
+    pick = years[[f"{int(y) + 543} ({y})" for y in years].index(yr)]
+    yr_rows = [e for e in realized if e["sell_date"].startswith(pick)]
 
-    filtered = rows
-    if tf != "ทั้งหมด": filtered = [r for r in filtered if r["Type"]   == tf]
-    if sf != "ทั้งหมด": filtered = [r for r in filtered if r["Status"] == sf]
-    if wf != "ทั้งหมด": filtered = [r for r in filtered if r["W/L"]    == wf]
+    gain = sum(e["pnl_thb"] or 0 for e in yr_rows if (e["pnl_thb"] or 0) > 0)
+    loss = sum(e["pnl_thb"] or 0 for e in yr_rows if (e["pnl_thb"] or 0) < 0)
+    t1, t2, t3 = st.columns(3)
+    t1.metric("กำไรที่ realize", fmt_money(gain, disp, rate))
+    t2.metric("ขาดทุนที่ realize", fmt_money(loss, disp, rate))
+    t3.metric("สุทธิ", fmt_money(gain + loss, disp, rate))
 
-    # -- Table --
-    section(f"History ({len(filtered)} entries)")
-    st.dataframe(filtered, use_container_width=True, hide_index=True)
+    tax_tbl = [{
+        "ขายเมื่อ":      e["sell_date"],
+        "ประเภท":        e["kind"] + (" (บางส่วน)" if e["partial"] else ""),
+        "Ticker":        e["ticker"],
+        "ซื้อเมื่อ":     e["entry_date"] or "—",
+        "ราคาซื้อ":      e["entry_price"] or "—",
+        "ราคาขาย":       e["sell_price"] or "—",
+        "จำนวน":         e["shares"] or "—",
+        "สกุล":          e["currency"],
+        "เรต ณ วันขาย":  f"{e['fx_rate']:.4f}" if e["fx_rate"] else "—",
+        "ได้รับ (฿)":    f"{e['proceeds_thb']:,.2f}" if e["proceeds_thb"] is not None else "—",
+        "กำไร/ขาดทุน (฿)": f"{e['pnl_thb']:,.2f}" if e["pnl_thb"] is not None else "—",
+        "บัญชี":         e["account"],
+    } for e in yr_rows]
 
-    # -- Export CSV --
-    if filtered:
-        csv = pd.DataFrame(filtered).to_csv(index=False).encode("utf-8-sig")
-        st.download_button(
-            "⬇️ Export CSV", data=csv,
-            file_name=f"timfin_log_{date.today()}.csv",
-            mime="text/csv",
-        )
+    st.dataframe(tax_tbl, use_container_width=True, hide_index=True)
+    st.download_button(
+        "⬇️ Export CSV สำหรับยื่นภาษี", key="dl_tax",
+        data=pd.DataFrame(tax_tbl).to_csv(index=False).encode("utf-8-sig"),
+        file_name=f"timfin_tax_{pick}.csv", mime="text/csv",
+    )
+    if any(e["fx_rate"] is None for e in yr_rows):
+        st.caption("⚠️ รายการที่เรตขึ้น “—” ปิดก่อนระบบเริ่มเก็บเรต — ยอดบาทคำนวณจากเรตปัจจุบัน "
+                   "ไม่ใช่เรตวันขาย ถ้าต้องใช้ยื่นจริงให้กรอกเรตวันนั้นเอง")
 
 
 # -- Main --
