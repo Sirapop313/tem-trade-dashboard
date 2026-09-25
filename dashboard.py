@@ -1206,8 +1206,12 @@ def build_cashouts(cash: list) -> list:
                 "amount":     c.get("amount"),          # in the account's own currency
                 "amount_thb": c.get("amount_thb"),
                 "fx_rate":    c.get("fx_rate"),
-                "to_thai":    bool(c.get("to_thai")),   # remitted into Thailand
+                "to_thai":    bool(c.get("to_thai")),
                 "note":       c.get("note", ""),
+                # Only a withdrawal out of a foreign-currency account and into
+                # Thailand is a remittance. Pulling THB out of a Thai account moves
+                # money that was already onshore, so nothing is being brought in.
+                "remitted":   bool(c.get("to_thai")) and acc.get("currency") != "THB",
             })
     out.sort(key=lambda c: c["date"], reverse=True)
     return out
@@ -1587,8 +1591,10 @@ def page_overview(trades: list, investments: list, cash: list, disp: str, rate: 
                    f"Invest {fmt_money(realized_inv, disp, rate)}")
     # kept as its own card, never netted against Realized — spending a gain is
     # not a loss, and merging the two makes the performance figure meaningless
-    k5.metric("ถอนออกไปใช้แล้ว",
-              fmt_money(cashout_thb, disp, rate, sign=False) if cashouts_ov else "—")
+    k5.metric("Cash Out",
+              fmt_money(cashout_thb, disp, rate, sign=False) if cashouts_ov else "—",
+              help="เงินที่ถอนออกจากพอร์ตไปใช้จ่ายแล้ว — แยกจาก Realized เพราะ "
+                   "การถอนกำไรไปใช้ไม่ใช่การขาดทุน")
     if cashouts_ov:
         k5.caption(f"{len(cashouts_ov)} ครั้ง · ล่าสุด {cashouts_ov[0]['date']}")
 
@@ -2811,11 +2817,12 @@ def page_cash(trades: list, investments: list, cash: list, disp: str, rate: floa
     m1.metric("Cash THB รวม", f"฿{cash_thb:,.0f}")
     m2.metric("Cash USD รวม", f"${cash_usd:,.2f}")
     m3.metric(f"Net Cash ({disp})", fmt_money(cash_total_thb, disp, rate, sign=False) if cash else "฿0")
-    m4.metric("ถอนออกแล้วรวม",
+    m4.metric("Cash Out",
               fmt_money(cashout_thb, disp, rate, sign=False) if cashouts else "—")
     if cashouts:
-        m4.caption(f"{len(cashouts)} ครั้ง · เข้าไทย "
-                   f"{fmt_money(sum(c['amount_thb'] or 0 for c in cashouts if c['to_thai']), disp, rate, sign=False)}")
+        _rem = sum(c["amount_thb"] or 0 for c in cashouts if c["remitted"])
+        m4.caption(f"{len(cashouts)} ครั้ง · โอนเข้าไทยจากบัญชีต่างสกุล "
+                   f"{fmt_money(_rem, disp, rate, sign=False)}")
 
     st.markdown("<div style='height:1rem'></div>", unsafe_allow_html=True)
 
@@ -2913,19 +2920,27 @@ def page_cash(trades: list, investments: list, cash: list, disp: str, rate: floa
 
     # -- Cash out (money leaving the portfolio to be spent) --
     if cash:
-        with st.expander("💸 ถอนเงินออกไปใช้"):
+        with st.expander("💸 Cash Out — ถอนเงินออกไปใช้"):
             with st.form("cashout_form"):
                 oc1, oc2, oc3 = st.columns([4, 3, 3])
                 _opts = [acc_label(a) for a in cash]
                 o_idx = oc1.selectbox("จากบัญชี", range(len(_opts)),
                                       format_func=lambda i: _opts[i])
                 _acc  = cash[o_idx]
+                _foreign = _acc["currency"] != "THB"
                 o_amt = oc2.text_input(f"ยอดถอน ({_acc['currency']})", "")
                 o_dt  = oc3.date_input("วันที่ถอน", value=date.today())
                 oc4, oc5 = st.columns([3, 7])
-                o_thai = oc4.checkbox("เข้าบัญชีไทย", value=(_acc["currency"] == "THB"),
-                                      help="ติ๊กเมื่อเงินก้อนนี้ถูกโอนเข้าประเทศไทย — "
-                                           "เป็นจังหวะที่ใช้อ้างอิงตอนยื่นภาษี")
+                # The question only exists for a foreign-currency account; THB sitting
+                # in a Thai account is already onshore and cannot be "brought in".
+                if _foreign:
+                    o_thai = oc4.checkbox("โอนเข้าไทย", value=True,
+                                          help=f"เงินก้อนนี้ออกจากบัญชี {_acc['currency']} "
+                                               "เข้าบัญชีในไทยไหม — จังหวะนี้คือตัวที่ "
+                                               "เกี่ยวกับภาษี ถ้าเก็บไว้ต่างประเทศให้ติ๊กออก")
+                else:
+                    o_thai = False
+                    oc4.caption("บัญชี THB — เงินอยู่ในไทยแล้ว\nไม่ใช่การนำเงินเข้า")
                 o_note = oc5.text_input("บันทึก (ไม่บังคับ)", "",
                                         placeholder="เช่น ค่าเทอม / ซื้อของ / โอนเข้า SCB")
 
@@ -2954,7 +2969,7 @@ def page_cash(trades: list, investments: list, cash: list, disp: str, rate: floa
 
         if cashouts:
             st.markdown("<div style='height:0.5rem'></div>", unsafe_allow_html=True)
-            section(f"ประวัติการถอน ({len(cashouts)})")
+            section(f"Cash Out History ({len(cashouts)})")
             st.dataframe([{
                 "วันที่":     c["date"],
                 "บัญชี":      c["account"],
@@ -2962,7 +2977,7 @@ def page_cash(trades: list, investments: list, cash: list, disp: str, rate: floa
                                if c["amount"] is not None else "—"),
                 "เป็นบาท":    f"฿{c['amount_thb']:,.2f}" if c["amount_thb"] is not None else "—",
                 "เรต":        f"{c['fx_rate']:.4f}" if c["fx_rate"] else "—",
-                "เข้าไทย":    "✅" if c["to_thai"] else "—",
+                "นำเข้าไทย":  "✅" if c["remitted"] else ("—" if c["currency"] == "THB" else "ไม่"),
                 "บันทึก":     c["note"] or "—",
             } for c in cashouts], use_container_width=True, hide_index=True)
 
@@ -3039,19 +3054,6 @@ def page_cash(trades: list, investments: list, cash: list, disp: str, rate: floa
 
 
 # -- Page 5: Log --
-_TH_MONTHS = ["ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.",
-              "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."]
-
-
-def _month_label(ym: str) -> str:
-    """'2026-09' -> 'ก.ย. 2569'"""
-    try:
-        y, m = ym.split("-")
-        return f"{_TH_MONTHS[int(m) - 1]} {int(y) + 543}"
-    except (ValueError, IndexError):
-        return ym
-
-
 def page_log(trades: list, investments: list, cash: list, disp: str, rate: float):
     sym = "฿" if disp == "THB" else "$"
 
@@ -3062,17 +3064,21 @@ def page_log(trades: list, investments: list, cash: list, disp: str, rate: float
     if not activity:
         st.info("ยังไม่มี activity")
     else:
-        months = sorted({e["วันที่"][:7] for e in activity if len(e.get("วันที่", "")) >= 7},
-                        reverse=True)
-        a1, a2 = st.columns([3, 2])
-        mo_pick = a1.selectbox("เดือน", ["ทั้งหมด"] + [_month_label(m) for m in months],
-                               key="log_month")
-        ty_pick = a2.selectbox("ประเภท", ["ทั้งหมด", "💼 Invest", "📈 Trade"], key="log_type")
+        _yrs  = [int(e["วันที่"][:4]) for e in activity
+                 if len(e.get("วันที่", "")) >= 4 and e["วันที่"][:4].isdigit()]
+        _lo   = min(_yrs, default=2026)
+        years = list(range(2030, min(_lo, 2030) - 1, -1))
+
+        a1, a2, a3 = st.columns([2, 2, 3])
+        yr_pick = a1.selectbox("ปี", ["ทั้งหมด"] + years, key="log_year")
+        mo_pick = a2.selectbox("เดือน", ["ทั้งหมด"] + list(range(1, 13)), key="log_month")
+        ty_pick = a3.selectbox("ประเภท", ["ทั้งหมด", "💼 Invest", "📈 Trade"], key="log_type")
 
         shown = activity
+        if yr_pick != "ทั้งหมด":
+            shown = [e for e in shown if e.get("วันที่", "").startswith(f"{yr_pick}-")]
         if mo_pick != "ทั้งหมด":
-            ym = months[[_month_label(m) for m in months].index(mo_pick)]
-            shown = [e for e in shown if e.get("วันที่", "").startswith(ym)]
+            shown = [e for e in shown if e.get("วันที่", "")[5:7] == f"{mo_pick:02d}"]
         if ty_pick != "ทั้งหมด":
             shown = [e for e in shown if e.get("ประเภท") == ty_pick]
 
@@ -3096,25 +3102,26 @@ def page_log(trades: list, investments: list, cash: list, disp: str, rate: float
         st.info("ยังไม่มีการขาย — ตารางนี้จะขึ้นเมื่อปิด position หรือขายบางส่วน")
         return
 
-    years = sorted({e["sell_date"][:4] for e in realized if len(e["sell_date"]) >= 4},
-                   reverse=True)
-    yr = st.selectbox("ปีภาษี", [f"{int(y) + 543} ({y})" for y in years], key="tax_year")
-    pick = years[[f"{int(y) + 543} ({y})" for y in years].index(yr)]
+    tax_years = sorted({e["sell_date"][:4] for e in realized if len(e["sell_date"]) >= 4},
+                       reverse=True)
+    pick = st.selectbox("ปี", tax_years, key="tax_year")
     yr_rows = [e for e in realized if e["sell_date"].startswith(pick)]
 
     gain = sum(e["pnl_thb"] or 0 for e in yr_rows if (e["pnl_thb"] or 0) > 0)
     loss = sum(e["pnl_thb"] or 0 for e in yr_rows if (e["pnl_thb"] or 0) < 0)
-    yr_out   = [c for c in build_cashouts(cash) if c["date"].startswith(pick)]
-    out_thai = sum(c["amount_thb"] or 0 for c in yr_out if c["to_thai"])
+    yr_out  = [c for c in build_cashouts(cash) if c["date"].startswith(pick)]
+    remit   = sum(c["amount_thb"] or 0 for c in yr_out if c["remitted"])
 
     t1, t2, t3, t4 = st.columns(4)
     t1.metric("กำไรที่ realize", fmt_money(gain, disp, rate))
     t2.metric("ขาดทุนที่ realize", fmt_money(loss, disp, rate))
     t3.metric("สุทธิ", fmt_money(gain + loss, disp, rate))
-    t4.metric("ถอนเข้าไทยปีนี้",
-              fmt_money(out_thai, disp, rate, sign=False) if yr_out else "—")
+    t4.metric("นำเงินเข้าไทย",
+              fmt_money(remit, disp, rate, sign=False) if yr_out else "—",
+              help="เฉพาะที่ถอนจากบัญชีต่างสกุลแล้วโอนเข้าไทย — "
+                   "ถอนจากบัญชี THB ไม่นับ เพราะเงินอยู่ในไทยแล้ว")
     if yr_out:
-        t4.caption(f"ถอนรวมทุกทาง "
+        t4.caption(f"Cash Out ทั้งปี "
                    f"{fmt_money(sum(c['amount_thb'] or 0 for c in yr_out), disp, rate, sign=False)}")
 
     tax_tbl = [{
@@ -3141,6 +3148,9 @@ def page_log(trades: list, investments: list, cash: list, disp: str, rate: float
     if any(e["fx_rate"] is None for e in yr_rows):
         st.caption("⚠️ รายการที่เรตขึ้น “—” ปิดก่อนระบบเริ่มเก็บเรต — ยอดบาทคำนวณจากเรตปัจจุบัน "
                    "ไม่ใช่เรตวันขาย ถ้าต้องใช้ยื่นจริงให้กรอกเรตวันนั้นเอง")
+    st.caption("ℹ️ ตารางนี้เป็น **บันทึกรายการ** ไม่ใช่การคำนวณภาษี — ยอด “นำเงินเข้าไทย” "
+               "ยังไม่ได้หักเงินต้นที่ส่งออกไปลงทุนตอนแรก (ระบบไม่ได้ track ขาส่งออก) "
+               "ตัวเลขที่ต้องยื่นจริงให้ยืนยันกับบัญชีอีกครั้ง")
 
 
 # -- Main --
