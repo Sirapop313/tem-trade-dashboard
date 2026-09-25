@@ -489,12 +489,14 @@ def _inject_navbar(logo_src: str, email: str, curr: str, rate: float) -> str:
         ".tfin-ddbtn.red:hover{background:rgba(239,68,68,.1);}"
         "[data-baseweb='tab-list']{display:none!important;}"
         # ---- Narrow screens. Streamlit already stacks st.columns on its own at 640px,
-        # so the navbar is the only thing that breaks: measured, its row needs ~860px and
-        # below that the currency toggle and account button end up past the right edge,
-        # unreachable. Up to 860px the 5 tabs therefore move to a bottom bar and the top
-        # row keeps only identity + currency + account. Pure CSS, DOM order untouched, so
-        # the navbar's click delegation keeps working exactly as it does on desktop.
-        "@media(max-width:860px){"
+        # so the navbar is the only thing that breaks: measured, its row stops fitting
+        # between 861 and 866px, and below that the currency toggle and account button
+        # end up past the right edge, unreachable. Breakpoint sits at 900 rather than
+        # right on the measured edge so a longer rate string or slightly wider font
+        # metrics cannot reopen the gap. Up to there the 5 tabs move to a bottom bar and
+        # the top row keeps only identity + currency + account. Pure CSS, DOM order
+        # untouched, so the navbar's click delegation behaves as it does on desktop.
+        "@media(max-width:900px){"
         # backdrop-filter makes #tfin-nav a containing block for fixed-position
         # descendants, which would anchor the tab bar to the navbar instead of the
         # viewport. Drop the blur here (solid background reads the same, and skipping
@@ -1184,6 +1186,33 @@ def build_realized_events(investments: list, trades: list) -> list:
     return out
 
 
+def build_cashouts(cash: list) -> list:
+    """Money taken out of the portfolio to spend, newest first.
+
+    Kept deliberately apart from realized P&L: realized measures how the picks
+    did, a cashout is cash leaving the system. Netting a withdrawal against
+    realized would read as a loss when it is just spending a gain.
+
+    Stored per account under "cashouts" — cash_accounts is a jsonb blob that
+    save_cash() writes whole, so this needs no schema change.
+    """
+    out = []
+    for acc in cash:
+        for c in acc.get("cashouts", []):
+            out.append({
+                "date":       c.get("date", ""),
+                "account":    acc.get("name", "—"),
+                "currency":   acc.get("currency", "THB"),
+                "amount":     c.get("amount"),          # in the account's own currency
+                "amount_thb": c.get("amount_thb"),
+                "fx_rate":    c.get("fx_rate"),
+                "to_thai":    bool(c.get("to_thai")),   # remitted into Thailand
+                "note":       c.get("note", ""),
+            })
+    out.sort(key=lambda c: c["date"], reverse=True)
+    return out
+
+
 def build_activity_log(investments: list, trades: list) -> list:
     events = []
     for inv in investments:
@@ -1534,12 +1563,18 @@ def page_overview(trades: list, investments: list, cash: list, disp: str, rate: 
 
     # -- KPI Row --
     section("Portfolio Summary")
-    k1, k2, k3, k4 = st.columns(4)
-    k1.metric("Total Wealth (incl. Cash)",
-              fmt_money(port_thb, disp, rate, sign=False) if port_thb else "No data yet")
-    k2.metric("Deployed (Cost Basis)",
+    cashouts_ov = build_cashouts(cash)
+    cashout_thb = sum(c["amount_thb"] or 0 for c in cashouts_ov)
+
+    # labels kept short: at five columns the long ones truncate mid-word
+    k1, k2, k3, k4, k5 = st.columns(5)
+    k1.metric("Total Wealth",
+              fmt_money(port_thb, disp, rate, sign=False) if port_thb else "No data yet",
+              help="มูลค่าพอร์ตทั้งหมด รวมเงินสดในทุกบัญชี")
+    k2.metric("Deployed",
               fmt_money(cost_basis_thb if cost_basis_thb else None, disp, rate, sign=False)
-              if cost_basis_thb else "No holdings")
+              if cost_basis_thb else "No holdings",
+              help="ต้นทุนรวมของ position ที่ยังถืออยู่ (cost basis)")
     _unreal_ret_pct = unreal_thb / cost_basis_thb * 100 if cost_basis_thb and unreal_items else None
     k3.metric("Unrealized P&L",
               fmt_money(unreal_thb if unreal_items else None, disp, rate),
@@ -1550,6 +1585,12 @@ def page_overview(trades: list, investments: list, cash: list, disp: str, rate: 
         # a delta string gets clipped by the card width, a caption wraps instead
         k4.caption(f"Trade {fmt_money(realized_trade, disp, rate)}  ·  "
                    f"Invest {fmt_money(realized_inv, disp, rate)}")
+    # kept as its own card, never netted against Realized — spending a gain is
+    # not a loss, and merging the two makes the performance figure meaningless
+    k5.metric("ถอนออกไปใช้แล้ว",
+              fmt_money(cashout_thb, disp, rate, sign=False) if cashouts_ov else "—")
+    if cashouts_ov:
+        k5.caption(f"{len(cashouts_ov)} ครั้ง · ล่าสุด {cashouts_ov[0]['date']}")
 
     # -- Asset Allocation (pie) + Return Chart side by side --
     open_all = open_trades + open_inv
@@ -2763,10 +2804,18 @@ def page_cash(trades: list, investments: list, cash: list, disp: str, rate: floa
     cash_thb = sum(a["amount"] for a in cash if a["currency"] == "THB")
     cash_total_thb = (cash_usd * rate) + cash_thb
 
-    m1, m2, m3 = st.columns(3)
+    cashouts     = build_cashouts(cash)
+    cashout_thb  = sum(c["amount_thb"] or 0 for c in cashouts)
+
+    m1, m2, m3, m4 = st.columns(4)
     m1.metric("Cash THB รวม", f"฿{cash_thb:,.0f}")
     m2.metric("Cash USD รวม", f"${cash_usd:,.2f}")
     m3.metric(f"Net Cash ({disp})", fmt_money(cash_total_thb, disp, rate, sign=False) if cash else "฿0")
+    m4.metric("ถอนออกแล้วรวม",
+              fmt_money(cashout_thb, disp, rate, sign=False) if cashouts else "—")
+    if cashouts:
+        m4.caption(f"{len(cashouts)} ครั้ง · เข้าไทย "
+                   f"{fmt_money(sum(c['amount_thb'] or 0 for c in cashouts if c['to_thai']), disp, rate, sign=False)}")
 
     st.markdown("<div style='height:1rem'></div>", unsafe_allow_html=True)
 
@@ -2862,6 +2911,63 @@ def page_cash(trades: list, investments: list, cash: list, disp: str, rate: floa
 
     st.markdown("<div style='height:0.5rem'></div>", unsafe_allow_html=True)
 
+    # -- Cash out (money leaving the portfolio to be spent) --
+    if cash:
+        with st.expander("💸 ถอนเงินออกไปใช้"):
+            with st.form("cashout_form"):
+                oc1, oc2, oc3 = st.columns([4, 3, 3])
+                _opts = [acc_label(a) for a in cash]
+                o_idx = oc1.selectbox("จากบัญชี", range(len(_opts)),
+                                      format_func=lambda i: _opts[i])
+                _acc  = cash[o_idx]
+                o_amt = oc2.text_input(f"ยอดถอน ({_acc['currency']})", "")
+                o_dt  = oc3.date_input("วันที่ถอน", value=date.today())
+                oc4, oc5 = st.columns([3, 7])
+                o_thai = oc4.checkbox("เข้าบัญชีไทย", value=(_acc["currency"] == "THB"),
+                                      help="ติ๊กเมื่อเงินก้อนนี้ถูกโอนเข้าประเทศไทย — "
+                                           "เป็นจังหวะที่ใช้อ้างอิงตอนยื่นภาษี")
+                o_note = oc5.text_input("บันทึก (ไม่บังคับ)", "",
+                                        placeholder="เช่น ค่าเทอม / ซื้อของ / โอนเข้า SCB")
+
+                if st.form_submit_button("💸 ถอนเงิน", use_container_width=True):
+                    amt = parse(o_amt)
+                    if not amt or amt <= 0:
+                        st.error("ใส่ยอดถอนให้ถูกต้อง")
+                    elif amt > _acc["amount"]:
+                        st.error(f"ยอดในบัญชีมีแค่ "
+                                 f"{'$' if _acc['currency']=='USD' else '฿'}{_acc['amount']:,.2f}")
+                    else:
+                        amt_thb = amt * rate if _acc["currency"] == "USD" else amt
+                        _acc.setdefault("cashouts", []).append({
+                            "date": str(o_dt), "amount": round(amt, 2),
+                            "amount_thb": round(amt_thb, 2),
+                            # same reason as closing a position: without the rate the
+                            # THB figure cannot be reproduced once the rate moves
+                            "fx_rate": round(rate, 4),
+                            "to_thai": bool(o_thai), "note": o_note.strip(),
+                        })
+                        _acc["amount"] = round(_acc["amount"] - amt, 2)
+                        save_cash(cash)
+                        st.success(f"ถอนออก {'$' if _acc['currency']=='USD' else '฿'}"
+                                   f"{amt:,.2f} จาก {_acc['name']} ✅")
+                        st.rerun()
+
+        if cashouts:
+            st.markdown("<div style='height:0.5rem'></div>", unsafe_allow_html=True)
+            section(f"ประวัติการถอน ({len(cashouts)})")
+            st.dataframe([{
+                "วันที่":     c["date"],
+                "บัญชี":      c["account"],
+                "ยอด":        (f"{'$' if c['currency']=='USD' else '฿'}{c['amount']:,.2f}"
+                               if c["amount"] is not None else "—"),
+                "เป็นบาท":    f"฿{c['amount_thb']:,.2f}" if c["amount_thb"] is not None else "—",
+                "เรต":        f"{c['fx_rate']:.4f}" if c["fx_rate"] else "—",
+                "เข้าไทย":    "✅" if c["to_thai"] else "—",
+                "บันทึก":     c["note"] or "—",
+            } for c in cashouts], use_container_width=True, hide_index=True)
+
+    st.markdown("<div style='height:0.5rem'></div>", unsafe_allow_html=True)
+
     # -- Add account --
     with st.expander("➕ เพิ่มบัญชี Cash"):
         with st.form("add_cash_page"):
@@ -2946,7 +3052,7 @@ def _month_label(ym: str) -> str:
         return ym
 
 
-def page_log(trades: list, investments: list, disp: str, rate: float):
+def page_log(trades: list, investments: list, cash: list, disp: str, rate: float):
     sym = "฿" if disp == "THB" else "$"
 
     # ============ Activity Log ============
@@ -2998,10 +3104,18 @@ def page_log(trades: list, investments: list, disp: str, rate: float):
 
     gain = sum(e["pnl_thb"] or 0 for e in yr_rows if (e["pnl_thb"] or 0) > 0)
     loss = sum(e["pnl_thb"] or 0 for e in yr_rows if (e["pnl_thb"] or 0) < 0)
-    t1, t2, t3 = st.columns(3)
+    yr_out   = [c for c in build_cashouts(cash) if c["date"].startswith(pick)]
+    out_thai = sum(c["amount_thb"] or 0 for c in yr_out if c["to_thai"])
+
+    t1, t2, t3, t4 = st.columns(4)
     t1.metric("กำไรที่ realize", fmt_money(gain, disp, rate))
     t2.metric("ขาดทุนที่ realize", fmt_money(loss, disp, rate))
     t3.metric("สุทธิ", fmt_money(gain + loss, disp, rate))
+    t4.metric("ถอนเข้าไทยปีนี้",
+              fmt_money(out_thai, disp, rate, sign=False) if yr_out else "—")
+    if yr_out:
+        t4.caption(f"ถอนรวมทุกทาง "
+                   f"{fmt_money(sum(c['amount_thb'] or 0 for c in yr_out), disp, rate, sign=False)}")
 
     tax_tbl = [{
         "ขายเมื่อ":      e["sell_date"],
@@ -3101,7 +3215,7 @@ def main():
     with _tabs[1]: page_investment(investments, trades, cash, disp, rate)
     with _tabs[2]: page_trade(trades, cash, disp, rate)
     with _tabs[3]: page_cash(trades, investments, cash, disp, rate)
-    with _tabs[4]: page_log(trades, investments, disp, rate)
+    with _tabs[4]: page_log(trades, investments, cash, disp, rate)
 
 
 main()
