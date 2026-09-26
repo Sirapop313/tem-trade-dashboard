@@ -3251,10 +3251,22 @@ def main():
         # blanket stRadio hide that was also killing the 1D/1W/1M/1Y period selectors.
         # Only hide tab-list (replaced by custom navbar) and strip top padding.
         '[data-baseweb="tab-list"]{display:none!important;}'
-        '[data-testid="stMainBlockContainer"]{padding-top:0!important;}'
+        # Clear the 58px fixed navbar here rather than with a spacer element, so the
+        # clearance does not also cost a flex gap slot. 30px measured, not guessed: the
+        # navbar iframe's container still occupies 26px and the tab panel adds 16px of
+        # its own padding, which lands the first row ~14px under the bar.
+        # Written as a child selector on purpose: stMainBlockContainer IS a direct child
+        # of stMain, so the zeroing rule below outranks a lone attribute selector.
         '[data-testid="stMain"]>div{padding-top:0!important;}'
-        '.main .block-container{padding-top:0!important;}'
-        'div.block-container{padding-top:0!important;}'
+        '[data-testid="stMain"]>[data-testid="stMainBlockContainer"]'
+        '{padding-top:30px!important;}'
+        # Everything at the top level of this block except the tabs is an invisible
+        # helper (two style blocks, the two navbar-driven radios, the navbar iframe),
+        # and each was still charged the block's 16px gap — 112px of dead space above
+        # the first real content. Scoped to the OUTERMOST block only: the page has ~135
+        # vertical blocks and zeroing the gap on all of them would flatten every section.
+        '[data-testid="stMainBlockContainer"]>[data-testid="stVerticalBlockBorderWrapper"]'
+        '>[data-testid="stVerticalBlock"]{gap:0!important;}'
         '</style>',
         unsafe_allow_html=True,
     )
@@ -3274,10 +3286,6 @@ def main():
         ),
         height=0, scrolling=False,
     )
-
-    # Spacer so content starts below fixed navbar (navbar=58px, padding zeroed via CSS)
-    st.markdown('<div style="height:60px;margin:0;padding:0;line-height:0;font-size:0"></div>',
-                unsafe_allow_html=True)
 
     # -- Tabs --
     _tabs = st.tabs(["📊 Overview", "💼 Investment", "📈 Trade", "💵 Cash", "📓 Log"])
