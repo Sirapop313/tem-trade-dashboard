@@ -109,40 +109,13 @@ st.markdown("""<style>
 #MainMenu, footer { visibility: hidden; }
 [data-testid="stToolbar"],
 [data-testid="stDecoration"] { display: none !important; }
-/* Sidebar always visible — higher specificity beats any injected display:none */
-html body [data-testid="stSidebar"] { display: flex !important; }
-html body [data-testid="collapsedControl"] { display: flex !important; }
-
-/* Sidebar collapse button (inside sidebar) */
-[data-testid="stSidebarCollapseButton"] button {
-    background: rgba(124,58,237,0.18) !important;
-    border: 1px solid rgba(124,58,237,0.4) !important;
-    border-radius: 8px !important;
-    color: #C4B5FD !important;
-}
-[data-testid="stSidebarCollapseButton"] button:hover {
-    background: rgba(124,58,237,0.35) !important;
-}
-/* Expand button shown when sidebar is collapsed — very visible purple pill */
-[data-testid="collapsedControl"] {
-    position: fixed !important;
-    left: 0 !important;
-    top: 50% !important;
-    transform: translateY(-50%) !important;
-    z-index: 9999 !important;
-    background: #7C3AED !important;
-    border-radius: 0 12px 12px 0 !important;
-    box-shadow: 4px 0 16px rgba(124,58,237,0.5) !important;
-    padding: 6px 2px !important;
-}
-[data-testid="collapsedControl"] button {
-    background: transparent !important;
-    border: none !important;
-    color: #fff !important;
-    min-width: 32px !important;
-    min-height: 48px !important;
-    font-size: 1.2rem !important;
-}
+/* No sidebar. It only repeated what the navbar already shows — logo, app name,
+   email, logout — and once collapsed it could not be reopened, because the
+   reopen control lives in stHeader and this app hides that. The rules that used
+   to force it visible and restyle its collapse/expand buttons went with it. */
+[data-testid="stSidebar"],
+[data-testid="stSidebarCollapseButton"],
+[data-testid="collapsedControl"] { display: none !important; }
 
 .stApp {
     background-color: #060C18 !important;
@@ -161,48 +134,6 @@ html body [data-testid="collapsedControl"] { display: flex !important; }
 [data-testid="stMain"] { background: #060C18 !important; }
 .main .block-container { max-width: 1400px; padding-top: 1.5rem; }
 
-/* Sidebar */
-[data-testid="stSidebar"] {
-    background: #09111F !important;
-    border-right: 1px solid rgba(124,58,237,0.18) !important;
-}
-[data-testid="stSidebar"] * { font-family: 'Plus Jakarta Sans', sans-serif !important; }
-/* Gradient accent bar at top of sidebar */
-[data-testid="stSidebarContent"]::before {
-    content: '';
-    display: block;
-    height: 3px;
-    background: linear-gradient(90deg, #7C3AED, #1D4ED8, #0D9488);
-    border-radius: 0 0 2px 2px;
-    margin-bottom: 1rem;
-}
-/* Sidebar nav items */
-[data-testid="stSidebar"] [data-baseweb="radio"] label {
-    border-radius: 8px !important;
-    padding: 5px 10px !important;
-    margin: 2px 0 !important;
-    transition: background .15s !important;
-}
-[data-testid="stSidebar"] [data-baseweb="radio"] label:hover {
-    background: rgba(124,58,237,0.1) !important;
-}
-[data-testid="stSidebar"] [data-baseweb="radio"] [data-checked="true"] ~ div {
-    color: #A78BFA !important;
-}
-/* Sidebar logout button */
-[data-testid="stSidebar"] [data-testid="stButton"] button {
-    background: transparent !important;
-    border: 1px solid rgba(124,58,237,0.28) !important;
-    color: var(--it-muted) !important;
-    border-radius: 8px !important;
-    font-size: 0.82rem !important;
-    transition: all .15s !important;
-}
-[data-testid="stSidebar"] [data-testid="stButton"] button:hover {
-    background: rgba(124,58,237,0.1) !important;
-    border-color: var(--it-accent) !important;
-    color: var(--it-text) !important;
-}
 
 /* Page header */
 .page-title {
@@ -1532,28 +1463,29 @@ header[data-testid="stHeader"]{{display:none!important}}
 
 
 # -- Sidebar (branding + account only, no nav) --
-def render_sidebar(logged_in: bool = True) -> None:
-    with st.sidebar:
-        if _LOGO_B64:
-            st.markdown(
-                f'<img src="data:image/png;base64,{_LOGO_B64}" '
-                f'style="height:36px;display:block;margin:0.5rem auto 0.25rem">',
-                unsafe_allow_html=True,
-            )
-        st.markdown(
-            '<p style="text-align:center;font-family:Syne,sans-serif;'
-            'font-weight:700;font-size:0.95rem;color:#E2E8F0;margin:0 0 0.25rem">Investment Tracker</p>',
-            unsafe_allow_html=True,
-        )
-        st.markdown("---")
-        if logged_in and "sb_session" in st.session_state:
-            email = st.session_state["sb_session"]["user"]["email"]
-            st.caption(f"👤 {email}")
-            if st.button("ออกจากระบบ", use_container_width=True):
-                del st.session_state["sb_session"]
-                st.query_params.pop("_s", None)
-                st.rerun()
-        st.caption("Tim.fin Personal OS")
+def render_logout_target(logged_in: bool) -> None:
+    """The real logout button, kept off-screen.
+
+    The navbar's account menu is HTML injected into the parent document, so it
+    cannot touch session state itself — doLogout() finds a Streamlit button by
+    its label text and clicks it. That button used to sit in the sidebar; with
+    the sidebar gone it lives here, moved out of view rather than hidden with
+    display:none so the synthetic click still reaches React.
+    """
+    if not (logged_in and "sb_session" in st.session_state):
+        return
+    # Streamlit stamps a keyed widget's container with .st-key-<key>
+    # (convertKeyToClassName in its bundle) — the only stable hook onto one widget.
+    st.markdown(
+        '<style>.st-key-tfin_real_logout{position:absolute!important;'
+        'left:-9999px!important;top:0!important;height:1px!important;'
+        'overflow:hidden!important;}</style>',
+        unsafe_allow_html=True,
+    )
+    if st.button("ออกจากระบบ", key="tfin_real_logout"):
+        del st.session_state["sb_session"]
+        st.query_params.pop("_s", None)
+        st.rerun()
 
 
 # -- Page 1: Overview --
@@ -3223,7 +3155,6 @@ def main():
                     st.query_params["_s"] = s["refresh_token"]
 
     _logged_in = not _use_sb() or is_logged_in()
-    render_sidebar(logged_in=_logged_in)
 
     if not _logged_in:
         page_login()
@@ -3276,6 +3207,8 @@ def main():
                     key="display_currency", label_visibility="collapsed")
     st.radio("", ["แสดงยอด", "ซ่อนยอด"], horizontal=True,
              key="amount_visibility", label_visibility="collapsed")
+
+    render_logout_target(_logged_in)
 
     # -- Inject navbar (HTML + CSS + JS) into parent document via window.parent --
     _components.html(
