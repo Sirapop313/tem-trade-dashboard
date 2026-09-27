@@ -85,173 +85,186 @@ _svg_b64 = _b64.b64encode(_svg_raw.encode()).decode()
 
 # -- CSS --
 st.markdown(
+    # IBM Plex Sans Thai covers Thai AND Latin in one family. The previous pair
+    # (Syne + Plus Jakarta Sans) is Latin-only, so every Thai string — which is most
+    # of this UI — fell through to whatever face the OS picked, and headings rendered
+    # in a different family from the body text. Mono carries every figure so columns
+    # of money line up without per-table tabular-nums.
     '<link rel="preconnect" href="https://fonts.googleapis.com">'
+    '<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>'
     '<link rel="stylesheet" href="https://fonts.googleapis.com/css2?'
-    'family=Syne:wght@400;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap">',
+    'family=IBM+Plex+Sans+Thai:wght@400;500;600;700'
+    '&family=IBM+Plex+Mono:wght@500;600&display=swap">',
     unsafe_allow_html=True,
 )
 st.markdown("""<style>
-/* Tokens */
+/* ── Tokens ────────────────────────────────────────────────────────────────
+   Ground is a neutral near-black, not navy: depth now comes from surfaces
+   getting lighter (bg → surface → surface2 → surface3) instead of a purple
+   border on every card, which is what made every panel shout at once.
+   Accent is reserved for things you can interact with; gold is for the one
+   thing on a screen that must be noticed.
+   Both themes are defined here and nowhere else — a colour written inline
+   somewhere else cannot follow the theme, which is why Light only ever
+   changed the login card.
+   ─────────────────────────────────────────────────────────────────────────── */
 :root {
-  --it-bg:      #080F1C;
-  --it-sidebar: #09111F;
-  --it-card:    #0C1828;
-  --it-border:  #192537;
-  --it-text:    #E2E8F0;
-  --it-muted:   #64748B;
-  --it-accent:  #7C3AED;
-  --it-accent2: #1D4ED8;
-  --it-green:   #22C55E;
-  --it-red:     #EF4444;
+  --it-bg:        #0B0C0F;
+  --it-surface:   #14161B;
+  --it-surface2:  #1B1E25;
+  --it-surface3:  #23262F;
+  --it-border:    rgba(255,255,255,0.07);
+  --it-border2:   rgba(255,255,255,0.13);
+  --it-text:      #E8EAED;
+  --it-dim:       #9BA1AC;
+  --it-muted:     #6B7280;
+  --it-accent:    #7C6BFF;
+  --it-accent-sm: rgba(124,107,255,0.14);
+  --it-accent-md: rgba(124,107,255,0.30);
+  --it-gold:      #E8B54B;
+  --it-green:     #22C55E;
+  --it-red:       #F04438;
+  --it-shadow:    0 18px 44px rgba(0,0,0,0.45);
+  /* aliases kept so the rules already written against the old names still work */
+  --it-card:      var(--it-surface);
+  --it-sidebar:   var(--it-surface);
+  --it-accent2:   #2563EB;
+}
+
+html[data-theme="light"] {
+  --it-bg:        #F6F7F9;
+  --it-surface:   #FFFFFF;
+  --it-surface2:  #F0F2F5;
+  --it-surface3:  #E4E7EC;
+  --it-border:    rgba(0,0,0,0.08);
+  --it-border2:   rgba(0,0,0,0.15);
+  --it-text:      #15171C;
+  --it-dim:       #5C6472;
+  --it-muted:     #8A919E;
+  --it-accent:    #5B4BE8;
+  --it-accent-sm: rgba(91,75,232,0.10);
+  --it-accent-md: rgba(91,75,232,0.24);
+  --it-gold:      #A9750B;
+  --it-green:     #15803D;
+  --it-red:       #DC2626;
+  --it-shadow:    0 14px 32px rgba(15,23,42,0.10);
 }
 
 /* Base */
 #MainMenu, footer { visibility: hidden; }
 [data-testid="stToolbar"],
 [data-testid="stDecoration"] { display: none !important; }
-/* Sidebar always visible — higher specificity beats any injected display:none */
-html body [data-testid="stSidebar"] { display: flex !important; }
-html body [data-testid="collapsedControl"] { display: flex !important; }
+/* The sidebar is gone: it only ever repeated what the navbar already shows
+   (logo, app name, email, logout) and it could not be reopened once collapsed,
+   because the reopen control lives in stHeader and this app hides that. All the
+   CSS that used to force it visible and restyle its collapse/expand buttons went
+   with it — the whole class of bugs disappears with the panel. */
+[data-testid="stSidebar"],
+[data-testid="stSidebarCollapseButton"],
+[data-testid="collapsedControl"] { display: none !important; }
 
-/* Sidebar collapse button (inside sidebar) */
-[data-testid="stSidebarCollapseButton"] button {
-    background: rgba(124,58,237,0.18) !important;
-    border: 1px solid rgba(124,58,237,0.4) !important;
-    border-radius: 8px !important;
-    color: #C4B5FD !important;
-}
-[data-testid="stSidebarCollapseButton"] button:hover {
-    background: rgba(124,58,237,0.35) !important;
-}
-/* Expand button shown when sidebar is collapsed — very visible purple pill */
-[data-testid="collapsedControl"] {
-    position: fixed !important;
-    left: 0 !important;
-    top: 50% !important;
-    transform: translateY(-50%) !important;
-    z-index: 9999 !important;
-    background: #7C3AED !important;
-    border-radius: 0 12px 12px 0 !important;
-    box-shadow: 4px 0 16px rgba(124,58,237,0.5) !important;
-    padding: 6px 2px !important;
-}
-[data-testid="collapsedControl"] button {
-    background: transparent !important;
-    border: none !important;
-    color: #fff !important;
-    min-width: 32px !important;
-    min-height: 48px !important;
-    font-size: 1.2rem !important;
-}
+/* Plain ground. The candle watermark, the two grid overlays and the purple glow
+   that used to sit here were four decorative layers competing with the data —
+   a flat surface lets the numbers be the only thing with contrast. */
+.stApp { background: var(--it-bg) !important; color: var(--it-text); }
 
-.stApp {
-    background-color: #060C18 !important;
-    background-image:
-        url('data:image/svg+xml;base64,__CANDLE_SVG__'),
-        linear-gradient(rgba(124,58,237,0.042) 1px, transparent 1px),
-        linear-gradient(90deg, rgba(29,78,216,0.028) 1px, transparent 1px),
-        radial-gradient(ellipse 100% 55% at 55% -10%, rgba(124,58,237,0.13) 0%, transparent 65%) !important;
-    background-size: 72% 62%, 44px 44px, 44px 44px, 100% 100% !important;
-    background-position: bottom right, 0 0, 0 0, 0 0 !important;
-    background-repeat: no-repeat, repeat, repeat, no-repeat !important;
-    background-attachment: fixed, fixed, fixed, fixed !important;
-    font-family: 'Plus Jakarta Sans', sans-serif !important;
+/* Streamlit declares font-family on elements deep in its tree, so a rule on
+   .stApp alone never reaches the text — family does not inherit past an explicit
+   declaration. These three rules are ordered by rising specificity on purpose:
+   !important ties are broken by specificity, so the base must stay at (0,1,0)
+   or it outranks the mono rule below and every figure renders in the sans face. */
+.stApp, .stApp * {
+    font-family: 'IBM Plex Sans Thai', system-ui, -apple-system, sans-serif !important;
+}
+/* icon and math faces are ligature fonts — forcing a text face breaks the glyphs */
+.stApp [class*="material-symbols"], .stApp .katex, .stApp .katex * {
+    font-family: 'Material Symbols Rounded', KaTeX_Main, serif !important;
+}
+/* figures in mono: money lines up column to column and digits stop shifting
+   as values update — (0,2,0) beats the base rule above */
+.stApp [data-testid="stMetricValue"], .stApp [data-testid="stMetricValue"] *,
+.stApp [data-testid="stMetricDelta"], .stApp [data-testid="stMetricDelta"] *,
+.stApp [data-testid="stDataFrame"] [role="gridcell"],
+.stApp [data-testid="stDataFrame"] [role="columnheader"],
+.stApp .mono, .stApp .mono * {
+    font-family: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace !important;
+    font-variant-numeric: tabular-nums !important;
+}
+.stApp [data-testid="stMetricValue"], .stApp [data-testid="stMetricValue"] * {
+    font-size: 1.6rem !important; font-weight: 600 !important;
+    letter-spacing: -0.03em !important; color: var(--it-text) !important;
+}
+.stApp [data-testid="stMetricLabel"], .stApp [data-testid="stMetricLabel"] * {
+    font-size: 0.68rem !important; font-weight: 600 !important;
+    letter-spacing: 0.09em !important; text-transform: uppercase !important;
+    color: var(--it-dim) !important;
 }
 /* Content area: solid bg so SVG decoration doesn't bleed through content */
-[data-testid="stMain"] { background: #060C18 !important; }
+/* was hardcoded #060C18, which covered the whole content area and is the single
+   reason Light only ever reached the login card */
+[data-testid="stMain"] { background: var(--it-bg) !important; }
 .main .block-container { max-width: 1400px; padding-top: 1.5rem; }
 
-/* Sidebar */
-[data-testid="stSidebar"] {
-    background: #09111F !important;
-    border-right: 1px solid rgba(124,58,237,0.18) !important;
+/* Streamlit renders its own widgets from config.toml's base theme, which is fixed
+   at startup and cannot follow a runtime toggle — so widget text has to be pulled
+   onto the tokens by hand or half the labels vanish in Light. */
+.stApp [data-testid="stWidgetLabel"] p,
+.stApp [data-baseweb="radio"] div,
+.stApp [data-baseweb="checkbox"] span,
+.stApp [data-testid="stMarkdownContainer"] p,
+.stApp [data-testid="stMarkdownContainer"] li,
+.stApp [data-testid="stExpander"] summary,
+.stApp [data-testid="stExpander"] summary * { color: var(--it-text) !important; }
+.stApp [data-testid="stCaptionContainer"],
+.stApp [data-testid="stCaptionContainer"] * { color: var(--it-dim) !important; }
+.stApp [data-baseweb="select"] div,
+.stApp [data-baseweb="select"] span,
+.stApp [data-baseweb="input"] input,
+.stApp [data-baseweb="base-input"] input { color: var(--it-text) !important; }
+.stApp [data-baseweb="select"] > div,
+.stApp [data-baseweb="input"],
+.stApp [data-baseweb="base-input"],
+.stApp [data-baseweb="textarea"] {
+    background: var(--it-surface2) !important;
+    border-color: var(--it-border) !important;
 }
-[data-testid="stSidebar"] * { font-family: 'Plus Jakarta Sans', sans-serif !important; }
-/* Gradient accent bar at top of sidebar */
-[data-testid="stSidebarContent"]::before {
-    content: '';
-    display: block;
-    height: 3px;
-    background: linear-gradient(90deg, #7C3AED, #1D4ED8, #0D9488);
-    border-radius: 0 0 2px 2px;
-    margin-bottom: 1rem;
-}
-/* Sidebar nav items */
-[data-testid="stSidebar"] [data-baseweb="radio"] label {
-    border-radius: 8px !important;
-    padding: 5px 10px !important;
-    margin: 2px 0 !important;
-    transition: background .15s !important;
-}
-[data-testid="stSidebar"] [data-baseweb="radio"] label:hover {
-    background: rgba(124,58,237,0.1) !important;
-}
-[data-testid="stSidebar"] [data-baseweb="radio"] [data-checked="true"] ~ div {
-    color: #A78BFA !important;
-}
-/* Sidebar logout button */
-[data-testid="stSidebar"] [data-testid="stButton"] button {
-    background: transparent !important;
-    border: 1px solid rgba(124,58,237,0.28) !important;
-    color: var(--it-muted) !important;
-    border-radius: 8px !important;
-    font-size: 0.82rem !important;
-    transition: all .15s !important;
-}
-[data-testid="stSidebar"] [data-testid="stButton"] button:hover {
-    background: rgba(124,58,237,0.1) !important;
-    border-color: var(--it-accent) !important;
-    color: var(--it-text) !important;
+/* radio/checkbox marks: the unselected mark is drawn in the base theme's ink */
+.stApp [data-baseweb="radio"] [data-testid="stRadioIcon"],
+.stApp [role="radio"] > div:first-child,
+.stApp [role="checkbox"] > div:first-child {
+    background: var(--it-surface2) !important;
+    border-color: var(--it-border2) !important;
 }
 
 /* Page header */
 .page-title {
-    font-size: 1.8rem; font-weight: 800; margin: 0; line-height: 1.15;
-    font-family: 'Syne', sans-serif !important;
-    background: linear-gradient(135deg, #C4B5FD 0%, #93C5FD 100%);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
+    font-size: 1.8rem; font-weight: 700; margin: 0; line-height: 1.15;
+    letter-spacing: -0.03em; color: var(--it-text);
 }
-.page-sub { font-size: .82rem; color: var(--it-muted); margin-top: 3px; }
+.page-sub { font-size: .82rem; color: var(--it-dim); margin-top: 3px; }
 
 /* Section labels */
 .section-label {
-    font-size: 0.65rem; font-weight: 700; letter-spacing: 0.14em;
-    text-transform: uppercase; color: var(--it-accent);
+    font-size: 0.65rem; font-weight: 600; letter-spacing: 0.14em;
+    text-transform: uppercase; color: var(--it-dim);
     padding-bottom: .45rem;
-    border-bottom: 1px solid rgba(124,58,237,0.22);
+    border-bottom: 1px solid var(--it-border);
     margin-bottom: .75rem;
 }
 
-/* Metric cards */
+/* Metric cards — flat surface, no purple gradient and no accent left-edge.
+   Depth reads from the surface sitting above the ground; the old treatment
+   outlined every card in purple so nothing could stand out from anything. */
 [data-testid="stMetric"] {
-    background: linear-gradient(135deg, rgba(124,58,237,0.08) 0%, var(--it-card) 100%) !important;
-    border: 1px solid rgba(124,58,237,0.18) !important;
-    border-left: 3px solid rgba(124,58,237,0.7) !important;
-    border-radius: 12px !important;
-    padding: 18px 20px !important;
-    transition: transform .15s, box-shadow .15s !important;
+    background: var(--it-surface) !important;
+    border: 1px solid var(--it-border) !important;
+    border-radius: 14px !important;
+    padding: 15px 17px !important;
+    transition: border-color .15s, transform .15s !important;
 }
 [data-testid="stMetric"]:hover {
-    transform: translateY(-2px) !important;
-    box-shadow: 0 8px 28px rgba(124,58,237,0.18) !important;
-}
-[data-testid="stMetricValue"] {
-    font-size: 1.6rem !important;
-    font-weight: 700 !important;
-    color: var(--it-text) !important;
-    font-family: 'Plus Jakarta Sans', sans-serif !important;
-    font-variant-numeric: tabular-nums !important;
-    letter-spacing: -0.01em !important;
-}
-[data-testid="stMetricLabel"] {
-    font-size: 0.62rem !important;
-    color: var(--it-muted) !important;
-    text-transform: uppercase !important;
-    letter-spacing: 0.1em !important;
-    font-weight: 700 !important;
-    font-family: 'Plus Jakarta Sans', sans-serif !important;
+    transform: translateY(-1px) !important;
+    border-color: var(--it-border2) !important;
 }
 
 /* Expanders */
@@ -268,7 +281,7 @@ html body [data-testid="collapsedControl"] { display: flex !important; }
 }
 [data-testid="stExpander"] summary {
     padding: 10px 16px !important;
-    font-family: 'Plus Jakarta Sans', sans-serif !important;
+    font-family: 'IBM Plex Sans Thai', sans-serif !important;
     font-weight: 600 !important;
 }
 
@@ -281,7 +294,7 @@ html body [data-testid="collapsedControl"] { display: flex !important; }
     border: 1px solid var(--it-border) !important;
     border-radius: 8px !important;
     color: var(--it-text) !important;
-    font-family: 'Plus Jakarta Sans', sans-serif !important;
+    font-family: 'IBM Plex Sans Thai', sans-serif !important;
 }
 [data-testid="stTextInput"] input:focus,
 [data-testid="stNumberInput"] input:focus,
@@ -312,7 +325,7 @@ html body [data-testid="collapsedControl"] { display: flex !important; }
     color: var(--it-muted) !important;
     font-weight: 500 !important;
     font-size: 0.9rem !important;
-    font-family: 'Plus Jakarta Sans', sans-serif !important;
+    font-family: 'IBM Plex Sans Thai', sans-serif !important;
     transition: background .15s !important;
 }
 [data-baseweb="tab"][aria-selected="true"] {
@@ -330,7 +343,7 @@ html body [data-testid="collapsedControl"] { display: flex !important; }
     border: none !important;
     border-radius: 10px !important;
     font-weight: 600 !important;
-    font-family: 'Plus Jakarta Sans', sans-serif !important;
+    font-family: 'IBM Plex Sans Thai', sans-serif !important;
     width: 100%;
     transition: transform .15s, box-shadow .15s;
 }
@@ -346,14 +359,14 @@ html body [data-testid="collapsedControl"] { display: flex !important; }
     border: 1px solid rgba(124,58,237,0.3) !important;
     color: #C4B5FD !important;
     border-radius: 8px !important;
-    font-family: 'Plus Jakarta Sans', sans-serif !important;
+    font-family: 'IBM Plex Sans Thai', sans-serif !important;
     font-weight: 500 !important;
     transition: all .15s !important;
 }
 [data-testid="stMain"] [data-testid="stButton"] button:hover {
     background: rgba(124,58,237,0.22) !important;
     border-color: var(--it-accent) !important;
-    color: #E2E8F0 !important;
+    color: var(--it-text) !important;
     transform: translateY(-1px) !important;
 }
 
@@ -412,8 +425,18 @@ def sb_update_password(new_pass: str) -> tuple[bool, str]:
         return False, str(e)
 
 
+def ui_theme() -> str:
+    """One theme for the whole app, login page included.
+
+    The old flag was named login_theme and read only inside page_login(), so the
+    toggle changed that one card and nothing else — and never survived into the
+    app at all.
+    """
+    return st.session_state.get("ui_theme", "dark")
+
+
 def _inject_navbar(logo_src: str, email: str, curr: str, rate: float,
-                   hide_amt: bool = False) -> str:
+                   hide_amt: bool = False, theme: str = "dark") -> str:
     """Inject navbar HTML+CSS+JS into the parent page via window.parent (components.html iframe)."""
     thb_cls = "on" if curr == "THB" else ""
     usd_cls = "on" if curr == "USD" else ""
@@ -440,6 +463,9 @@ def _inject_navbar(logo_src: str, email: str, curr: str, rate: float,
         f'<button class="tfin-eye{" off" if hide_amt else ""}" id="tfin-eye" '
         f'title="{"แสดงยอดเงิน" if hide_amt else "ซ่อนยอดเงิน"}">'
         f'{"🙈" if hide_amt else "👁"}</button>'
+        f'<button class="tfin-eye" id="tfin-theme" '
+        f'title="{"สลับเป็นโหมดสว่าง" if theme == "dark" else "สลับเป็นโหมดมืด"}">'
+        f'{"☾" if theme == "dark" else "☀"}</button>'
         f'<div class="tfin-aw">'
         f'<button class="tfin-ab" id="tfin-acct-btn" title="{email}">👤</button>'
         f'<div class="tfin-dd" id="tfin-acct-dd">'
@@ -451,30 +477,30 @@ def _inject_navbar(logo_src: str, email: str, curr: str, rate: float,
 
     nav_css = (
         "#tfin-nav{position:fixed!important;top:0!important;left:0!important;right:0!important;"
-        "height:58px!important;background:rgba(6,11,22,0.97)!important;"
+        "height:58px!important;background:var(--it-surface)!important;"
         "backdrop-filter:blur(20px)!important;-webkit-backdrop-filter:blur(20px)!important;"
-        "border-bottom:1px solid rgba(124,58,237,0.18)!important;"
+        "border-bottom:1px solid var(--it-border)!important;"
         "display:flex!important;align-items:center!important;justify-content:space-between!important;"
         "padding:0 20px!important;z-index:2147483647!important;"
-        "box-shadow:0 2px 28px rgba(0,0,0,0.5)!important;"
-        "font-family:'Plus Jakarta Sans','Syne',sans-serif!important;gap:10px!important;}"
+        "box-shadow:0 1px 0 var(--it-border),0 8px 24px rgba(0,0,0,0.18)!important;"
+        "font-family:'IBM Plex Sans Thai',sans-serif!important;gap:10px!important;}"
         ".tfin-brand{display:flex;align-items:center;gap:8px;flex-shrink:0;}"
         ".tfin-brand-img{height:30px;width:30px;border-radius:6px;object-fit:cover;}"
-        ".tfin-brand-name{font-size:.88rem;font-weight:700;color:#E2E8F0;letter-spacing:-.02em;}"
+        ".tfin-brand-name{font-size:.86rem;font-weight:600;color:var(--it-text);letter-spacing:-.02em;}"
         ".tfin-nav-tabs{display:flex;align-items:center;gap:2px;flex:1;justify-content:center;}"
-        ".tfin-nt{background:transparent;border:none;cursor:pointer;color:rgba(148,163,184,.7);"
+        ".tfin-nt{background:transparent;border:none;cursor:pointer;color:var(--it-dim);"
         "font-size:.8rem;font-weight:500;padding:6px 13px;border-radius:8px;transition:all .15s;"
-        "white-space:nowrap;font-family:'Plus Jakarta Sans',sans-serif;line-height:1;}"
+        "white-space:nowrap;font-family:'IBM Plex Sans Thai',sans-serif;line-height:1;}"
         ".tfin-nt:hover{background:rgba(124,58,237,.12);color:#e2e8f0;}"
-        ".tfin-nt.on{background:rgba(124,58,237,.22);color:#C4B5FD;font-weight:700;"
+        ".tfin-nt.on{background:var(--it-accent-sm);color:var(--it-accent);font-weight:600;"
         "box-shadow:0 0 0 1px rgba(124,58,237,.3) inset;}"
         ".tfin-nav-right{display:flex;align-items:center;gap:10px;flex-shrink:0;}"
-        ".tfin-rate{font-size:.7rem;color:rgba(148,163,184,.5);}"
-        ".tfin-curr-wrap{display:flex;background:rgba(255,255,255,.05);border-radius:7px;padding:3px;}"
+        ".tfin-rate{font-size:.7rem;color:var(--it-muted);}"
+        ".tfin-curr-wrap{display:flex;background:var(--it-surface2);border-radius:999px;padding:3px;}"
         ".tfin-cb{background:transparent;border:none;cursor:pointer;font-size:.75rem;font-weight:600;"
         "padding:4px 10px;border-radius:5px;transition:all .14s;color:rgba(148,163,184,.6);"
-        "font-family:'Plus Jakarta Sans',sans-serif;}"
-        ".tfin-cb.on{background:rgba(124,58,237,.38);color:#C4B5FD;}"
+        "font-family:'IBM Plex Sans Thai',sans-serif;}"
+        ".tfin-cb.on{background:var(--it-accent);color:#fff;}"
         ".tfin-eye{background:rgba(255,255,255,.05);border:1px solid rgba(124,58,237,.2);"
         "border-radius:7px;cursor:pointer;font-size:.82rem;line-height:1;padding:6px 9px;"
         "transition:all .14s;flex-shrink:0;}"
@@ -486,12 +512,12 @@ def _inject_navbar(logo_src: str, email: str, curr: str, rate: float,
         "display:flex;align-items:center;justify-content:center;transition:all .15s;padding:0;}"
         ".tfin-ab:hover{background:rgba(124,58,237,.24);}"
         ".tfin-dd{display:none;position:fixed;top:58px;right:20px;min-width:192px;"
-        "background:#0C1828;border:1px solid rgba(124,58,237,.22);border-radius:12px;"
+        "background:var(--it-surface);border:1px solid var(--it-border2);border-radius:14px;"
         "padding:10px;box-shadow:0 10px 40px rgba(0,0,0,.65);z-index:2147483646;}"
         ".tfin-dd-email{font-size:.74rem;color:rgba(148,163,184,.65);padding:4px 8px 6px;word-break:break-all;}"
         ".tfin-dd-hr{border:none;border-top:1px solid rgba(124,58,237,.14);margin:5px 0;}"
         ".tfin-ddbtn{display:block;width:100%;text-align:left;background:transparent;border:none;"
-        "color:#E2E8F0;font-size:.79rem;padding:7px 9px;border-radius:7px;"
+        "color:var(--it-text);font-size:.79rem;padding:7px 9px;border-radius:8px;"
         "cursor:pointer;font-family:inherit;transition:background .12s;}"
         ".tfin-ddbtn:hover{background:rgba(124,58,237,.14);}"
         ".tfin-ddbtn.red{color:#f87171;}"
@@ -513,7 +539,7 @@ def _inject_navbar(logo_src: str, email: str, curr: str, rate: float,
         # a full-width blur is cheaper on phones anyway).
         "#tfin-nav{height:50px!important;padding:0 10px!important;gap:6px!important;"
         "backdrop-filter:none!important;-webkit-backdrop-filter:none!important;"
-        "background:#070D19!important;}"
+        "background:var(--it-surface)!important;}"
         ".tfin-brand-name{display:none!important;}"
         ".tfin-brand-img{height:26px!important;width:26px!important;}"
         ".tfin-rate{font-size:.62rem!important;white-space:nowrap;}"
@@ -549,6 +575,7 @@ def _inject_navbar(logo_src: str, email: str, curr: str, rate: float,
     thb_js = "true" if curr == "THB" else "false"
     usd_js = "true" if curr == "USD" else "false"
     hide_js = "true" if hide_amt else "false"
+    theme_js = json.dumps(theme)
     rate_js = json.dumps(f"฿{rate_str}/USD")
 
     return f"""<script>
@@ -577,6 +604,15 @@ def _inject_navbar(logo_src: str, email: str, curr: str, rate: float,
     eye.textContent = {hide_js} ? '🙈' : '👁';
     eye.title = {hide_js} ? 'แสดงยอดเงิน' : 'ซ่อนยอดเงิน';
   }}
+  /* Python owns the theme; this stamps it on <html> so the token blocks apply.
+     Set from here because st.markdown cannot reach the document element. */
+  doc.documentElement.setAttribute('data-theme', {theme_js});
+  var thBtn = doc.getElementById('tfin-theme');
+  if(thBtn){{
+    var isDark = {theme_js} === 'dark';
+    thBtn.textContent = isDark ? '☾' : '☀';
+    thBtn.title = isDark ? 'สลับเป็นโหมดสว่าง' : 'สลับเป็นโหมดมืด';
+  }}
 
   /* 4 — Hide Streamlit helper widgets (inline setProperty beats all CSS rules) */
   function hide(el){{ if(el) el.style.setProperty('display','none','important'); }}
@@ -584,7 +620,7 @@ def _inject_navbar(logo_src: str, email: str, curr: str, rate: float,
     /* radio — the two that only exist to be driven by the navbar buttons */
     doc.querySelectorAll('[data-testid="stRadio"]').forEach(function(el){{
       var t = el.textContent||'';
-      if(t.includes('THB') || t.includes('ซ่อนยอด')) hide(el);
+      if(t.includes('THB') || t.includes('ซ่อนยอด') || t.includes('สว่าง')) hide(el);
     }});
     /* hide any stRadio that appears before the tabs wrapper */
     var stTabsEl=doc.querySelector('[data-testid="stTabs"]');
@@ -619,6 +655,14 @@ def _inject_navbar(logo_src: str, email: str, curr: str, rate: float,
     }});
     var t=doc.getElementById('cb-thb'); if(t) t.classList.toggle('on',val==='THB');
     var u=doc.getElementById('cb-usd'); if(u) u.classList.toggle('on',val==='USD');
+  }}
+
+  /* Theme toggle — drives the hidden "มืด/สว่าง" radio, same trick as setCurr */
+  function toggleTheme(){{
+    var want = {theme_js} === 'dark' ? 'สว่าง' : 'มืด';
+    doc.querySelectorAll('[data-testid="stRadio"] label').forEach(function(l){{
+      if((l.textContent||'').trim()===want) l.click();
+    }});
   }}
 
   /* Privacy toggle — drives the hidden "แสดงยอด/ซ่อนยอด" radio, same trick as setCurr */
@@ -675,6 +719,7 @@ def _inject_navbar(logo_src: str, email: str, curr: str, rate: float,
       if(tgt.closest && tgt.closest('#cb-thb')){{ setCurr('THB'); e.stopPropagation(); return; }}
       if(tgt.closest && tgt.closest('#cb-usd')){{ setCurr('USD'); e.stopPropagation(); return; }}
       if(tgt.closest && tgt.closest('#tfin-eye')){{ toggleEye(); e.stopPropagation(); return; }}
+      if(tgt.closest && tgt.closest('#tfin-theme')){{ toggleTheme(); e.stopPropagation(); return; }}
       if(tgt.closest && tgt.closest('#tfin-acct-btn')){{ e.stopPropagation(); toggleAcct(); return; }}
       if(tgt.closest && tgt.closest('#tfin-logout-btn')){{ doLogout(); e.stopPropagation(); return; }}
     }};
@@ -1020,15 +1065,29 @@ def days_held_str(entry_date_str: str) -> str:
 
 
 # -- Chart Helpers --
+# Plotly draws to SVG, so the CSS tokens never reach it — chart colours have to be
+# resolved in Python. These mirror the token values for the active theme.
+def _ch_text() -> str:
+    return "#15171C" if ui_theme() == "light" else "#E8EAED"
+
+
+def _ch_dim() -> str:
+    return "#5C6472" if ui_theme() == "light" else "#9BA1AC"
+
+
+def _ch_grid() -> str:
+    return "rgba(0,0,0,0.08)" if ui_theme() == "light" else "rgba(255,255,255,0.06)"
+
+
 CHART_LAYOUT = dict(
     plot_bgcolor="rgba(0,0,0,0)",
     paper_bgcolor="rgba(0,0,0,0)",
-    font=dict(color="#e2e8f0", size=13),
+    font=dict(color=_ch_text(), size=13),
     showlegend=False,
     margin=dict(t=32, b=8, l=8, r=8),
-    xaxis=dict(showgrid=False, tickfont=dict(size=12, color="#94a3b8")),
-    yaxis=dict(showgrid=True, gridcolor="rgba(255,255,255,0.06)",
-               tickfont=dict(size=11, color="#64748b"), zeroline=True,
+    xaxis=dict(showgrid=False, tickfont=dict(size=12, color=_ch_dim())),
+    yaxis=dict(showgrid=True, gridcolor=_ch_grid(),
+               tickfont=dict(size=11, color=_ch_dim()), zeroline=True,
                zerolinecolor="rgba(255,255,255,0.15)"),
 )
 
@@ -1039,17 +1098,17 @@ def allocation_pie(labels, vals_thb, disp, rate, title, height=320):
               "#a855f7","#ec4899","#84cc16","#f97316","#14b8a6"]
     fig = go.Figure(go.Pie(
         labels=labels, values=vals, hole=0.45,
-        textinfo="label+percent", textfont=dict(size=12, color="#e2e8f0"),
+        textinfo="label+percent", textfont=dict(size=12, color=_ch_text()),
         marker=dict(colors=colors[:len(labels)],
                     line=dict(color="rgba(0,0,0,0.3)", width=1)),
     ))
     sym = "฿" if disp == "THB" else "$"
     fig.update_layout(**{**CHART_LAYOUT,
-        "title": dict(text=title, font=dict(size=14, color="#94a3b8"), x=0),
+        "title": dict(text=title, font=dict(size=14, color=_ch_dim()), x=0),
         "height": height, "showlegend": True,
-        "legend": dict(font=dict(color="#94a3b8", size=11), orientation="v"),
+        "legend": dict(font=dict(color=_ch_dim(), size=11), orientation="v"),
         "annotations": [dict(text=money(total, sym), x=0.5, y=0.5,
-                              font=dict(size=15, color="#e2e8f0"), showarrow=False)],
+                              font=dict(size=15, color=_ch_text()), showarrow=False)],
     })
     return fig
 
@@ -1110,10 +1169,10 @@ def portfolio_line_chart(open_items: list, cash_thb: float, rate: float,
         "title": dict(
             text=f"Portfolio Value  "
                  f"<span style='color:{color_pct};font-size:14px'>{sign}{pct:.2f}%</span>",
-            font=dict(size=14, color="#94a3b8"), x=0),
+            font=dict(size=14, color=_ch_dim()), x=0),
         "yaxis_title": f"Value ({sym})", "height": height,
         "yaxis_tickformat": ",.0f",
-        "xaxis": dict(showgrid=False, tickfont=dict(size=11, color="#94a3b8")),
+        "xaxis": dict(showgrid=False, tickfont=dict(size=11, color=_ch_dim())),
     })
     return fig
 
@@ -1182,10 +1241,10 @@ def portfolio_return_chart(open_items: list, rate: float, disp: str, period_labe
         "title": dict(
             text=(f"Return %  <span style='color:{col};font-size:14px'>{sign}{final:.2f}%</span>"
                   f"<br><span style='font-size:10px;color:#64748b'>ราคา-based · ไม่นับเวลาที่ซื้อจริง</span>"),
-            font=dict(size=14, color="#94a3b8"), x=0),
+            font=dict(size=14, color=_ch_dim()), x=0),
         "yaxis_title": "Return (%)", "height": height,
         "yaxis_tickformat": ".2f", "yaxis_ticksuffix": "%",
-        "xaxis": dict(showgrid=False, tickfont=dict(size=11, color="#94a3b8")),
+        "xaxis": dict(showgrid=False, tickfont=dict(size=11, color=_ch_dim())),
         "legend": dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
     })
     return fig
@@ -1327,11 +1386,11 @@ def pnl_bar_chart(labels, vals_thb, disp, rate, title, height=280):
         marker=dict(color=colors, opacity=0.85,
                     line=dict(color="rgba(255,255,255,0.1)", width=1)),
         text=texts, textposition="outside",
-        textfont=dict(size=13, color="#e2e8f0"), cliponaxis=False,
+        textfont=dict(size=13, color=_ch_text()), cliponaxis=False,
     ))
     sym = "฿" if disp == "THB" else "$"
     fig.update_layout(**{**CHART_LAYOUT,
-        "title": dict(text=title, font=dict(size=14, color="#94a3b8"), x=0),
+        "title": dict(text=title, font=dict(size=14, color=_ch_dim()), x=0),
         "yaxis_title": f"P&L ({sym})", "height": height, "yaxis_tickformat": ",.0f",
     })
     if vals:
@@ -1375,9 +1434,7 @@ def page_header(title: str, subtitle: str = "") -> tuple[str, float]:
 
 # -- Login Page --
 def page_login():
-    if "login_theme" not in st.session_state:
-        st.session_state["login_theme"] = "dark"
-    dark = st.session_state["login_theme"] == "dark"
+    dark = ui_theme() == "dark"
 
     if dark:
         page_bg  = "#060C18"
@@ -1439,7 +1496,7 @@ header[data-testid="stHeader"]{{display:none!important}}
     border:1px solid {inp_bdr}!important;
     color:{inp_clr}!important;
     border-radius:8px!important;
-    font-family:'Plus Jakarta Sans',sans-serif!important;
+    font-family:'IBM Plex Sans Thai',sans-serif!important;
 }}
 [data-testid="stTextInput"] input:focus{{
     border-color:#7C3AED!important;
@@ -1457,7 +1514,7 @@ header[data-testid="stHeader"]{{display:none!important}}
     background:transparent!important;border:1px solid {card_bdr}!important;
     color:{sub}!important;border-radius:20px!important;
     font-size:.75rem!important;padding:.25rem 1rem!important;
-    font-family:'Plus Jakarta Sans',sans-serif!important;
+    font-family:'IBM Plex Sans Thai',sans-serif!important;
     width:auto!important;
 }}
 /* blobs */
@@ -1481,7 +1538,7 @@ header[data-testid="stHeader"]{{display:none!important}}
                  if _LOGO_B64 else "")
     st.markdown(f"""
 {logo_html}
-<h1 style="text-align:center;font-family:'Syne',sans-serif;font-size:1.55rem;
+<h1 style="text-align:center;font-family:'IBM Plex Sans Thai',sans-serif;font-size:1.55rem;
     font-weight:800;color:{txt};margin:0 0 .25rem;line-height:1.2">Investment Tracker</h1>
 <p style="text-align:center;color:{sub};font-size:.8rem;margin:0 0 1.1rem">
     ระบบติดตาม Portfolio ส่วนตัว</p>
@@ -1492,7 +1549,8 @@ header[data-testid="stHeader"]{{display:none!important}}
     _c1, _c2, _c3 = st.columns([3, 2, 3])
     with _c2:
         if st.button(tog_lbl, key="login_theme_toggle"):
-            st.session_state["login_theme"] = "light" if dark else "dark"
+            st.session_state["ui_theme"] = "light" if dark else "dark"
+            st.session_state["_theme_pick"] = "สว่าง" if dark else "มืด"
             st.rerun()
 
     tab_in, tab_up = st.tabs(["เข้าสู่ระบบ", "สมัครสมาชิก"])
@@ -1532,28 +1590,30 @@ header[data-testid="stHeader"]{{display:none!important}}
 
 
 # -- Sidebar (branding + account only, no nav) --
-def render_sidebar(logged_in: bool = True) -> None:
-    with st.sidebar:
-        if _LOGO_B64:
-            st.markdown(
-                f'<img src="data:image/png;base64,{_LOGO_B64}" '
-                f'style="height:36px;display:block;margin:0.5rem auto 0.25rem">',
-                unsafe_allow_html=True,
-            )
-        st.markdown(
-            '<p style="text-align:center;font-family:Syne,sans-serif;'
-            'font-weight:700;font-size:0.95rem;color:#E2E8F0;margin:0 0 0.25rem">Investment Tracker</p>',
-            unsafe_allow_html=True,
-        )
-        st.markdown("---")
-        if logged_in and "sb_session" in st.session_state:
-            email = st.session_state["sb_session"]["user"]["email"]
-            st.caption(f"👤 {email}")
-            if st.button("ออกจากระบบ", use_container_width=True):
-                del st.session_state["sb_session"]
-                st.query_params.pop("_s", None)
-                st.rerun()
-        st.caption("Tim.fin Personal OS")
+def render_logout_target(logged_in: bool) -> None:
+    """The real logout button, kept off-screen.
+
+    The navbar's account menu is HTML injected into the parent document, so it
+    cannot mutate session state on its own — its handler clicks a Streamlit button
+    by matching the label text. That button used to live in the sidebar; with the
+    sidebar gone it lives here instead, positioned out of view rather than
+    display:none so the click still reaches React.
+    """
+    if not (logged_in and "sb_session" in st.session_state):
+        return
+    # Streamlit stamps a keyed widget's container with .st-key-<key>
+    # (convertKeyToClassName in its bundle), which is the only stable hook onto
+    # one specific widget.
+    st.markdown(
+        '<style>.st-key-tfin_real_logout{position:absolute!important;'
+        'left:-9999px!important;top:0!important;height:1px!important;'
+        'overflow:hidden!important;}</style>',
+        unsafe_allow_html=True,
+    )
+    if st.button("ออกจากระบบ", key="tfin_real_logout"):
+        del st.session_state["sb_session"]
+        st.query_params.pop("_s", None)
+        st.rerun()
 
 
 # -- Page 1: Overview --
@@ -1961,31 +2021,31 @@ def page_investment(investments: list, trades: list, cash: list, disp: str, rate
             fig_tgt.add_trace(go.Bar(
                 name="Target %", y=t_tickers, x=tgt_pcts, orientation="h",
                 marker_color="rgba(148,163,184,0.25)",
-                marker_line=dict(color="#94a3b8", width=1),
+                marker_line=dict(color=_ch_dim(), width=1),
                 text=[f"{p:.0f}%" for p in tgt_pcts], textposition="inside",
-                textfont=dict(size=11, color="#94a3b8"),
+                textfont=dict(size=11, color=_ch_dim()),
             ))
             fig_tgt.add_trace(go.Bar(
                 name="Current %", y=t_tickers, x=curr_pcts, orientation="h",
                 marker_color=bar_colors, opacity=0.85,
                 text=[f"{p:.1f}%" for p in curr_pcts], textposition="outside",
-                textfont=dict(size=11, color="#e2e8f0"),
+                textfont=dict(size=11, color=_ch_text()),
             ))
             fig_tgt.update_layout(
                 **{**CHART_LAYOUT,
                    "barmode": "overlay",
                    "height": max(200, len(t_tickers) * 45 + 70),
                    "showlegend": True,
-                   "legend": dict(orientation="h", y=1.1, x=0, font=dict(size=11, color="#94a3b8")),
+                   "legend": dict(orientation="h", y=1.1, x=0, font=dict(size=11, color=_ch_dim())),
                    "margin": dict(t=50, b=8, l=8, r=80),
-                   "xaxis": dict(showgrid=True, gridcolor="rgba(255,255,255,0.06)",
-                                 ticksuffix="%", tickfont=dict(size=11, color="#94a3b8")),
-                   "yaxis": dict(showgrid=False, tickfont=dict(size=12, color="#e2e8f0")),
+                   "xaxis": dict(showgrid=True, gridcolor=_ch_grid(),
+                                 ticksuffix="%", tickfont=dict(size=11, color=_ch_dim())),
+                   "yaxis": dict(showgrid=False, tickfont=dict(size=12, color=_ch_text())),
                    "title": dict(
                        text=(f"Current vs Target  "
                              f"<span style='font-size:11px;color:#64748b'>"
                              f"Target รวม {total_tgt:.0f}% · Cash {max(0, 100-total_tgt):.0f}%</span>"),
-                       font=dict(size=13, color="#94a3b8"), x=0),
+                       font=dict(size=13, color=_ch_dim()), x=0),
                 }
             )
             st.plotly_chart(fig_tgt, use_container_width=True)
@@ -2772,12 +2832,12 @@ def page_trade(trades: list, cash: list, disp: str, rate: float):
                     labels=["Win", "Loss"], values=[win_count, loss_count],
                     marker=dict(colors=["#22c55e", "#ef4444"]),
                     hole=0.5, textinfo="percent+value",
-                    textfont=dict(size=13, color="#e2e8f0"),
+                    textfont=dict(size=13, color=_ch_text()),
                 ))
                 fig_pie.update_layout(**{**CHART_LAYOUT, "height": 240,
                     "title": dict(text="Win / Loss Distribution",
-                                  font=dict(size=14, color="#94a3b8"), x=0),
-                    "showlegend": True, "legend": dict(font=dict(color="#94a3b8")),
+                                  font=dict(size=14, color=_ch_dim()), x=0),
+                    "showlegend": True, "legend": dict(font=dict(color=_ch_dim())),
                 })
                 st.plotly_chart(fig_pie, use_container_width=True)
 
@@ -3223,7 +3283,6 @@ def main():
                     st.query_params["_s"] = s["refresh_token"]
 
     _logged_in = not _use_sb() or is_logged_in()
-    render_sidebar(logged_in=_logged_in)
 
     if not _logged_in:
         page_login()
@@ -3276,13 +3335,19 @@ def main():
                     key="display_currency", label_visibility="collapsed")
     st.radio("", ["แสดงยอด", "ซ่อนยอด"], horizontal=True,
              key="amount_visibility", label_visibility="collapsed")
+    st.radio("", ["มืด", "สว่าง"], horizontal=True,
+             key="_theme_pick", label_visibility="collapsed",
+             on_change=lambda: st.session_state.__setitem__(
+                 "ui_theme", "dark" if st.session_state["_theme_pick"] == "มืด" else "light"))
+
+    render_logout_target(_logged_in)
 
     # -- Inject navbar (HTML + CSS + JS) into parent document via window.parent --
     _components.html(
         _inject_navbar(
             f'data:image/png;base64,{_LOGO_B64}' if _LOGO_B64 else "",
             _email, st.session_state.get("display_currency", "THB"), rate,
-            hidden_amounts(),
+            hidden_amounts(), ui_theme(),
         ),
         height=0, scrolling=False,
     )
