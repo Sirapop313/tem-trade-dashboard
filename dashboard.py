@@ -1205,7 +1205,32 @@ def build_cashouts(cash: list) -> list:
     return out
 
 
-def build_activity_log(investments: list, trades: list) -> list:
+def build_deposits(cash: list) -> list:
+    """Money put into the portfolio from outside, newest first.
+
+    The counterpart to build_cashouts(). Before this, the only way to add money
+    was overwriting an account's balance, which left no record — a deposit was
+    indistinguishable from a typo fix or a realised gain, so actual return
+    (value − deposits + withdrawals) could not be computed. Stored per account
+    under "deposits", same jsonb blob, no schema change.
+    """
+    out = []
+    for acc in cash:
+        for d in acc.get("deposits", []):
+            out.append({
+                "date":       d.get("date", ""),
+                "account":    acc.get("name", "—"),
+                "currency":   acc.get("currency", "THB"),
+                "amount":     d.get("amount"),          # in the account's own currency
+                "amount_thb": d.get("amount_thb"),
+                "fx_rate":    d.get("fx_rate"),
+                "note":       d.get("note", ""),
+            })
+    out.sort(key=lambda d: d["date"], reverse=True)
+    return out
+
+
+def build_activity_log(investments: list, trades: list, cash: list | None = None) -> list:
     events = []
     for inv in investments:
         ticker = inv.get("ticker","—")
@@ -1246,6 +1271,22 @@ def build_activity_log(investments: list, trades: list) -> list:
             events.append({"วันที่": t.get("close_date",""), "ประเภท": "📈 Trade",
                 "Action": "🔴 ปิด", "Ticker": f"{ticker} {arr}",
                 "รายละเอียด": f"ปิด @ {t.get('exit_price','—')} · P&L {fmt_pct(t.get('pnl_pct'))} · {t.get('win_loss','')}"})
+    # money moving in and out of the portfolio, so the log shows the whole story
+    for d in build_deposits(cash or []):
+        sym = "$" if d["currency"] == "USD" else "฿"
+        events.append({"วันที่": d["date"], "ประเภท": "💵 Cash",
+            "Action": "💰 เติมเงิน", "Ticker": d["account"],
+            "รายละเอียด": f"+{money(d['amount'], sym, 2)}"
+                          + (f" (≈{money(d['amount_thb'])})" if d["currency"] != "THB" else "")
+                          + (f" · {d['note']}" if d["note"] else "")})
+    for c in build_cashouts(cash or []):
+        sym = "$" if c["currency"] == "USD" else "฿"
+        events.append({"วันที่": c["date"], "ประเภท": "💵 Cash",
+            "Action": "💸 ถอนเงิน", "Ticker": c["account"],
+            "รายละเอียด": f"−{money(c['amount'], sym, 2)}"
+                          + (f" (≈{money(c['amount_thb'])})" if c["currency"] != "THB" else "")
+                          + (" · โอนเข้าไทย" if c["remitted"] else "")
+                          + (f" · {c['note']}" if c["note"] else "")})
     events.sort(key=lambda e: e.get("วันที่",""), reverse=True)
     return events
 
@@ -1722,7 +1763,7 @@ def page_overview(trades: list, investments: list, cash: list, disp: str, rate: 
             st.dataframe(styled_ov, use_container_width=True, hide_index=True)
 
     # -- Recent Activity --
-    recent_events = build_activity_log(investments, trades)
+    recent_events = build_activity_log(investments, trades, cash)
     if recent_events:
         st.markdown("<div style='height:0.5rem'></div>", unsafe_allow_html=True)
         section("Recent Activity")
@@ -2801,16 +2842,23 @@ def page_cash(trades: list, investments: list, cash: list, disp: str, rate: floa
 
     cashouts     = build_cashouts(cash)
     cashout_thb  = sum(c["amount_thb"] or 0 for c in cashouts)
+    deposits     = build_deposits(cash)
+    deposit_thb  = sum(d["amount_thb"] or 0 for d in deposits)
 
-    m1, m2, m3, m4 = st.columns(4)
+    m1, m2, m3, m4, m5 = st.columns(5)
     m1.metric("Cash THB รวม", money(cash_thb))
     m2.metric("Cash USD รวม", money(cash_usd, "$", 2))
     m3.metric(f"Net Cash ({disp})", fmt_money(cash_total_thb, disp, rate, sign=False) if cash else "฿0")
-    m4.metric("Cash Out",
+    m4.metric("Deposit",
+              fmt_money(deposit_thb, disp, rate, sign=False) if deposits else "—",
+              help="เงินที่เติมเข้าพอร์ตจากข้างนอก — นับตั้งแต่เริ่มบันทึกผ่านปุ่มเติมเงิน")
+    if deposits:
+        m4.caption(f"{len(deposits)} ครั้ง · ล่าสุด {deposits[0]['date']}")
+    m5.metric("Cash Out",
               fmt_money(cashout_thb, disp, rate, sign=False) if cashouts else "—")
     if cashouts:
         _rem = sum(c["amount_thb"] or 0 for c in cashouts if c["remitted"])
-        m4.caption(f"{len(cashouts)} ครั้ง · โอนเข้าไทยจากบัญชีต่างสกุล "
+        m5.caption(f"{len(cashouts)} ครั้ง · โอนเข้าไทยจากบัญชีต่างสกุล "
                    f"{fmt_money(_rem, disp, rate, sign=False)}")
 
     st.markdown("<div style='height:1rem'></div>", unsafe_allow_html=True)
@@ -2907,10 +2955,42 @@ def page_cash(trades: list, investments: list, cash: list, disp: str, rate: floa
 
     st.markdown("<div style='height:0.5rem'></div>", unsafe_allow_html=True)
 
+    # -- Deposit (money coming into the portfolio from outside) --
+    if cash:
+        with st.expander("💰 Deposit — เติมเงินเข้าพอร์ต"):
+            # picker outside the form so the currency in the amount label follows
+            # the chosen account immediately (inside a form it only updates on submit)
+            _dopts = [acc_label(a) for a in cash]
+            d_idx = st.selectbox("เข้าบัญชี", range(len(_dopts)),
+                                 format_func=lambda i: _dopts[i], key="dep_acc")
+            _dacc = cash[d_idx]
+            with st.form("deposit_form", clear_on_submit=True):
+                dc1, dc2, dc3 = st.columns([3, 3, 4])
+                d_amt  = dc1.text_input(f"ยอดเติม ({_dacc['currency']})", "")
+                d_dt   = dc2.date_input("วันที่เติม", value=date.today())
+                d_note = dc3.text_input("บันทึก (ไม่บังคับ)", "",
+                                        placeholder="เช่น เงินเดือน / โอนจาก SCB / DCA")
+                if st.form_submit_button("💰 เติมเงิน", use_container_width=True):
+                    amt = parse(d_amt)
+                    if not amt or amt <= 0:
+                        st.error("ใส่ยอดเติมให้ถูกต้อง")
+                    else:
+                        amt_thb = amt * rate if _dacc["currency"] == "USD" else amt
+                        _dacc.setdefault("deposits", []).append({
+                            "date": str(d_dt), "amount": round(amt, 2),
+                            "amount_thb": round(amt_thb, 2),
+                            "fx_rate": round(rate, 4), "note": d_note.strip(),
+                        })
+                        _dacc["amount"] = round(_dacc["amount"] + amt, 2)
+                        save_cash(cash)
+                        _s = "$" if _dacc["currency"] == "USD" else "฿"
+                        st.success(f"เติม {money(amt, _s, 2)} เข้า {_dacc['name']} ✅")
+                        st.rerun()
+
     # -- Cash out (money leaving the portfolio to be spent) --
     if cash:
         with st.expander("💸 Cash Out — ถอนเงินออกไปใช้"):
-            with st.form("cashout_form"):
+            with st.form("cashout_form", clear_on_submit=True):
                 oc1, oc2, oc3 = st.columns([4, 3, 3])
                 _opts = [acc_label(a) for a in cash]
                 o_idx = oc1.selectbox("จากบัญชี", range(len(_opts)),
@@ -2956,19 +3036,28 @@ def page_cash(trades: list, investments: list, cash: list, disp: str, rate: floa
                         st.success(f"ถอนออก {money(amt, _s, 2)} จาก {_acc['name']} ✅")
                         st.rerun()
 
-        if cashouts:
+        # one table for both directions — reading in/out side by side is the point
+        flows_io = (
+            [{**d, "_kind": "in"} for d in deposits]
+            + [{**c, "_kind": "out"} for c in cashouts]
+        )
+        flows_io.sort(key=lambda f: f["date"], reverse=True)
+        if flows_io:
             st.markdown("<div style='height:0.5rem'></div>", unsafe_allow_html=True)
-            section(f"Cash Out History ({len(cashouts)})")
+            section(f"ประวัติเงินเข้า-ออก ({len(flows_io)})")
             st.dataframe([{
-                "วันที่":     c["date"],
-                "บัญชี":      c["account"],
-                "ยอด":        (money(c['amount'], '$' if c['currency']=='USD' else '฿', 2)
-                               if c["amount"] is not None else "—"),
-                "เป็นบาท":    money(c["amount_thb"], dp=2),
-                "เรต":        f"{c['fx_rate']:.4f}" if c["fx_rate"] else "—",
-                "นำเข้าไทย":  "✅" if c["remitted"] else ("—" if c["currency"] == "THB" else "ไม่"),
-                "บันทึก":     c["note"] or "—",
-            } for c in cashouts], use_container_width=True, hide_index=True)
+                "วันที่":     f["date"],
+                "ประเภท":     "💰 เติม" if f["_kind"] == "in" else "💸 ถอน",
+                "บัญชี":      f["account"],
+                "ยอด":        (("+" if f["_kind"] == "in" else "−")
+                               + money(f["amount"], "$" if f["currency"] == "USD" else "฿", 2)
+                               if f["amount"] is not None else "—"),
+                "เป็นบาท":    money(f["amount_thb"], dp=2),
+                "เรต":        f"{f['fx_rate']:.4f}" if f["fx_rate"] else "—",
+                "นำเข้าไทย":  ("—" if f["_kind"] == "in" or f["currency"] == "THB"
+                               else ("✅" if f["remitted"] else "ไม่")),
+                "บันทึก":     f["note"] or "—",
+            } for f in flows_io], use_container_width=True, hide_index=True)
 
     st.markdown("<div style='height:0.5rem'></div>", unsafe_allow_html=True)
 
@@ -3048,7 +3137,7 @@ def page_log(trades: list, investments: list, cash: list, disp: str, rate: float
 
     # ============ Activity Log ============
     section("Activity Log")
-    activity = build_activity_log(investments, trades)
+    activity = build_activity_log(investments, trades, cash)
 
     if not activity:
         st.info("ยังไม่มี activity")
@@ -3061,7 +3150,7 @@ def page_log(trades: list, investments: list, cash: list, disp: str, rate: float
         a1, a2, a3 = st.columns([2, 2, 3])
         yr_pick = a1.selectbox("ปี", ["ทั้งหมด"] + years, key="log_year")
         mo_pick = a2.selectbox("เดือน", ["ทั้งหมด"] + list(range(1, 13)), key="log_month")
-        ty_pick = a3.selectbox("ประเภท", ["ทั้งหมด", "💼 Invest", "📈 Trade"], key="log_type")
+        ty_pick = a3.selectbox("ประเภท", ["ทั้งหมด", "💼 Invest", "📈 Trade", "💵 Cash"], key="log_type")
 
         shown = activity
         if yr_pick != "ทั้งหมด":
