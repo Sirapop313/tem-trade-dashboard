@@ -4,6 +4,7 @@ Tim.fin Personal OS — Investment & Trade Dashboard
 import base64 as _b64
 import io
 import json
+import math
 import os
 import re
 from datetime import date
@@ -889,6 +890,48 @@ def calc_pnl_thb(entry, current: float, shares, trade_currency: str,
     diff = (current - e) * (-1 if direction == "Short" else 1)
     return round(diff * s * (rate if trade_currency == "USD" else 1), 2)
 
+def trade_leverage(item: dict) -> float:
+    """1 for anything recorded before leverage existed, or entered below 1."""
+    lev = parse(str(item.get("leverage", 1)))
+    return lev if lev and math.isfinite(lev) and lev >= 1 else 1.0
+
+
+def settle_thb(item: dict, shares_closed: float, pnl_thb, rate: float) -> float:
+    """Cash that goes back to an account when `shares_closed` of a trade is closed:
+    the margin that slice tied up, plus its P&L.
+
+    At 1x the margin is the full cost, so this reproduces the old proceeds formula
+    in both directions — Long: exit value; Short: 2 x cost - exit value — to the baht.
+    Above 1x it returns margin + P&L only. Crediting the notional instead is what
+    dropped ฿154,897 into an account on a leveraged Binance future whose real margin
+    was a fraction of that.
+    """
+    cost = shares_closed * (parse(item.get("entry_price")) or 0) \
+        * (rate if get_currency(item) == "USD" else 1)
+    return cost / trade_leverage(item) + (pnl_thb or 0)
+
+
+def position_value_thb(item: dict, price, rate: float) -> float:
+    """What an open position is worth to its owner at `price`: the capital it tied
+    up plus its unrealised P&L — the same thing settle_thb() would return if it
+    were closed now.
+
+    For an unleveraged Long that is just market value, so investments read as
+    before. It differs where market value was wrong to begin with: a 10x trade
+    counts its margin, not the notional (cash only fell by the margin, so counting
+    the notional overstated net worth by the borrowed 90%); and a Short now falls
+    in value as price rises, where it used to rise with it.
+    Falls back to entry price, i.e. zero P&L, when no live price is available.
+    """
+    s = parse(get_shares(item)) or 0
+    p = price if price is not None else parse(item.get("entry_price"))
+    if p is None or not s:
+        return 0.0
+    pnl = calc_pnl_thb(item.get("entry_price"), p, str(s), get_currency(item),
+                       rate, item.get("direction", "Long")) or 0
+    return settle_thb(item, s, pnl, rate)
+
+
 def auto_rr(entry, sl, tp) -> str:
     e, s, t = parse(entry), parse(sl), parse(tp)
     if None in (e, s, t) or abs(e - s) == 0: return "—"
@@ -1022,8 +1065,7 @@ def portfolio_line_chart(open_items: list, cash_thb: float, rate: float,
         for item in open_items:
             t = item.get("ticker","")
             if t in row.index and pd.notna(row[t]):
-                s = parse(get_shares(item)) or 0
-                v += s * row[t] * (rate if get_currency(item) == "USD" else 1)
+                v += position_value_thb(item, float(row[t]), rate)
         port_vals.append(to_display(v, disp, rate))
 
     dates = list(combined.index)
@@ -1162,12 +1204,14 @@ def build_realized_events(investments: list, trades: list) -> list:
                 inv.get("fx_rate_at_close"), False)
 
     for t in trades:
+        # "received" is the cash that came back: on a leveraged trade that is margin +
+        # P&L, not the notional sale value (identical at 1x)
         for sh in t.get("sell_history", []):
             add("Trade", t, sh.get("date"), sh.get("shares"), sh.get("price"),
-                sh.get("pnl_thb"), sh.get("thb"), sh.get("fx_rate"), True)
+                sh.get("pnl_thb"), sh.get("settled_thb", sh.get("thb")), sh.get("fx_rate"), True)
         if t.get("status") == "closed":
             add("Trade", t, t.get("close_date"), get_shares(t), t.get("exit_price"),
-                t.get("pnl_thb"), t.get("proceeds_thb"),
+                t.get("pnl_thb"), t.get("settled_thb", t.get("proceeds_thb")),
                 t.get("fx_rate_at_close"), False)
 
     out.sort(key=lambda e: e["sell_date"], reverse=True)
@@ -1559,10 +1603,7 @@ def page_overview(trades: list, investments: list, cash: list, disp: str, rate: 
     cash_thb = sum(a["amount"] * rate if a["currency"] == "USD" else a["amount"] for a in cash)
     port_thb = cash_thb
     for item in open_trades + open_inv:
-        price = get_price(item.get("ticker",""))
-        ref   = str(price) if price else item.get("entry_price")
-        p     = calc_position_thb(ref, get_shares(item), get_currency(item), rate)
-        if p: port_thb += p
+        port_thb += position_value_thb(item, get_price(item.get("ticker","")), rate)
 
     # Unrealized P&L
     unreal_thb  = 0.0
@@ -1593,7 +1634,9 @@ def page_overview(trades: list, investments: list, cash: list, disp: str, rate: 
         _s = parse(get_shares(_item))
         _e = parse(_item.get("entry_price",""))
         if _s and _e:
-            cost_basis_thb += _s * _e * (rate if get_currency(_item) == "USD" else 1)
+            # capital actually deployed: the margin on a leveraged trade, not the notional
+            cost_basis_thb += (_s * _e * (rate if get_currency(_item) == "USD" else 1)
+                               / trade_leverage(_item))
 
     # -- KPI Row --
     section("Portfolio Summary")
@@ -1637,10 +1680,10 @@ def page_overview(trades: list, investments: list, cash: list, disp: str, rate: 
         with col_pie:
             pie_labels, pie_vals = [], []
             for item in open_all:
-                price = get_price(item.get("ticker",""))
-                ref   = str(price) if price else item.get("entry_price")
-                pos   = calc_position_thb(ref, get_shares(item), get_currency(item), rate)
-                if pos:
+                # same valuation as Total Wealth so the slices add up to the headline;
+                # a position underwater past its capital has no positive share to draw
+                pos = position_value_thb(item, get_price(item.get("ticker","")), rate)
+                if pos > 0:
                     pie_labels.append(item.get("ticker","?"))
                     pie_vals.append(pos)
             if cash_thb > 0:
@@ -2506,10 +2549,16 @@ def page_trade(trades: list, cash: list, disp: str, rate: float):
             _hc   = "green" if (pnl_thb or 0) >= 0 else "red"
             _cs   = fmt_money(pos_thb, disp, rate, sign=False) if pos_thb else "—"
             _vs   = fmt_money(mkt_val_thb, disp, rate, sign=False) if mkt_val_thb else "—"
-            header = (f"{icon} **{t['ticker']}** {arrow}  ·  "
+            _lev   = trade_leverage(t)
+            # on a leveraged trade the price move understates the result on the
+            # money actually at risk — show ROE (on margin), the figure Binance shows
+            _pct_s = (f"{fmt_pct(pnl_pct * _lev)} ROE" if _lev > 1 and pnl_pct is not None
+                      else fmt_pct(pnl_pct))
+            header = (f"{icon} **{t['ticker']}** {arrow}"
+                      + (f" `{_lev:g}x`" if _lev > 1 else "") + "  ·  "
                       f"AVG {t.get('entry_price','—')} → {f'{price:.2f}' if price else '—'}  ·  "
                       f"{_cs} → {_vs}"
-                      f"  |  :{_hc}[{fmt_pct(pnl_pct)}  {fmt_money(pnl_thb, disp, rate)}]"
+                      f"  |  :{_hc}[{_pct_s}  {fmt_money(pnl_thb, disp, rate)}]"
                       ).replace("$", r"\$")
 
             with st.expander(header):
@@ -2597,8 +2646,11 @@ def page_trade(trades: list, cash: list, disp: str, rate: float):
                                 s_new = s_old + s_add
                                 p_avg = (s_old * p_old + s_add * p_add) / s_new
                                 add_thb = s_add * p_add * (rate if get_currency(t) == "USD" else 1)
+                                # a leveraged position adds margin, not notional — the
+                                # close settles cost / leverage, so both sides must agree
+                                add_margin = add_thb / trade_leverage(t)
                                 resolved = resolve_source(cash, src_id, other_name, other_curr)
-                                cash_deduct(cash, resolved, add_thb, rate)
+                                cash_deduct(cash, resolved, add_margin, rate)
                                 save_cash(cash)
                                 _tbh = t.get("buy_history", [])
                                 _tbh.append({"date": str(add_date), "shares": add_shares, "price": add_price, "note": "ซื้อเพิ่ม"})
@@ -2666,6 +2718,37 @@ def page_trade(trades: list, cash: list, disp: str, rate: float):
                         emotion     = tc5.selectbox("Emotion (ถ้าขายหมด)",
                                                      ["ปกติ", "กลัว", "โลภ", "FOMO"])
                         lesson      = st.text_input("Lesson ที่ได้ (ถ้าขายหมด)")
+                        # Choose where the money lands instead of always crediting the
+                        # opening account in silence. Keyed by account id, not name:
+                        # names change on rename and can repeat across currencies, and
+                        # a name lookup would quietly credit nothing or the wrong one.
+                        _dest_ids  = [a["id"] for a in cash] + [None]
+                        _dest_lbl  = {a["id"]: acc_label(a) for a in cash}
+                        _src_id    = t.get("source_account_id")
+                        # An imported position never had its cost deducted, so crediting
+                        # it back by default puts money in that never left — the exact
+                        # way a Binance future landed ฿154,897 in Streaming. Default to no
+                        # cash move and let the person pick the account deliberately.
+                        if t.get("is_import") or _src_id not in _dest_ids:
+                            _dest_idx = len(_dest_ids) - 1
+                        else:
+                            _dest_idx = _dest_ids.index(_src_id)
+                        dest_id = st.selectbox(
+                            "คืนเงินเข้าบัญชี", _dest_ids, index=_dest_idx,
+                            format_func=lambda i: "— ไม่คืนเงินเข้า Cash" if i is None else _dest_lbl[i],
+                            key=f"close_dest_{t['id']}")
+                        _lev = trade_leverage(t)
+                        st.caption(
+                            ("คืน = margin + กำไร/ขาดทุน · "
+                             f"{_lev:g}x ระบบไม่คืนเงินเต็มขนาด position" if _lev > 1
+                             else "คืน = ต้นทุน + กำไร/ขาดทุน")
+                            + (" · ⚠️ position นี้ Import มา (ตอนเปิดไม่ได้หักเงิน) จึงตั้งไว้ว่า"
+                               "ไม่คืนเงิน — ถ้าเงินจากการขายเข้าบัญชีจริง ให้เลือกบัญชีด้านบน"
+                               if t.get("is_import") else ""))
+                        allow_neg = st.checkbox("ยืนยันว่าขาดทุนเกินเงินที่วางจริง (cross margin)",
+                                                key=f"close_neg_{t['id']}",
+                                                help="ติ๊กเฉพาะเมื่อขาดทุนเกินเงินที่วางไว้จริง "
+                                                     "เช่น futures แบบ cross margin")
                         if st.form_submit_button("✅ ยืนยันขาย"):
                             s_sell = parse(sell_shares)
                             ep     = parse(exit_p)
@@ -2673,8 +2756,20 @@ def page_trade(trades: list, cash: list, disp: str, rate: float):
                                 st.error("กรุณากรอกจำนวน shares และ Exit Price")
                             elif s_sell > s_current:
                                 st.error(f"ขายได้สูงสุด {s_current} shares")
+                            # A close that returns less than nothing debits the account. Real
+                            # under cross margin, so not clamped — but far more often a typo
+                            # (exit 8.5 for 85 on a 10x long would take ~8x the margin), so it
+                            # must be confirmed. Shown here, before any rerun, so it is seen.
+                            elif (settle_thb(t, s_sell,
+                                             calc_pnl_thb(t["entry_price"], ep, str(s_sell),
+                                                          get_currency(t), rate,
+                                                          t.get("direction", "Long")),
+                                             rate) < 0 and not allow_neg):
+                                st.error("⚠️ ราคาปิดนี้ทำให้ขาดทุนเกินเงินที่วางไว้ — บัญชีจะถูกหักเพิ่ม "
+                                         "ตรวจ Exit Price อีกครั้ง ถ้าถูกต้องจริง (cross margin) "
+                                         "ให้ติ๊กช่องยืนยันแล้วกดใหม่")
                             else:
-                                src_id    = t.get("source_account_id")
+                                _dest     = next((a for a in cash if a["id"] == dest_id), None)
                                 currency  = get_currency(t)
                                 direction = t.get("direction", "Long")
                                 if s_sell >= s_current:
@@ -2695,12 +2790,17 @@ def page_trade(trades: list, cash: list, disp: str, rate: float):
                                         "proceeds_thb": round(exit_thb, 2),
                                         "win_loss": "Win" if (pnl_thb_v or 0) > 0 else "Loss",
                                     })
-                                    if src_id:
-                                        cash_credit(cash, src_id, exit_thb, rate)
+                                    _settle = settle_thb(t, s_current, pnl_thb_v, rate)
+                                    t.update({"settled_thb": round(_settle, 2),
+                                              "settled_to": _dest["name"] if _dest else ""})
+                                    if _dest:
+                                        cash_credit(cash, _dest["id"], _settle, rate)
                                         save_cash(cash)
                                     save_trades(trades)
                                     st.session_state.pop(f"show_close_{t['id']}", None)
-                                    st.success(f"ปิด Trade ✅  P&L = {fmt_money(pnl_thb_v, disp, rate)}")
+                                    _where = (f" · คืน {fmt_money(_settle, disp, rate, sign=False)} เข้า {_dest['name']}"
+                                              if _dest else " · ไม่ได้คืนเงินเข้า Cash")
+                                    st.success(f"ปิด Trade ✅  P&L = {fmt_money(pnl_thb_v, disp, rate)}{_where}")
                                 else:
                                     s_remain   = round(s_current - s_sell, 8)
                                     pnl_thb_p  = calc_pnl_thb(t["entry_price"], ep, str(s_sell), currency, rate, direction)
@@ -2708,12 +2808,15 @@ def page_trade(trades: list, cash: list, disp: str, rate: float):
                                     if direction == "Short":
                                         entry_thb_p = s_sell * (parse(t["entry_price"]) or 0) * (rate if currency == "USD" else 1)
                                         exit_thb_p  = 2 * entry_thb_p - exit_thb_p
+                                    _settle_p = settle_thb(t, s_sell, pnl_thb_p, rate)
                                     sell_hist = t.get("sell_history", [])
                                     sell_hist.append({
                                         "date": str(exit_d), "shares": str(s_sell),
                                         "price": str(ep), "pnl_thb": round(pnl_thb_p or 0, 2),
                                         "thb": round(exit_thb_p, 2),
                                         "fx_rate": round(rate, 4),
+                                        "settled_thb": round(_settle_p, 2),
+                                        "settled_to": _dest["name"] if _dest else "",
                                     })
                                     new_pos_thb = (t.get("position_thb") or 0) * (s_remain / s_current)
                                     t.update({
@@ -2722,8 +2825,8 @@ def page_trade(trades: list, cash: list, disp: str, rate: float):
                                         "sell_history": sell_hist,
                                         "rr": auto_rr(t["entry_price"], t.get("stop_loss",""), t.get("take_profit","")),
                                     })
-                                    if src_id:
-                                        cash_credit(cash, src_id, exit_thb_p, rate)
+                                    if _dest:
+                                        cash_credit(cash, _dest["id"], _settle_p, rate)
                                         save_cash(cash)
                                     save_trades(trades)
                                     st.session_state.pop(f"show_close_{t['id']}", None)
@@ -2775,7 +2878,9 @@ def page_trade(trades: list, cash: list, disp: str, rate: float):
             "ปิด":          t.get("close_date","—"),
             "Entry":        t.get("entry_price","—"),
             "Exit":         t.get("exit_price","—"),
-            "P&L %":        fmt_pct(t.get("pnl_pct")),
+            "P&L %":        (f"{fmt_pct(t['pnl_pct'] * trade_leverage(t))} ROE ({trade_leverage(t):g}x)"
+                             if trade_leverage(t) > 1 and isinstance(t.get("pnl_pct"), (int, float))
+                             else fmt_pct(t.get("pnl_pct"))),
             f"P&L ({sym})": fmt_money(t.get("pnl_thb"), disp, rate),
             "W/L":          t.get("win_loss","—"),
             "Lesson":       t.get("lesson","—"),
@@ -2792,10 +2897,14 @@ def page_trade(trades: list, cash: list, disp: str, rate: float):
             direction = c2.selectbox("Direction", ["Long", "Short"])
             currency  = c3.selectbox("ราคาเป็น", ["THB", "USD"])
             shares    = c4.text_input("จำนวนหุ้น *", placeholder="เช่น 100")
-            c5, c6, c7 = st.columns(3)
+            c5, c6, c7, c8 = st.columns(4)
             entry     = c5.text_input("Entry Price *")
             sl        = c6.text_input("Stop Loss")
             tp        = c7.text_input("Take Profit")
+            lev_in    = c8.text_input("Leverage (x)", value="1",
+                                      help="หุ้นปกติ = 1 · Futures ใส่ตามที่เปิดใน Binance เช่น 10 · "
+                                           "ใส่จำนวนตามขนาด position จริง (notional) "
+                                           "ระบบจะหักเงินแค่ margin = ขนาด ÷ leverage")
             thesis    = st.text_area("Thesis *", height=80,
                                      placeholder="เหตุผลสั้นๆ ที่ชัดเจน")
             open_date = st.date_input("วันที่เปิด", value=date.today())
@@ -2804,16 +2913,27 @@ def page_trade(trades: list, cash: list, disp: str, rate: float):
             is_import = st.checkbox("📥 Import position เก่า (ไม่หักเงินจาก Cash)", key="import_trade")
             if st.form_submit_button("✅ บันทึก Trade"):
                 e, s = parse(entry), parse(shares)
+                # accept "10x" — the field is labelled (x), and treating it as unparseable
+                # used to fall back to 1x and deduct the full notional, the very bug this
+                # field exists to prevent. Reject anything non-finite: NaN slips past a
+                # plain range check because every comparison with it is False.
+                _lev_s = (lev_in or "").strip().lower().rstrip("x").strip()
+                lev    = parse(_lev_s) if _lev_s else 1.0
                 if not ticker or e is None:
                     st.error("กรุณากรอก Ticker และ Entry Price")
                 elif not strategy:
                     st.error("กรุณาเลือก Strategy")
+                elif lev is None or not math.isfinite(lev) or lev < 1 or lev > 125:
+                    st.error("Leverage ต้องเป็นตัวเลข 1 ถึง 125 (เช่น 10 หรือ 10x)")
                 else:
                     rr       = auto_rr(entry, sl, tp)
                     pos_thb  = (s or 0) * e * (rate if currency == "USD" else 1)
+                    # notional stays in position_thb (exposure, used for sizing and P&L);
+                    # only the margin actually leaves the account
+                    margin_thb = pos_thb / lev
                     resolved = resolve_source(cash, src_id, other_name, other_curr)
                     if not is_import:
-                        cash_deduct(cash, resolved, pos_thb, rate)
+                        cash_deduct(cash, resolved, margin_thb, rate)
                         save_cash(cash)
                     trades.append({
                         "id": next_id(trades), "type": "trade", "status": "open",
@@ -2823,11 +2943,17 @@ def page_trade(trades: list, cash: list, disp: str, rate: float):
                         "stop_loss": sl, "take_profit": tp, "rr": rr,
                         "thesis": thesis, "open_date": str(open_date),
                         "position_thb": round(pos_thb, 2),
+                        "leverage": lev,
+                        # remembered so a later close can tell the cost never left an account
+                        "is_import": bool(is_import),
                         "source_account_id": resolved,
                         "source_account_name": next((a["name"] for a in cash if a["id"] == resolved), ""),
                     })
                     save_trades(trades)
-                    st.success(f"✅ บันทึก! R:R = {rr} · Position: {fmt_money(pos_thb, disp, rate, sign=False)}")
+                    _lev_txt = (f" · {lev:g}x · Margin {fmt_money(margin_thb, disp, rate, sign=False)}"
+                                if lev > 1 else "")
+                    st.success(f"✅ บันทึก! R:R = {rr} · Position: "
+                               f"{fmt_money(pos_thb, disp, rate, sign=False)}{_lev_txt}")
                     st.rerun()
 
 
@@ -3086,23 +3212,37 @@ def page_cash(trades: list, investments: list, cash: list, disp: str, rate: floa
     for t in trades:
         src = t.get("source_account_name") or t.get("source_account_id") or "—"
         pos = calc_position_thb(t.get("entry_price"), get_shares(t), get_currency(t), rate)
-        flows.append({
-            "วันที่":   t.get("open_date","—"),
-            "ประเภท":  "เปิด Trade",
-            "Ticker":  t.get("ticker","—"),
-            "บัญชี":   src,
-            "Flow":    fmt_money(-(pos or 0), disp, rate),
-        })
-        if t.get("status") == "closed" and t.get("exit_price"):
-            ep = parse(t.get("exit_price",""))
-            exit_thb = parse(get_shares(t)) * (ep or 0) * (rate if get_currency(t) == "USD" else 1)
+        # show what actually left the account: the margin, and nothing for an import
+        if not t.get("is_import"):
             flows.append({
-                "วันที่":   t.get("close_date","—"),
-                "ประเภท":  "ปิด Trade",
+                "วันที่":   t.get("open_date","—"),
+                "ประเภท":  "เปิด Trade",
                 "Ticker":  t.get("ticker","—"),
                 "บัญชี":   src,
-                "Flow":    fmt_money(exit_thb, disp, rate),
+                "Flow":    fmt_money(-((pos or 0) / trade_leverage(t)), disp, rate),
             })
+        if t.get("status") == "closed" and t.get("exit_price"):
+            if "settled_thb" in t:
+                # closed after settlement was recorded: show the cash that really came
+                # back and where it went (nothing, if the close moved no cash)
+                if t.get("settled_to"):
+                    flows.append({
+                        "วันที่":   t.get("close_date","—"),
+                        "ประเภท":  "ปิด Trade",
+                        "Ticker":  t.get("ticker","—"),
+                        "บัญชี":   t["settled_to"],
+                        "Flow":    fmt_money(t["settled_thb"], disp, rate),
+                    })
+            else:
+                ep = parse(t.get("exit_price",""))
+                exit_thb = parse(get_shares(t)) * (ep or 0) * (rate if get_currency(t) == "USD" else 1)
+                flows.append({
+                    "วันที่":   t.get("close_date","—"),
+                    "ประเภท":  "ปิด Trade",
+                    "Ticker":  t.get("ticker","—"),
+                    "บัญชี":   src,
+                    "Flow":    fmt_money(exit_thb, disp, rate),
+                })
     for inv in investments:
         src = inv.get("source_account_name") or inv.get("source_account_id") or "—"
         pos = calc_position_thb(inv.get("entry_price"), get_shares(inv), get_currency(inv), rate)
