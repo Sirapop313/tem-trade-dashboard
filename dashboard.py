@@ -1361,7 +1361,14 @@ def section(title: str):
     st.markdown(f'<div class="section-label">{title}</div>', unsafe_allow_html=True)
 
 def strategy_input(key: str, default: str = "") -> str:
-    preset = default if default in STRATEGY_PRESETS else STRATEGY_PRESETS[0]
+    # a custom strategy must reopen as "Others" with its text, not as the first preset —
+    # otherwise editing a trade tagged "Gap Fill" shows Breakout and saving overwrites it
+    if default in STRATEGY_PRESETS:
+        preset = default
+    elif default:
+        preset = "Others"
+    else:
+        preset = STRATEGY_PRESETS[0]
     choice = st.selectbox("Strategy", STRATEGY_PRESETS,
                           index=STRATEGY_PRESETS.index(preset), key=f"{key}_sel")
     if choice == "Others":
@@ -2686,6 +2693,15 @@ def page_trade(trades: list, cash: list, disp: str, rate: float):
                         new_acct   = ec7.selectbox("พอร์ต / บัญชี", _acct_opts, index=_acct_idx)
                         new_dir    = ec8.selectbox("Direction", ["Long", "Short"],
                                                    index=0 if t.get("direction","Long") == "Long" else 1)
+                        # inside a form a free-text "Others" box can't appear on demand, so
+                        # offer the presets plus whatever custom value the trade already has
+                        _cur_strat  = t.get("strategy", "")
+                        _strat_opts = [s for s in STRATEGY_PRESETS if s != "Others"]
+                        if _cur_strat and _cur_strat not in _strat_opts:
+                            _strat_opts.append(_cur_strat)
+                        new_strat  = st.selectbox(
+                            "Strategy", _strat_opts,
+                            index=_strat_opts.index(_cur_strat) if _cur_strat in _strat_opts else 0)
                         if st.form_submit_button("💾 บันทึก"):
                             _matched = next((a for a in cash if a["name"] == new_acct), None)
                             t.update({
@@ -2695,6 +2711,7 @@ def page_trade(trades: list, cash: list, disp: str, rate: float):
                                 "thesis": new_thesis,
                                 "rr": auto_rr(new_entry, new_sl, new_tp),
                                 "direction": new_dir,
+                                "strategy": new_strat,
                                 "source_account_name": _matched["name"] if _matched else "",
                                 "source_account_id":   _matched["id"]   if _matched else None,
                             })
@@ -2886,6 +2903,37 @@ def page_trade(trades: list, cash: list, disp: str, rate: float):
             "Lesson":       t.get("lesson","—"),
         } for t in sorted(closed_trades, key=lambda x: x.get("close_date",""), reverse=True)]
         st.dataframe(pd.DataFrame(_ct_rows), use_container_width=True, hide_index=True)
+
+        # Journal fields only. Price, size and dates stay locked: the cash has already
+        # settled against them, and changing them here would desync every balance.
+        with st.expander("✏️ แก้ไขบันทึก Trade ที่ปิดแล้ว (Strategy / Lesson)"):
+            _ct_sorted = sorted(closed_trades, key=lambda x: x.get("close_date", ""), reverse=True)
+            _ct_lbl = {t["id"]: f"{t.get('ticker','—')} · ปิด {t.get('close_date','—')} · "
+                                f"{t.get('strategy','—')}" for t in _ct_sorted}
+            ct_id = st.selectbox("เลือก Trade", list(_ct_lbl), format_func=lambda i: _ct_lbl[i],
+                                 key="ct_edit_pick")
+            ct = next(t for t in closed_trades if t["id"] == ct_id)
+            # outside a form so picking "Others" reveals its text box immediately
+            ct_strategy = strategy_input(f"ct_{ct_id}", ct.get("strategy", ""))
+            _emo_opts = ["ปกติ", "กลัว", "โลภ", "FOMO"]
+            _th_opts  = ["✅ ถูก", "❌ ผิด", "⚠️ บางส่วน"]
+            ce1, ce2 = st.columns(2)
+            ct_emotion = ce1.selectbox(
+                "Emotion", _emo_opts, key=f"ct_emo_{ct_id}",
+                index=_emo_opts.index(ct["emotion"]) if ct.get("emotion") in _emo_opts else 0)
+            ct_thesis = ce2.selectbox(
+                "Thesis ถูกไหม", _th_opts, key=f"ct_th_{ct_id}",
+                index=_th_opts.index(ct["thesis_correct"]) if ct.get("thesis_correct") in _th_opts else 0)
+            ct_lesson = st.text_area("Lesson", value=ct.get("lesson", ""), height=80,
+                                     key=f"ct_les_{ct_id}")
+            if st.button("💾 บันทึกการแก้ไข", key=f"ct_save_{ct_id}"):
+                if not (ct_strategy or "").strip():
+                    st.error("กรุณาระบุ Strategy")
+                else:
+                    ct.update({"strategy": ct_strategy.strip(), "emotion": ct_emotion,
+                               "thesis_correct": ct_thesis, "lesson": ct_lesson.strip()})
+                    save_trades(trades)
+                    st.rerun()
 
     # -- New Trade Form (collapsed) --
     st.markdown("<div style='height:1rem'></div>", unsafe_allow_html=True)
