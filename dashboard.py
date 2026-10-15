@@ -2272,8 +2272,13 @@ def page_investment(investments: list, trades: list, cash: list, disp: str, rate
                         s_current = parse(get_shares(inv)) or 0
                         st.caption(f"ถืออยู่ {s_current} หุ้น · AVG {inv.get('entry_price','—')} · ใส่ครบ = ปิด position")
                         with st.form(f"form_sell_inv_{inv['id']}"):
-                            sv1, sv2, sv3 = st.columns(3)
-                            sell_shares = sv1.text_input("จำนวนที่ขาย *", placeholder=f"สูงสุด {s_current}")
+                            # a button can't fill a field inside a form, so Max is a tick
+                            # read on submit — it sells exactly what is held, no typing
+                            sv1, svm, sv2, sv3 = st.columns([3, 1, 3, 3])
+                            sell_shares = sv1.text_input("จำนวนที่ขาย *", placeholder=f"สูงสุด {s_current:,.10g}")
+                            with svm:
+                                st.markdown("<div style='height:29px'></div>", unsafe_allow_html=True)
+                                sell_max = st.checkbox("Max", key=f"sell_inv_max_{inv['id']}", help="ขายหมดทั้ง position ไม่ต้องพิมพ์จำนวน")
                             exit_p      = sv2.text_input("ราคาที่ขาย *", placeholder="เช่น 420")
                             exit_d      = sv3.date_input("วันที่ขาย", value=date.today())
                             sv4, sv5 = st.columns(2)
@@ -2283,7 +2288,7 @@ def page_investment(investments: list, trades: list, cash: list, disp: str, rate
                                                        ["ปกติ", "กลัว", "โลภ", "FOMO"])
                             lesson    = st.text_input("Lesson ที่ได้ (optional, ถ้าปิด position)")
                             if st.form_submit_button("✅ ยืนยันขาย"):
-                                s_sell = parse(sell_shares)
+                                s_sell = s_current if sell_max else parse(sell_shares)
                                 ep     = parse(exit_p)
                                 if not s_sell or not ep:
                                     st.error("กรุณากรอกจำนวนหุ้นและราคาที่ขาย")
@@ -2773,8 +2778,14 @@ def page_trade(trades: list, cash: list, disp: str, rate: float):
                     s_current = parse(get_shares(t)) or 0
                     st.caption(f"ถืออยู่ {s_current} shares · AVG {t.get('entry_price','—')} · ใส่ครบ = ปิด trade")
                     with st.form(f"form_close_{t['id']}"):
-                        tc1, tc2, tc3 = st.columns(3)
-                        sell_shares = tc1.text_input("จำนวน Shares ที่ขาย *", placeholder=f"สูงสุด {s_current}")
+                        # a button can't fill a field inside a form, so Max is a tick
+                        # read on submit — it sells exactly what is held, no typing
+                        tc1, tcm, tc2, tc3 = st.columns([3, 1, 3, 3])
+                        sell_shares = tc1.text_input("จำนวน Shares ที่ขาย *", placeholder=f"สูงสุด {s_current:,.10g}")
+                        with tcm:
+                            st.markdown("<div style='height:29px'></div>", unsafe_allow_html=True)
+                            sell_max = st.checkbox("Max", key=f"close_max_{t['id']}",
+                                                   help="ขายหมดทั้ง position ไม่ต้องพิมพ์จำนวน")
                         exit_p      = tc2.text_input("Exit Price *")
                         exit_d      = tc3.date_input("วันที่ปิด", value=date.today())
                         tc4, tc5    = st.columns(2)
@@ -2815,7 +2826,7 @@ def page_trade(trades: list, cash: list, disp: str, rate: float):
                                                 help="ติ๊กเฉพาะเมื่อขาดทุนเกินเงินที่วางไว้จริง "
                                                      "เช่น futures แบบ cross margin")
                         if st.form_submit_button("✅ ยืนยันขาย"):
-                            s_sell = parse(sell_shares)
+                            s_sell = s_current if sell_max else parse(sell_shares)
                             ep     = parse(exit_p)
                             if not s_sell or not ep:
                                 st.error("กรุณากรอกจำนวน shares และ Exit Price")
