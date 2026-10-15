@@ -168,7 +168,8 @@ st.markdown("""<style>
 [data-testid="stFormSubmitButton"] button p { color: var(--it-accent-ink) !important; }
 [data-testid="stFormSubmitButton"] button:hover { filter: brightness(1.07); }
 [data-testid="stMain"] [data-testid="stButton"] button,
-[data-testid="stMain"] [data-testid="stDownloadButton"] button {
+[data-testid="stMain"] [data-testid="stDownloadButton"] button,
+[role="dialog"] [data-testid="stButton"] button {
     background: var(--it-card) !important;
     border: 1px solid var(--it-border) !important;
     color: var(--it-text) !important;
@@ -177,7 +178,8 @@ st.markdown("""<style>
     transition: background .15s, border-color .15s !important;
 }
 [data-testid="stMain"] [data-testid="stButton"] button:hover,
-[data-testid="stMain"] [data-testid="stDownloadButton"] button:hover {
+[data-testid="stMain"] [data-testid="stDownloadButton"] button:hover,
+[role="dialog"] [data-testid="stButton"] button:hover {
     background: var(--it-raise) !important;
     border-color: var(--it-faint) !important;
 }
@@ -220,9 +222,14 @@ hr { border-color: var(--it-border) !important; }
 @media (max-width: 640px) { .pd-facts { grid-template-columns: 1fr 1fr; } }
 .st-key-pos_drawer { background: var(--it-raise) !important; }
 .st-key-pos_drawer [data-testid="stButton"] button { min-height: 0 !important; }
-[data-testid="stMain"] [class*="st-key-sellbtn_"] button {
+[data-testid="stMain"] [class*="st-key-sellbtn_"] button,
+[role="dialog"] [class*="st-key-sellbtn_"] button {
     color: var(--it-red) !important; border-color: rgba(239,95,85,.35) !important; background: rgba(239,95,85,.10) !important; }
-[data-testid="stMain"] [class*="st-key-sellbtn_"] button p { color: var(--it-red) !important; }
+[data-testid="stMain"] [class*="st-key-sellbtn_"] button p,
+[role="dialog"] [class*="st-key-sellbtn_"] button p { color: var(--it-red) !important; }
+/* position popup */
+[role="dialog"] { background: var(--it-card) !important; border: 1px solid var(--it-border) !important; }
+[role="dialog"] .pd-facts > div { background: var(--it-raise); }
 
 /* Hide the native Streamlit tab-list — navbar replaces it */
 [data-baseweb="tab-list"] { display: none !important; }
@@ -938,20 +945,69 @@ CHART_LAYOUT = dict(
                zerolinecolor="rgba(255,255,255,0.15)"),
 )
 
+def _pnl_tint(pct) -> str:
+    """Tile colour for a P&L %: surface grey pulled toward green or red with the size
+    of the move (saturates around ±20%). None (cash) stays neutral."""
+    base = (0x1A, 0x1F, 0x23)
+    if pct is None or not math.isfinite(pct):
+        return "#2A3035"
+    tgt = (0x3D, 0xBE, 0x7F) if pct >= 0 else (0xEF, 0x5F, 0x55)
+    k = (min(abs(pct) * 3.2, 62) + 12) / 100
+    return "#" + "".join(f"{round(b + (t - b) * k):02X}" for b, t in zip(base, tgt))
+
+
+def allocation_treemap(labels, vals_thb, pcts, disp, rate, height=360):
+    """Holdings as boxes: area = share of money, colour = P&L %. Reads both at once,
+    which a pie cannot do once there are more than a handful of slices."""
+    vals = [to_display(v, disp, rate) for v in vals_thb]
+    total = sum(vals) or 1
+    hide = hidden_amounts()
+    pct_txt = ["" if p is None else fmt_pct(p) for p in pcts]
+    hover = [f"{l}<br>{v / total * 100:.1f}% ของพอร์ต"
+             + ("" if hide else f"<br>{fmt_money(vt, disp, rate, sign=False)}")
+             + (f"<br>P&L {t}" if t else "")
+             for l, v, vt, t in zip(labels, vals, vals_thb, pct_txt)]
+    fig = go.Figure(go.Treemap(
+        labels=labels, parents=[""] * len(labels), values=vals, sort=True,
+        customdata=pct_txt, hovertext=hover, hoverinfo="text",
+        texttemplate="<b>%{label}</b><br>%{percentRoot:.1%}<br>%{customdata}",
+        textfont=dict(family="IBM Plex Sans Thai, sans-serif", size=14, color="#E9E6DF"),
+        textposition="top left",
+        marker=dict(colors=[_pnl_tint(p) for p in pcts],
+                    line=dict(color="#0D1012", width=3), pad=dict(t=8, l=8, r=8, b=8)),
+        tiling=dict(pad=0), pathbar=dict(visible=False),
+    ))
+    fig.update_layout(**{**CHART_LAYOUT, "height": height,
+                         "margin": dict(t=4, b=4, l=0, r=0)})
+    return fig
+
+
 def allocation_panel(labels, vals_thb, pcts, disp, rate, key: str) -> None:
     """Donut with the total in the middle and a legend list beside it: ticker, share of
     the portfolio and P&L %. Slice labels around the ring collide once there are more
     than a few holdings, so the reading happens in the list instead."""
+    view = st.radio("มุมมอง", ["Pie", "Treemap"], horizontal=True,
+                    key=f"alloc_view_{key}", label_visibility="collapsed")
+    if view == "Treemap":
+        st.plotly_chart(allocation_treemap(labels, vals_thb, pcts, disp, rate, height=320),
+                        use_container_width=True, key=f"alloc_tm_{key}")
+        return
     total = sum(vals_thb) or 1
     order = sorted(range(len(labels)), key=lambda i: -vals_thb[i])
     cols = [ALLOC_COLORS[n % len(ALLOC_COLORS)] for n in range(len(order))]
+    # a name on every slice collides once there are a dozen holdings; label the ones
+    # at 3%+ and leave the slivers to the list beside the chart
+    shares = [vals_thb[i] / total * 100 for i in order]
+    names = [f"{labels[i]}<br>{sh:.0f}%" if sh >= 3 else "" for i, sh in zip(order, shares)]
     fig = go.Figure(go.Pie(
         labels=[labels[i] for i in order], values=[to_display(vals_thb[i], disp, rate) for i in order],
-        hole=0.66, sort=False, direction="clockwise", textinfo="none",
+        hole=0.6, sort=False, direction="clockwise",
+        text=names, textinfo="text", textposition="outside",
+        textfont=dict(size=11, color="#C9C6BF", family="IBM Plex Sans Thai, sans-serif"),
         marker=dict(colors=cols, line=dict(color="#0D1012", width=2)),
-        hovertemplate="%{label}<br>%{percent}<extra></extra>",
+        hovertemplate="%{label}<br>%{percent}<extra></extra>", automargin=True,
     ))
-    fig.update_layout(**{**CHART_LAYOUT, "height": 220, "margin": dict(t=4, b=4, l=4, r=4),
+    fig.update_layout(**{**CHART_LAYOUT, "height": 300, "margin": dict(t=30, b=30, l=50, r=50),
         "annotations": [dict(text=("รวม<br><b>" + fmt_money(total, disp, rate, sign=False) + "</b>"),
                              x=0.5, y=0.5, showarrow=False,
                              font=dict(size=13, color="#E9E6DF", family="IBM Plex Mono, monospace"))]})
@@ -964,7 +1020,7 @@ def allocation_panel(labels, vals_thb, pcts, disp, rate, key: str) -> None:
             f"<span class='al-tk'>{html.escape(str(labels[i]))}</span>"
             f"<span class='al-w'>{vals_thb[i] / total * 100:.1f}%</span>"
             f"<span class='al-p' style='color:{pc}'>{'' if p is None else fmt_pct(p)}</span></div>")
-    c1, c2 = st.columns([2, 3], vertical_alignment="center")
+    c1, c2 = st.columns([1, 1], vertical_alignment="center")
     with c1:
         st.plotly_chart(fig, use_container_width=True, key=f"alloc_{key}")
     with c2:
@@ -1867,7 +1923,9 @@ def page_investment(investments: list, trades: list, cash: list, disp: str, rate
             })
 
         # Pie chart + Return % chart
-        col_pie_inv, col_ret_inv = st.columns([5, 5], gap="large")
+        # stacked, not side by side: with a dozen holdings the pie needs the width
+        # for its labels, and the return chart reads better full width anyway
+        col_pie_inv, col_ret_inv = st.container(), st.container()
         with col_pie_inv:
             if pie_labels_inv:
                 section("ถืออะไรอยู่")
@@ -2041,17 +2099,14 @@ def page_investment(investments: list, trades: list, cash: list, disp: str, rate
         # mockup does it — one table instead of the table plus a second list of
         # expanders repeating the same rows.
         _ev = st.dataframe(styled, use_container_width=True, hide_index=True,
-                           on_select="rerun", selection_mode="single-row", key="inv_hold_tbl")
+                           on_select="rerun", selection_mode="single-row", key="inv_hold_tbl",
+                           height=(len(rows) + 1) * 35 + 3)
 
-        try:
-            _sel_rows = list(_ev.selection.rows)
-        except Exception:
-            _sel_rows = []
-        _sel_inv = raw[_sel_rows[0]]["inv"] if _sel_rows and _sel_rows[0] < len(raw) else None
-        if _sel_inv is None:
-            st.caption("คลิกแถวในตารางเพื่อซื้อเพิ่ม / แก้ไข / ขาย")
-        else:
-            inv     = _sel_inv
+        # The selected row opens as a popup over the page, where the eye already is,
+        # rather than a panel below a long table. It opens once per new selection:
+        # closing it with X and then changing currency must not pop it back up.
+        @st.dialog("จัดการ Position", width="large")
+        def _inv_dialog(inv):
             price   = get_price(inv.get("ticker",""))
             pnl_thb = calc_pnl_thb(inv.get("entry_price"), price, get_shares(inv),
                                     get_currency(inv), rate) if price else None
@@ -2061,195 +2116,208 @@ def page_investment(investments: list, trades: list, cash: list, disp: str, rate
             _imval  = (_isv * price * (rate if get_currency(inv) == "USD" else 1)) if price and _isv else None
             _ics    = fmt_money(_icost, disp, rate, sign=False) if _icost else "—"
             _ivs    = fmt_money(_imval, disp, rate, sign=False) if _imval else "—"
-            with st.container(border=True, key="pos_drawer"):
-                _pc2 = "#3DBE7F" if (pnl_thb or 0) >= 0 else "#EF5F55"
-                _bg2 = "rgba(61,190,127,0.12)" if (pnl_thb or 0) >= 0 else "rgba(239,95,85,0.12)"
-                _acct = inv.get("source_account_name") or "—"
-                st.markdown(
-                    f"<div class='pd-head'><span class='pd-tk'>{html.escape(inv['ticker'])}</span>"
-                    f"<span class='pd-sub'>{html.escape(get_shares(inv))} หุ้น · AVG {html.escape(str(inv.get('entry_price','—')))}"
-                    f" → {f'{price:,.2f}' if price else '—'}</span>"
-                    f"<span class='pd-pill' style='color:{_pc2};background:{_bg2}'>"
-                    f"{fmt_money(pnl_thb, disp, rate) if pnl_thb is not None else '—'} · {fmt_pct(pnl_pct)}</span></div>"
-                    f"<div class='pd-facts'>"
-                    f"<div><div class='l'>ต้นทุน</div><div class='v'>{_ics}</div></div>"
-                    f"<div><div class='l'>มูลค่า</div><div class='v'>{_ivs}</div></div>"
-                    f"<div><div class='l'>ถือตั้งแต่</div><div class='v'>{html.escape(inv.get('entry_date') or '—')}</div></div>"
-                    f"<div><div class='l'>บัญชี</div><div class='v' style='font-family:inherit'>{html.escape(_acct)}</div></div>"
-                    f"</div>".replace("$", "&#36;"),
-                    unsafe_allow_html=True)
-                ca, cb, cc, _, cd = st.columns([1, 1, 1, 4, 1])
-                if cc.button("ขาย", key=f"sellbtn_{inv['id']}", use_container_width=True):
-                    st.session_state[f"sell_inv_{inv['id']}"] = True
-                    st.session_state.pop(f"edit_inv_{inv['id']}", None)
-                    st.session_state.pop(f"add_inv_{inv['id']}", None)
-                if cb.button("แก้ไข", key=f"ei_{inv['id']}", use_container_width=True):
-                    st.session_state[f"edit_inv_{inv['id']}"] = True
-                    st.session_state.pop(f"sell_inv_{inv['id']}", None)
-                    st.session_state.pop(f"add_inv_{inv['id']}", None)
-                if ca.button("ซื้อเพิ่ม", key=f"ai_{inv['id']}", use_container_width=True):
-                    st.session_state[f"add_inv_{inv['id']}"] = True
-                    st.session_state.pop(f"edit_inv_{inv['id']}", None)
-                    st.session_state.pop(f"sell_inv_{inv['id']}", None)
-                if cd.button("ลบ", key=f"di_{inv['id']}", use_container_width=True):
-                    investments[:] = [x for x in investments if x["id"] != inv["id"]]
-                    save_investments(investments)
-                    st.session_state.pop("inv_hold_tbl", None)
-                    st.rerun()
+            _pc2 = "#3DBE7F" if (pnl_thb or 0) >= 0 else "#EF5F55"
+            _bg2 = "rgba(61,190,127,0.12)" if (pnl_thb or 0) >= 0 else "rgba(239,95,85,0.12)"
+            _acct = inv.get("source_account_name") or "—"
+            st.markdown(
+                f"<div class='pd-head'><span class='pd-tk'>{html.escape(inv['ticker'])}</span>"
+                f"<span class='pd-sub'>{html.escape(get_shares(inv))} หุ้น · AVG {html.escape(str(inv.get('entry_price','—')))}"
+                f" → {f'{price:,.2f}' if price else '—'}</span>"
+                f"<span class='pd-pill' style='color:{_pc2};background:{_bg2}'>"
+                f"{fmt_money(pnl_thb, disp, rate) if pnl_thb is not None else '—'} · {fmt_pct(pnl_pct)}</span></div>"
+                f"<div class='pd-facts'>"
+                f"<div><div class='l'>ต้นทุน</div><div class='v'>{_ics}</div></div>"
+                f"<div><div class='l'>มูลค่า</div><div class='v'>{_ivs}</div></div>"
+                f"<div><div class='l'>ถือตั้งแต่</div><div class='v'>{html.escape(inv.get('entry_date') or '—')}</div></div>"
+                f"<div><div class='l'>บัญชี</div><div class='v' style='font-family:inherit'>{html.escape(_acct)}</div></div>"
+                f"</div>".replace("$", "&#36;"),
+                unsafe_allow_html=True)
+            ca, cb, cc, _, cd = st.columns([1, 1, 1, 4, 1])
+            if cc.button("ขาย", key=f"sellbtn_{inv['id']}", use_container_width=True):
+                st.session_state[f"sell_inv_{inv['id']}"] = True
+                st.session_state.pop(f"edit_inv_{inv['id']}", None)
+                st.session_state.pop(f"add_inv_{inv['id']}", None)
+            if cb.button("แก้ไข", key=f"ei_{inv['id']}", use_container_width=True):
+                st.session_state[f"edit_inv_{inv['id']}"] = True
+                st.session_state.pop(f"sell_inv_{inv['id']}", None)
+                st.session_state.pop(f"add_inv_{inv['id']}", None)
+            if ca.button("ซื้อเพิ่ม", key=f"ai_{inv['id']}", use_container_width=True):
+                st.session_state[f"add_inv_{inv['id']}"] = True
+                st.session_state.pop(f"edit_inv_{inv['id']}", None)
+                st.session_state.pop(f"sell_inv_{inv['id']}", None)
+            if cd.button("ลบ", key=f"di_{inv['id']}", use_container_width=True):
+                investments[:] = [x for x in investments if x["id"] != inv["id"]]
+                save_investments(investments)
+                st.session_state.pop("inv_hold_tbl", None)
+                st.rerun()
 
-                if st.session_state.get(f"add_inv_{inv['id']}"):
-                    st.markdown("**ซื้อเพิ่ม**")
-                    with st.form(f"form_add_inv_{inv['id']}"):
-                        aa1, aa2, aa3 = st.columns(3)
-                        add_shares = aa1.text_input("จำนวนหุ้นที่ซื้อเพิ่ม *", placeholder="เช่น 5")
-                        add_price  = aa2.text_input("ราคาที่ซื้อ *", placeholder="เช่น 80")
-                        add_date   = aa3.date_input("วันที่ซื้อ", value=date.today())
-                        src_id, other_name, other_curr = source_selector(cash, f"add_inv_{inv['id']}")
-                        if st.form_submit_button("ยืนยันซื้อเพิ่ม"):
-                            s_add = parse(add_shares)
-                            p_add = parse(add_price)
-                            if s_add and p_add:
-                                s_old = parse(get_shares(inv)) or 0
-                                p_old = parse(inv.get("entry_price", "0")) or 0
-                                s_new = s_old + s_add
-                                p_avg = (s_old * p_old + s_add * p_add) / s_new
-                                add_thb = s_add * p_add * (rate if get_currency(inv) == "USD" else 1)
-                                resolved = resolve_source(cash, src_id, other_name, other_curr)
-                                cash_deduct(cash, resolved, add_thb, rate)
-                                save_cash(cash)
-                                _bh = inv.get("buy_history", [])
-                                _bh.append({"date": str(add_date), "shares": add_shares, "price": add_price, "note": "ซื้อเพิ่ม"})
-                                inv.update({
-                                    "shares":       str(round(s_new, 8)),
-                                    "entry_price":  str(round(p_avg, 4)),
-                                    "position_thb": round((inv.get("position_thb") or 0) + add_thb, 2),
-                                    "buy_history":  _bh,
-                                })
-                                save_investments(investments)
-                                st.session_state.pop(f"add_inv_{inv['id']}", None)
-                                st.success(f"ซื้อเพิ่ม {add_shares} หุ้น @ {add_price} · AVG ใหม่ = {round(p_avg,4)}")
-                                st.session_state.pop("inv_hold_tbl", None)
-                                st.rerun()
-                            else:
-                                st.error("กรุณากรอกจำนวนหุ้นและราคา")
-
-                if st.session_state.get(f"edit_inv_{inv['id']}"):
-                    st.markdown("**แก้ไข Investment**")
-                    with st.form(f"form_edit_inv_{inv['id']}"):
-                        ei1, ei2, ei3 = st.columns(3)
-                        new_ticker = ei1.text_input("Ticker",       value=inv.get("ticker",""))
-                        new_shares = ei2.text_input("จำนวนหุ้น",    value=get_shares(inv))
-                        new_entry  = ei3.text_input("Entry Price",  value=inv.get("entry_price",""))
-                        ee1, ee2 = st.columns(2)
-                        new_thesis  = ee1.text_input("Thesis", value=inv.get("thesis",""))
-                        new_tgt_raw = ee2.text_input(
-                            "Target % (สัดส่วนเป้าหมาย)",
-                            value=str(inv["target_pct"]) if inv.get("target_pct") is not None else "",
-                            placeholder="เช่น 20  (ว่าง = ไม่ตั้ง)",
-                        )
-                        new_manual_price = st.text_input(
-                            "Manual Price (DR / หุ้นที่ดึงราคาไม่ได้)",
-                            value=str(inv["manual_price"]) if inv.get("manual_price") is not None else "",
-                            placeholder="ใส่ราคาปัจจุบัน เช่น 85.50  (ว่าง = ดึงจาก yfinance)",
-                        )
-                        if st.form_submit_button("บันทึก"):
-                            upd = {
-                                "ticker":      new_ticker.upper().strip(),
-                                "shares":      new_shares,
-                                "entry_price": new_entry,
-                                "thesis":      new_thesis,
-                            }
-                            t_pct = parse(new_tgt_raw)
-                            if t_pct is not None:
-                                upd["target_pct"] = t_pct
-                            elif not new_tgt_raw.strip() and "target_pct" in inv:
-                                upd["target_pct"] = None
-                            mp = parse(new_manual_price)
-                            if mp is not None:
-                                upd["manual_price"] = mp
-                            elif not new_manual_price.strip():
-                                upd["manual_price"] = None
-                            inv.update(upd)
+            if st.session_state.get(f"add_inv_{inv['id']}"):
+                st.markdown("**ซื้อเพิ่ม**")
+                with st.form(f"form_add_inv_{inv['id']}"):
+                    aa1, aa2, aa3 = st.columns(3)
+                    add_shares = aa1.text_input("จำนวนหุ้นที่ซื้อเพิ่ม *", placeholder="เช่น 5")
+                    add_price  = aa2.text_input("ราคาที่ซื้อ *", placeholder="เช่น 80")
+                    add_date   = aa3.date_input("วันที่ซื้อ", value=date.today())
+                    src_id, other_name, other_curr = source_selector(cash, f"add_inv_{inv['id']}")
+                    if st.form_submit_button("ยืนยันซื้อเพิ่ม"):
+                        s_add = parse(add_shares)
+                        p_add = parse(add_price)
+                        if s_add and p_add:
+                            s_old = parse(get_shares(inv)) or 0
+                            p_old = parse(inv.get("entry_price", "0")) or 0
+                            s_new = s_old + s_add
+                            p_avg = (s_old * p_old + s_add * p_add) / s_new
+                            add_thb = s_add * p_add * (rate if get_currency(inv) == "USD" else 1)
+                            resolved = resolve_source(cash, src_id, other_name, other_curr)
+                            cash_deduct(cash, resolved, add_thb, rate)
+                            save_cash(cash)
+                            _bh = inv.get("buy_history", [])
+                            _bh.append({"date": str(add_date), "shares": add_shares, "price": add_price, "note": "ซื้อเพิ่ม"})
+                            inv.update({
+                                "shares":       str(round(s_new, 8)),
+                                "entry_price":  str(round(p_avg, 4)),
+                                "position_thb": round((inv.get("position_thb") or 0) + add_thb, 2),
+                                "buy_history":  _bh,
+                            })
                             save_investments(investments)
-                            st.session_state.pop(f"edit_inv_{inv['id']}", None)
-                            st.success("แก้ไขเรียบร้อย!")
+                            st.session_state.pop(f"add_inv_{inv['id']}", None)
+                            st.success(f"ซื้อเพิ่ม {add_shares} หุ้น @ {add_price} · AVG ใหม่ = {round(p_avg,4)}")
+                            st.session_state.pop("inv_hold_tbl", None)
+                            st.rerun()
+                        else:
+                            st.error("กรุณากรอกจำนวนหุ้นและราคา")
+
+            if st.session_state.get(f"edit_inv_{inv['id']}"):
+                st.markdown("**แก้ไข Investment**")
+                with st.form(f"form_edit_inv_{inv['id']}"):
+                    ei1, ei2, ei3 = st.columns(3)
+                    new_ticker = ei1.text_input("Ticker",       value=inv.get("ticker",""))
+                    new_shares = ei2.text_input("จำนวนหุ้น",    value=get_shares(inv))
+                    new_entry  = ei3.text_input("Entry Price",  value=inv.get("entry_price",""))
+                    ee1, ee2 = st.columns(2)
+                    new_thesis  = ee1.text_input("Thesis", value=inv.get("thesis",""))
+                    new_tgt_raw = ee2.text_input(
+                        "Target % (สัดส่วนเป้าหมาย)",
+                        value=str(inv["target_pct"]) if inv.get("target_pct") is not None else "",
+                        placeholder="เช่น 20  (ว่าง = ไม่ตั้ง)",
+                    )
+                    new_manual_price = st.text_input(
+                        "Manual Price (DR / หุ้นที่ดึงราคาไม่ได้)",
+                        value=str(inv["manual_price"]) if inv.get("manual_price") is not None else "",
+                        placeholder="ใส่ราคาปัจจุบัน เช่น 85.50  (ว่าง = ดึงจาก yfinance)",
+                    )
+                    if st.form_submit_button("บันทึก"):
+                        upd = {
+                            "ticker":      new_ticker.upper().strip(),
+                            "shares":      new_shares,
+                            "entry_price": new_entry,
+                            "thesis":      new_thesis,
+                        }
+                        t_pct = parse(new_tgt_raw)
+                        if t_pct is not None:
+                            upd["target_pct"] = t_pct
+                        elif not new_tgt_raw.strip() and "target_pct" in inv:
+                            upd["target_pct"] = None
+                        mp = parse(new_manual_price)
+                        if mp is not None:
+                            upd["manual_price"] = mp
+                        elif not new_manual_price.strip():
+                            upd["manual_price"] = None
+                        inv.update(upd)
+                        save_investments(investments)
+                        st.session_state.pop(f"edit_inv_{inv['id']}", None)
+                        st.success("แก้ไขเรียบร้อย!")
+                        st.session_state.pop("inv_hold_tbl", None)
+                        st.rerun()
+
+            if st.session_state.get(f"sell_inv_{inv['id']}"):
+                st.markdown("**ขาย**")
+                s_current = parse(get_shares(inv)) or 0
+                st.caption(f"ถืออยู่ {s_current:,.10g} หุ้น · AVG {inv.get('entry_price','—')}")
+                with st.form(f"form_sell_inv_{inv['id']}"):
+                    # a button can't fill a field inside a form, so Max is a tick
+                    # read on submit — it sells exactly what is held, no typing
+                    sv1, svm, sv2, sv3 = st.columns([3, 1, 3, 3])
+                    sell_shares = sv1.text_input("จำนวนที่ขาย *", placeholder=f"สูงสุด {s_current:,.10g}")
+                    with svm:
+                        st.markdown("<div style='height:35px'></div>", unsafe_allow_html=True)
+                        sell_max = st.checkbox("Max", key=f"sell_inv_max_{inv['id']}", help="ขายหมดทั้ง position ไม่ต้องพิมพ์จำนวน")
+                    exit_p      = sv2.text_input("ราคาที่ขาย *", placeholder="เช่น 420")
+                    exit_d      = sv3.date_input("วันที่ขาย", value=date.today())
+                    sv4, sv5 = st.columns(2)
+                    thesis_ok = sv4.selectbox("Thesis ถูกไหม (ถ้าปิด position)",
+                                               ["✅ ถูก", "❌ ผิด", "⚠️ บางส่วน"])
+                    emotion   = sv5.selectbox("Emotion (ถ้าปิด position)",
+                                               ["ปกติ", "กลัว", "โลภ", "FOMO"])
+                    lesson    = st.text_input("Lesson ที่ได้ (optional, ถ้าปิด position)")
+                    if st.form_submit_button("ยืนยันขาย"):
+                        s_sell = s_current if sell_max else parse(sell_shares)
+                        ep     = parse(exit_p)
+                        if not s_sell or not ep:
+                            st.error("กรุณากรอกจำนวนหุ้นและราคาที่ขาย")
+                        elif s_sell > s_current:
+                            st.error(f"ขายได้สูงสุด {s_current} หุ้น")
+                        else:
+                            src_id   = inv.get("source_account_id")
+                            currency = get_currency(inv)
+                            exit_thb = s_sell * ep * (rate if currency == "USD" else 1)
+                            if s_sell >= s_current:
+                                pnl_pct_v = calc_pnl_pct(inv["entry_price"], ep)
+                                pnl_thb_v = calc_pnl_thb(inv["entry_price"], ep, str(s_current), currency, rate)
+                                inv.update({"status": "closed", "exit_price": str(ep),
+                                            "exit_date": str(exit_d),
+                                            "pnl_pct": pnl_pct_v, "pnl_thb": pnl_thb_v,
+                                            # pnl_thb is converted at today's rate; keep the
+                                            # rate and the THB proceeds or the filed figure
+                                            # can never be reproduced later
+                                            "fx_rate_at_close": round(rate, 4),
+                                            "proceeds_thb": round(exit_thb, 2),
+                                            "thesis_correct": thesis_ok,
+                                            "emotion": emotion, "lesson": lesson})
+                                if src_id:
+                                    cash_credit(cash, src_id, exit_thb, rate)
+                                    save_cash(cash)
+                                save_investments(investments)
+                                st.session_state.pop(f"sell_inv_{inv['id']}", None)
+                                st.success(f"ปิด Position · P&L = {fmt_money(pnl_thb_v, disp, rate)}")
+                            else:
+                                s_remain  = round(s_current - s_sell, 8)
+                                pnl_thb_p = calc_pnl_thb(inv["entry_price"], ep, str(s_sell), currency, rate)
+                                sell_hist = inv.get("sell_history", [])
+                                sell_hist.append({
+                                    "date": str(exit_d), "shares": str(s_sell),
+                                    "price": str(ep), "thb": round(exit_thb, 2),
+                                    "pnl_thb": round(pnl_thb_p or 0, 2),
+                                    "fx_rate": round(rate, 4),
+                                })
+                                new_pos_thb = (inv.get("position_thb") or 0) * (s_remain / s_current)
+                                inv.update({
+                                    "shares":       str(s_remain),
+                                    "position_thb": round(new_pos_thb, 2),
+                                    "sell_history": sell_hist,
+                                })
+                                if src_id:
+                                    cash_credit(cash, src_id, exit_thb, rate)
+                                    save_cash(cash)
+                                save_investments(investments)
+                                st.session_state.pop(f"sell_inv_{inv['id']}", None)
+                                st.success(f"ขาย {s_sell} หุ้น @ {ep} · เหลือ {s_remain} หุ้น · P&L = {fmt_money(pnl_thb_p, disp, rate)}")
                             st.session_state.pop("inv_hold_tbl", None)
                             st.rerun()
 
-                if st.session_state.get(f"sell_inv_{inv['id']}"):
-                    st.markdown("**ขาย**")
-                    s_current = parse(get_shares(inv)) or 0
-                    st.caption(f"ถืออยู่ {s_current:,.10g} หุ้น · AVG {inv.get('entry_price','—')}")
-                    with st.form(f"form_sell_inv_{inv['id']}"):
-                        # a button can't fill a field inside a form, so Max is a tick
-                        # read on submit — it sells exactly what is held, no typing
-                        sv1, svm, sv2, sv3 = st.columns([3, 1, 3, 3])
-                        sell_shares = sv1.text_input("จำนวนที่ขาย *", placeholder=f"สูงสุด {s_current:,.10g}")
-                        with svm:
-                            st.markdown("<div style='height:35px'></div>", unsafe_allow_html=True)
-                            sell_max = st.checkbox("Max", key=f"sell_inv_max_{inv['id']}", help="ขายหมดทั้ง position ไม่ต้องพิมพ์จำนวน")
-                        exit_p      = sv2.text_input("ราคาที่ขาย *", placeholder="เช่น 420")
-                        exit_d      = sv3.date_input("วันที่ขาย", value=date.today())
-                        sv4, sv5 = st.columns(2)
-                        thesis_ok = sv4.selectbox("Thesis ถูกไหม (ถ้าปิด position)",
-                                                   ["✅ ถูก", "❌ ผิด", "⚠️ บางส่วน"])
-                        emotion   = sv5.selectbox("Emotion (ถ้าปิด position)",
-                                                   ["ปกติ", "กลัว", "โลภ", "FOMO"])
-                        lesson    = st.text_input("Lesson ที่ได้ (optional, ถ้าปิด position)")
-                        if st.form_submit_button("ยืนยันขาย"):
-                            s_sell = s_current if sell_max else parse(sell_shares)
-                            ep     = parse(exit_p)
-                            if not s_sell or not ep:
-                                st.error("กรุณากรอกจำนวนหุ้นและราคาที่ขาย")
-                            elif s_sell > s_current:
-                                st.error(f"ขายได้สูงสุด {s_current} หุ้น")
-                            else:
-                                src_id   = inv.get("source_account_id")
-                                currency = get_currency(inv)
-                                exit_thb = s_sell * ep * (rate if currency == "USD" else 1)
-                                if s_sell >= s_current:
-                                    pnl_pct_v = calc_pnl_pct(inv["entry_price"], ep)
-                                    pnl_thb_v = calc_pnl_thb(inv["entry_price"], ep, str(s_current), currency, rate)
-                                    inv.update({"status": "closed", "exit_price": str(ep),
-                                                "exit_date": str(exit_d),
-                                                "pnl_pct": pnl_pct_v, "pnl_thb": pnl_thb_v,
-                                                # pnl_thb is converted at today's rate; keep the
-                                                # rate and the THB proceeds or the filed figure
-                                                # can never be reproduced later
-                                                "fx_rate_at_close": round(rate, 4),
-                                                "proceeds_thb": round(exit_thb, 2),
-                                                "thesis_correct": thesis_ok,
-                                                "emotion": emotion, "lesson": lesson})
-                                    if src_id:
-                                        cash_credit(cash, src_id, exit_thb, rate)
-                                        save_cash(cash)
-                                    save_investments(investments)
-                                    st.session_state.pop(f"sell_inv_{inv['id']}", None)
-                                    st.success(f"ปิด Position · P&L = {fmt_money(pnl_thb_v, disp, rate)}")
-                                else:
-                                    s_remain  = round(s_current - s_sell, 8)
-                                    pnl_thb_p = calc_pnl_thb(inv["entry_price"], ep, str(s_sell), currency, rate)
-                                    sell_hist = inv.get("sell_history", [])
-                                    sell_hist.append({
-                                        "date": str(exit_d), "shares": str(s_sell),
-                                        "price": str(ep), "thb": round(exit_thb, 2),
-                                        "pnl_thb": round(pnl_thb_p or 0, 2),
-                                        "fx_rate": round(rate, 4),
-                                    })
-                                    new_pos_thb = (inv.get("position_thb") or 0) * (s_remain / s_current)
-                                    inv.update({
-                                        "shares":       str(s_remain),
-                                        "position_thb": round(new_pos_thb, 2),
-                                        "sell_history": sell_hist,
-                                    })
-                                    if src_id:
-                                        cash_credit(cash, src_id, exit_thb, rate)
-                                        save_cash(cash)
-                                    save_investments(investments)
-                                    st.session_state.pop(f"sell_inv_{inv['id']}", None)
-                                    st.success(f"ขาย {s_sell} หุ้น @ {ep} · เหลือ {s_remain} หุ้น · P&L = {fmt_money(pnl_thb_p, disp, rate)}")
-                                st.session_state.pop("inv_hold_tbl", None)
-                                st.rerun()
+        try:
+            _sel_rows = list(_ev.selection.rows)
+        except Exception:
+            _sel_rows = []
+        _sel_inv = raw[_sel_rows[0]]["inv"] if _sel_rows and _sel_rows[0] < len(raw) else None
+        if _sel_inv is None:
+            st.session_state.pop("inv_dlg_last", None)
+            st.caption("คลิกแถวในตารางเพื่อซื้อเพิ่ม / แก้ไข / ขาย")
+        elif st.session_state.get("inv_dlg_last") != _sel_inv["id"]:
+            st.session_state["inv_dlg_last"] = _sel_inv["id"]
+            for _f in ("add_inv_", "edit_inv_", "sell_inv_"):
+                st.session_state.pop(f"{_f}{_sel_inv['id']}", None)
+            _inv_dialog(_sel_inv)
 
     # -- Closed --
     if closed_inv:
