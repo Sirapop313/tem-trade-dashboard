@@ -902,6 +902,43 @@ CHART_LAYOUT = dict(
                zerolinecolor="rgba(255,255,255,0.15)"),
 )
 
+def _pnl_tint(pct) -> str:
+    """Tile colour for a P&L %: surface grey pulled toward green or red with the size
+    of the move (saturates around ±20%). None (cash) stays neutral."""
+    base = (0x1A, 0x1F, 0x23)
+    if pct is None or not math.isfinite(pct):
+        return "#2A3035"
+    tgt = (0x3D, 0xBE, 0x7F) if pct >= 0 else (0xEF, 0x5F, 0x55)
+    k = (min(abs(pct) * 3.2, 62) + 12) / 100
+    return "#" + "".join(f"{round(b + (t - b) * k):02X}" for b, t in zip(base, tgt))
+
+
+def allocation_treemap(labels, vals_thb, pcts, disp, rate, height=360):
+    """Holdings as boxes: area = share of money, colour = P&L %. Reads both at once,
+    which a pie cannot do once there are more than a handful of slices."""
+    vals = [to_display(v, disp, rate) for v in vals_thb]
+    total = sum(vals) or 1
+    hide = hidden_amounts()
+    pct_txt = ["" if p is None else fmt_pct(p) for p in pcts]
+    hover = [f"{l}<br>{v / total * 100:.1f}% ของพอร์ต"
+             + ("" if hide else f"<br>{fmt_money(vt, disp, rate, sign=False)}")
+             + (f"<br>P&L {t}" if t else "")
+             for l, v, vt, t in zip(labels, vals, vals_thb, pct_txt)]
+    fig = go.Figure(go.Treemap(
+        labels=labels, parents=[""] * len(labels), values=vals, sort=True,
+        customdata=pct_txt, hovertext=hover, hoverinfo="text",
+        texttemplate="<b>%{label}</b><br>%{percentRoot:.1%}<br>%{customdata}",
+        textfont=dict(family="IBM Plex Sans Thai, sans-serif", size=14, color="#E9E6DF"),
+        textposition="top left",
+        marker=dict(colors=[_pnl_tint(p) for p in pcts],
+                    line=dict(color="#0D1012", width=3), pad=dict(t=8, l=8, r=8, b=8)),
+        tiling=dict(pad=0), pathbar=dict(visible=False),
+    ))
+    fig.update_layout(**{**CHART_LAYOUT, "height": height,
+                         "margin": dict(t=4, b=4, l=0, r=0)})
+    return fig
+
+
 def allocation_pie(labels, vals_thb, disp, rate, title, height=320):
     vals = [to_display(v, disp, rate) for v in vals_thb]
     total = sum(v for v in vals if v)
@@ -1536,25 +1573,24 @@ def page_overview(trades: list, investments: list, cash: list, disp: str, rate: 
     open_all = open_trades + open_inv
     if open_all or cash_thb > 0:
         st.markdown("<div style='height:0.5rem'></div>", unsafe_allow_html=True)
-        col_pie, col_chart = st.columns([5, 7])
+        pie_labels, pie_vals, pie_pcts = [], [], []
+        for item in open_all:
+            # same valuation as Total Wealth so the slices add up to the headline;
+            # a position underwater past its capital has no positive share to draw
+            _px = get_price(item.get("ticker",""))
+            pos = position_value_thb(item, _px, rate)
+            if pos > 0:
+                pie_labels.append(item.get("ticker","?"))
+                pie_vals.append(pos)
+                _pp = calc_pnl_pct(item.get("entry_price"), _px,
+                                   item.get("direction", "Long")) if _px else None
+                pie_pcts.append(_pp * trade_leverage(item) if _pp is not None else None)
+        if cash_thb > 0:
+            pie_labels.append("Cash")
+            pie_vals.append(cash_thb)
+            pie_pcts.append(None)
 
-        with col_pie:
-            pie_labels, pie_vals = [], []
-            for item in open_all:
-                # same valuation as Total Wealth so the slices add up to the headline;
-                # a position underwater past its capital has no positive share to draw
-                pos = position_value_thb(item, get_price(item.get("ticker","")), rate)
-                if pos > 0:
-                    pie_labels.append(item.get("ticker","?"))
-                    pie_vals.append(pos)
-            if cash_thb > 0:
-                pie_labels.append("Cash")
-                pie_vals.append(cash_thb)
-            if pie_labels:
-                st.plotly_chart(allocation_pie(pie_labels, pie_vals, disp, rate,
-                                               "Asset Allocation", height=320),
-                                use_container_width=True)
-
+        col_chart = st.container()
         with col_chart:
             if open_all:
                 cc1, cc2, cc3 = st.columns([3, 4, 4])
@@ -1576,6 +1612,21 @@ def page_overview(trades: list, investments: list, cash: list, disp: str, rate: 
                     st.plotly_chart(fig_ret, use_container_width=True)
                 else:
                     st.info("ไม่มีข้อมูลราคาย้อนหลัง")
+
+        if pie_labels:
+            _ah1, _ah2 = st.columns([3, 1])
+            with _ah1:
+                section("ถืออะไรอยู่")
+            with _ah2:
+                _av = st.radio("มุมมอง", ["Treemap", "Donut"], horizontal=True,
+                               key="ov_alloc_view", label_visibility="collapsed")
+            if _av == "Treemap":
+                st.plotly_chart(allocation_treemap(pie_labels, pie_vals, pie_pcts, disp, rate),
+                                use_container_width=True)
+            else:
+                st.plotly_chart(allocation_pie(pie_labels, pie_vals, disp, rate,
+                                               "", height=360),
+                                use_container_width=True)
 
     # -- Stats + Cash compact row --
     if open_all or cash:
@@ -1795,9 +1846,18 @@ def page_investment(investments: list, trades: list, cash: list, disp: str, rate
         col_pie_inv, col_ret_inv = st.columns([4, 6])
         with col_pie_inv:
             if pie_labels_inv:
-                st.plotly_chart(allocation_pie(pie_labels_inv, pie_vals_inv, disp, rate,
-                                               "Holdings Allocation", height=280),
-                                use_container_width=True)
+                _iv = st.radio("มุมมอง", ["Treemap", "Donut"], horizontal=True,
+                               key="inv_alloc_view", label_visibility="collapsed")
+                if _iv == "Treemap":
+                    _ip = [calc_pnl_pct(r["inv"].get("entry_price"), r["price"]) if r["price"] else None
+                           for r in raw if r["pos_thb"]]
+                    st.plotly_chart(allocation_treemap(pie_labels_inv, pie_vals_inv, _ip, disp, rate,
+                                                       height=300),
+                                    use_container_width=True)
+                else:
+                    st.plotly_chart(allocation_pie(pie_labels_inv, pie_vals_inv, disp, rate,
+                                                   "Holdings Allocation", height=280),
+                                    use_container_width=True)
         with col_ret_inv:
             inv_rp1, inv_rp2, inv_rp3 = st.columns([5, 4, 3])
             with inv_rp1:
