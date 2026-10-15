@@ -911,6 +911,19 @@ def settle_thb(item: dict, shares_closed: float, pnl_thb, rate: float) -> float:
     return cost / trade_leverage(item) + (pnl_thb or 0)
 
 
+def _trim_pct(sh: dict):
+    """Price return of one partial sell, from what was stored at the time.
+
+    The "thb" field is cost + P&L for both directions (a Short stores
+    2 x cost - exit), so cost = thb - pnl. Reading the trade's current entry
+    price instead would be wrong once a later buy-more has moved the average.
+    """
+    thb, pnl = sh.get("thb"), sh.get("pnl_thb")
+    if thb is None or pnl is None or thb - pnl <= 0:
+        return None
+    return round(pnl / (thb - pnl) * 100, 2)
+
+
 def position_value_thb(item: dict, price, rate: float) -> float:
     """What an open position is worth to its owner at `price`: the capital it tied
     up plus its unrealised P&L — the same thing settle_thb() would return if it
@@ -2616,6 +2629,25 @@ def page_trade(trades: list, cash: list, disp: str, rate: float):
                         unsafe_allow_html=True)
 
                 st.caption(f"Thesis: {t.get('thesis','—')}")
+
+                # trims already taken out of this position — they used to be visible
+                # only in the Log, so the trade page showed the remaining size with no
+                # sign that part of it had been sold and its profit already locked in
+                _trims = t.get("sell_history", [])
+                if _trims:
+                    _sold = sum(parse(x.get("shares")) or 0 for x in _trims)
+                    _rpnl = sum(x.get("pnl_thb") or 0 for x in _trims)
+                    st.markdown(f"**✂️ ขายไปแล้วบางส่วน** · {_sold:,.10g} shares · "
+                                f"กำไรที่ realize แล้ว {fmt_money(_rpnl, disp, rate)}")
+                    st.dataframe([{
+                        "วันที่":       x.get("date", "—"),
+                        "จำนวน":       f"{parse(x.get('shares')) or 0:,.10g}",
+                        "ราคาขาย":     x.get("price", "—"),
+                        "P&L %":       fmt_pct(_trim_pct(x)),
+                        f"P&L ({sym})": fmt_money(x.get("pnl_thb"), disp, rate),
+                        "คืนเงินเข้า":  x.get("settled_to") or "—",
+                    } for x in sorted(_trims, key=lambda x: x.get("date", ""), reverse=True)],
+                        use_container_width=True, hide_index=True)
                 st.divider()
 
                 ca, cb, cc, _, cd = st.columns([2, 2, 2, 1, 1])
@@ -2886,23 +2918,61 @@ def page_trade(trades: list, cash: list, disp: str, rate: float):
                     use_container_width=True)
 
     # -- Closed Trades Table --
-    if closed_trades:
-        section(f"Closed Trades ({len(closed_trades)})")
-        _ct_rows = [{
+    # Every sale, not only full closes: a trim on a still-open trade locks in profit
+    # too, and used to be visible only in the Log. A trade trimmed then closed shows
+    # one row per trim plus the final close, which only covers the remaining shares,
+    # so nothing is counted twice.
+    def _pct_txt(t, pct):
+        lev = trade_leverage(t)
+        if lev > 1 and isinstance(pct, (int, float)):
+            return f"{fmt_pct(pct * lev)} ROE ({lev:g}x)"
+        return fmt_pct(pct)
+
+    def _qty(v):
+        n = parse(v)
+        return "—" if n is None else f"{n:,.10g}"
+
+    _sale_rows = []
+    for t in closed_trades:
+        _sale_rows.append({
             "Ticker":       t.get("ticker","—"),
+            "การขาย":       "ปิดหมด",
             "Strategy":     t.get("strategy","—"),
             "เปิด":         t.get("open_date","—"),
             "ปิด":          t.get("close_date","—"),
-            "Entry":        t.get("entry_price","—"),
-            "Exit":         t.get("exit_price","—"),
-            "P&L %":        (f"{fmt_pct(t['pnl_pct'] * trade_leverage(t))} ROE ({trade_leverage(t):g}x)"
-                             if trade_leverage(t) > 1 and isinstance(t.get("pnl_pct"), (int, float))
-                             else fmt_pct(t.get("pnl_pct"))),
+            "จำนวน":        _qty(get_shares(t)),
+            "Entry":        str(t.get("entry_price","—")),
+            "Exit":         str(t.get("exit_price","—")),
+            "P&L %":        _pct_txt(t, t.get("pnl_pct")),
             f"P&L ({sym})": fmt_money(t.get("pnl_thb"), disp, rate),
             "W/L":          t.get("win_loss","—"),
             "Lesson":       t.get("lesson","—"),
-        } for t in sorted(closed_trades, key=lambda x: x.get("close_date",""), reverse=True)]
-        st.dataframe(pd.DataFrame(_ct_rows), use_container_width=True, hide_index=True)
+        })
+    for t in trades:
+        for x in t.get("sell_history", []):
+            _p = x.get("pnl_thb")
+            _sale_rows.append({
+                "Ticker":       t.get("ticker","—"),
+                "การขาย":       "ขายบางส่วน" + (" · ยังถืออยู่" if t.get("status") == "open" else ""),
+                "Strategy":     t.get("strategy","—"),
+                "เปิด":         t.get("open_date","—"),
+                "ปิด":          x.get("date","—"),
+                "จำนวน":        _qty(x.get("shares")),
+                "Entry":        str(t.get("entry_price","—")),
+                "Exit":         str(x.get("price","—")),
+                "P&L %":        _pct_txt(t, _trim_pct(x)),
+                f"P&L ({sym})": fmt_money(_p, disp, rate),
+                "W/L":          "—" if _p is None else ("Win" if _p > 0 else "Loss"),
+                "Lesson":       "—",
+            })
+    if _sale_rows:
+        _sale_rows.sort(key=lambda r: r["ปิด"] or "", reverse=True)
+        _n_trim = len(_sale_rows) - len(closed_trades)
+        section(f"Closed Trades ({len(closed_trades)})"
+                + (f" · ขายบางส่วน {_n_trim} ครั้ง" if _n_trim else ""))
+        st.dataframe(pd.DataFrame(_sale_rows), use_container_width=True, hide_index=True)
+
+    if closed_trades:
 
         # Journal fields only. Price, size and dates stay locked: the cash has already
         # settled against them, and changing them here would desync every balance.
