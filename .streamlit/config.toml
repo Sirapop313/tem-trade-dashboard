@@ -1,10 +1,44 @@
 [theme]
-# แก้ตรงนี้เพื่อเปลี่ยน theme ทั้งแอป
-base              = "dark"
-primaryColor      = "#5865f2"   # สี accent (ปุ่ม, highlight)
-backgroundColor   = "#0f0f17"   # พื้นหลัง
-secondaryBackgroundColor = "#1a1a2e"  # sidebar, cards
-textColor         = "#e2e8f0"
+# แก้ตรงนี้เพื่อเปลี่ยน theme ทั้งแอป — ค่าสีตรงกับ token ใน dashboard.py (--it-*)
+base                     = "dark"
+primaryColor             = "#D9A441"   # accent ทองหม่น (ปุ่ม, highlight)
+backgroundColor          = "#0D1012"   # พื้นหลัง
+secondaryBackgroundColor = "#14181B"   # การ์ด, ช่องกรอก
+textColor                = "#E9E6DF"
+# ฟอนต์อยู่ใน static/fonts — โหลดจากแอปเอง ไม่พึ่ง Google Fonts
+# IBM Plex Sans Thai มีทั้งไทยและอังกฤษ ตัวหนังสือทั้งแอปเลยเป็นตระกูลเดียวกัน
+font                     = "IBM Plex Sans Thai, sans-serif"
+codeFont                 = "IBM Plex Mono, monospace"
+
+[[theme.fontFaces]]
+family = "IBM Plex Sans Thai"
+url    = "app/static/fonts/IBMPlexSansThai-Regular.ttf"
+weight = 400
+[[theme.fontFaces]]
+family = "IBM Plex Sans Thai"
+url    = "app/static/fonts/IBMPlexSansThai-Medium.ttf"
+weight = 500
+[[theme.fontFaces]]
+family = "IBM Plex Sans Thai"
+url    = "app/static/fonts/IBMPlexSansThai-SemiBold.ttf"
+weight = 600
+[[theme.fontFaces]]
+family = "IBM Plex Sans Thai"
+url    = "app/static/fonts/IBMPlexSansThai-Bold.ttf"
+weight = 700
+[[theme.fontFaces]]
+family = "IBM Plex Mono"
+url    = "app/static/fonts/IBMPlexMono-Regular.ttf"
+weight = 400
+[[theme.fontFaces]]
+family = "IBM Plex Mono"
+url    = "app/static/fonts/IBMPlexMono-Medium.ttf"
+weight = 500
+[[theme.fontFaces]]
+family = "IBM Plex Mono"
+url    = "app/static/fonts/IBMPlexMono-SemiBold.ttf"
+weight = 600
 
 [server]
 headless = true
+enableStaticServing = true

@@ -37,75 +37,26 @@ INVESTMENTS_FILE = os.path.join(DIR, "investments.json")
 CASH_FILE        = os.path.join(DIR, "cash.json")
 STRATEGY_PRESETS = ["Breakout", "Swing", "Buy on dip", "Others"]
 
-# -- Candlestick decorative BG (computed here so CSS can embed it directly) --
-_CDATA = [
-    ( 35,  70, 108, 188, 228, True),
-    ( 95,  85, 122, 202, 245, False),
-    (155,  65, 100, 212, 255, False),
-    (215,  80, 125, 235, 272, False),
-    (275,  85, 138, 258, 290, False),
-    (335,  92, 135, 242, 278, True),
-    (395,  75, 102, 205, 250, True),
-    (455,  52,  75, 175, 228, True),
-    (515,  35,  56, 148, 200, True),
-    (575,  25,  44, 115, 172, True),
-    (635,  30,  52, 135, 190, False),
-    (695,  20,  40, 105, 160, True),
-    (755,  10,  28,  85, 130, True),
-    (815,  15,  33,  88, 142, True),
-    (875,   8,  22,  72, 118, True),
-]
-_close_pts = " ".join(
-    f"{'M' if i == 0 else 'L'} {cx} {bt if bull else bb}"
-    for i, (cx, wt, bt, bb, wb, bull) in enumerate(_CDATA)
-)
-_c_svgs = "".join(
-    f'<line x1="{cx}" y1="{wt}" x2="{cx}" y2="{wb}" '
-    f'stroke="{"#7C3AED" if bull else "#94A3B8"}" stroke-width="1.5" '
-    f'stroke-opacity="{"0.28" if bull else "0.16"}"/>'
-    f'<rect x="{cx - 12}" y="{bt}" width="24" height="{bb - bt}" '
-    f'fill="{"url(#cb)" if bull else "url(#cr)"}" rx="2"/>'
-    for cx, wt, bt, bb, wb, bull in _CDATA
-)
-_svg_raw = (
-    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 910 310" opacity="0.28">'
-    '<defs>'
-    '<linearGradient id="cb" x1="0" y1="0" x2="0" y2="1">'
-    '<stop offset="0%" stop-color="#7C3AED" stop-opacity="0.9"/>'
-    '<stop offset="100%" stop-color="#7C3AED" stop-opacity="0.3"/>'
-    '</linearGradient>'
-    '<linearGradient id="cr" x1="0" y1="0" x2="0" y2="1">'
-    '<stop offset="0%" stop-color="#94A3B8" stop-opacity="0.7"/>'
-    '<stop offset="100%" stop-color="#94A3B8" stop-opacity="0.2"/>'
-    '</linearGradient>'
-    '</defs>'
-    + _c_svgs
-    + f'<path d="{_close_pts}" fill="none" stroke="#7C3AED" '
-    'stroke-width="2.5" stroke-opacity="0.7" stroke-dasharray="5 3"/>'
-    '</svg>'
-)
-_svg_b64 = _b64.b64encode(_svg_raw.encode()).decode()
-
 # -- CSS --
-st.markdown(
-    '<link rel="preconnect" href="https://fonts.googleapis.com">'
-    '<link rel="stylesheet" href="https://fonts.googleapis.com/css2?'
-    'family=Syne:wght@400;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap">',
-    unsafe_allow_html=True,
-)
+# Fonts come from .streamlit/config.toml ([[theme.fontFaces]], files in static/fonts),
+# so Streamlit applies them everywhere including the canvas-drawn dataframes. Forcing
+# a font-family on every element here would also hit Streamlit's icon font and turn
+# the expander arrows into the literal word "keyboard_arrow_down".
 st.markdown("""<style>
-/* Tokens */
+/* Tokens — keep in sync with .streamlit/config.toml */
 :root {
-  --it-bg:      #080F1C;
-  --it-sidebar: #09111F;
-  --it-card:    #0C1828;
-  --it-border:  #192537;
-  --it-text:    #E2E8F0;
-  --it-muted:   #64748B;
-  --it-accent:  #7C3AED;
-  --it-accent2: #1D4ED8;
-  --it-green:   #22C55E;
-  --it-red:     #EF4444;
+  --it-bg:      #0D1012;
+  --it-card:    #14181B;
+  --it-raise:   #1A1F23;
+  --it-border:  #262C31;
+  --it-text:    #E9E6DF;
+  --it-muted:   #8B9196;
+  --it-faint:   #5B6268;
+  --it-accent:  #D9A441;
+  --it-accent-ink: #1A1408;
+  --it-green:   #3DBE7F;
+  --it-red:     #EF5F55;
+  --it-mono:    'IBM Plex Mono', ui-monospace, monospace;
 }
 
 /* Base */
@@ -114,206 +65,133 @@ st.markdown("""<style>
 [data-testid="stDecoration"] { display: none !important; }
 /* No sidebar. It only repeated what the navbar already shows — logo, app name,
    email, logout — and once collapsed it could not be reopened, because the
-   reopen control lives in stHeader and this app hides that. The rules that used
-   to force it visible and restyle its collapse/expand buttons went with it. */
+   reopen control lives in stHeader and this app hides that. */
 [data-testid="stSidebar"],
 [data-testid="stSidebarCollapseButton"],
 [data-testid="collapsedControl"] { display: none !important; }
 
-.stApp {
-    background-color: #060C18 !important;
-    background-image:
-        url('data:image/svg+xml;base64,__CANDLE_SVG__'),
-        linear-gradient(rgba(124,58,237,0.042) 1px, transparent 1px),
-        linear-gradient(90deg, rgba(29,78,216,0.028) 1px, transparent 1px),
-        radial-gradient(ellipse 100% 55% at 55% -10%, rgba(124,58,237,0.13) 0%, transparent 65%) !important;
-    background-size: 72% 62%, 44px 44px, 44px 44px, 100% 100% !important;
-    background-position: bottom right, 0 0, 0 0, 0 0 !important;
-    background-repeat: no-repeat, repeat, repeat, no-repeat !important;
-    background-attachment: fixed, fixed, fixed, fixed !important;
-    font-family: 'Plus Jakarta Sans', sans-serif !important;
-}
-/* Content area: solid bg so SVG decoration doesn't bleed through content */
-[data-testid="stMain"] { background: #060C18 !important; }
-.main .block-container { max-width: 1400px; padding-top: 1.5rem; }
-
-
-/* Page header */
-.page-title {
-    font-size: 1.8rem; font-weight: 800; margin: 0; line-height: 1.15;
-    font-family: 'Syne', sans-serif !important;
-    background: linear-gradient(135deg, #C4B5FD 0%, #93C5FD 100%);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
-}
-.page-sub { font-size: .82rem; color: var(--it-muted); margin-top: 3px; }
+.stApp, [data-testid="stMain"] { background: var(--it-bg) !important; }
+.main .block-container { max-width: 1280px; padding-top: 1.5rem; }
 
 /* Section labels */
 .section-label {
-    font-size: 0.65rem; font-weight: 700; letter-spacing: 0.14em;
-    text-transform: uppercase; color: var(--it-accent);
-    padding-bottom: .45rem;
-    border-bottom: 1px solid rgba(124,58,237,0.22);
-    margin-bottom: .75rem;
+    font-size: 12px; font-weight: 600; letter-spacing: 0.05em;
+    text-transform: uppercase; color: var(--it-muted);
+    margin: .35rem 0 .6rem;
 }
 
 /* Metric cards */
 [data-testid="stMetric"] {
-    background: linear-gradient(135deg, rgba(124,58,237,0.08) 0%, var(--it-card) 100%) !important;
-    border: 1px solid rgba(124,58,237,0.18) !important;
-    border-left: 3px solid rgba(124,58,237,0.7) !important;
-    border-radius: 12px !important;
-    padding: 18px 20px !important;
-    transition: transform .15s, box-shadow .15s !important;
-}
-[data-testid="stMetric"]:hover {
-    transform: translateY(-2px) !important;
-    box-shadow: 0 8px 28px rgba(124,58,237,0.18) !important;
+    background: var(--it-card) !important;
+    border: 1px solid var(--it-border) !important;
+    border-radius: 8px !important;
+    padding: 14px 16px !important;
 }
 [data-testid="stMetricValue"] {
-    font-size: 1.6rem !important;
-    font-weight: 700 !important;
+    font-family: var(--it-mono) !important;
+    font-size: 1.45rem !important;
+    font-weight: 600 !important;
     color: var(--it-text) !important;
-    font-family: 'Plus Jakarta Sans', sans-serif !important;
     font-variant-numeric: tabular-nums !important;
     letter-spacing: -0.01em !important;
 }
-[data-testid="stMetricLabel"] {
-    font-size: 0.62rem !important;
+[data-testid="stMetricLabel"], [data-testid="stMetricLabel"] p {
+    font-size: 12px !important;
     color: var(--it-muted) !important;
-    text-transform: uppercase !important;
-    letter-spacing: 0.1em !important;
-    font-weight: 700 !important;
-    font-family: 'Plus Jakarta Sans', sans-serif !important;
+    font-weight: 500 !important;
 }
+[data-testid="stMetricDelta"] { font-family: var(--it-mono) !important; }
+[data-testid="stMetricValue"] * { font-family: var(--it-mono) !important; }
+
+/* Radios as a segmented control: same widget and value, drawn like the THB/USD toggle */
+[data-testid="stMain"] [data-testid="stRadio"] [role="radiogroup"] {
+    display: inline-flex !important; flex-wrap: wrap; gap: 2px !important;
+    border: 1px solid var(--it-border); border-radius: 6px; padding: 2px;
+}
+[data-testid="stMain"] [data-testid="stRadio"] label[data-baseweb="radio"] {
+    margin: 0 !important; padding: 4px 12px !important; border-radius: 4px; cursor: pointer;
+    transition: background .15s;
+}
+[data-testid="stMain"] [data-testid="stRadio"] label[data-baseweb="radio"] > div:first-child { display: none !important; }
+[data-testid="stMain"] [data-testid="stRadio"] label[data-baseweb="radio"] p {
+    color: var(--it-muted) !important; font-size: 13px !important;
+}
+[data-testid="stMain"] [data-testid="stRadio"] label[data-baseweb="radio"]:has(input:checked) { background: var(--it-raise); }
+[data-testid="stMain"] [data-testid="stRadio"] label[data-baseweb="radio"]:has(input:checked) p { color: var(--it-text) !important; }
+[data-testid="stMain"] [data-testid="stRadio"] label[data-baseweb="radio"]:hover p { color: var(--it-text) !important; }
 
 /* Expanders */
+[data-testid="stExpander"] details,
 [data-testid="stExpander"] {
     background: var(--it-card) !important;
-    border: 1px solid var(--it-border) !important;
-    border-left: 3px solid rgba(124,58,237,0.38) !important;
-    border-radius: 12px !important;
-    margin-bottom: .5rem !important;
-    transition: border-left-color .15s !important;
-}
-[data-testid="stExpander"]:hover {
-    border-left-color: var(--it-accent) !important;
-}
-[data-testid="stExpander"] summary {
-    padding: 10px 16px !important;
-    font-family: 'Plus Jakarta Sans', sans-serif !important;
-    font-weight: 600 !important;
-}
-
-/* Inputs */
-[data-testid="stTextInput"] input,
-[data-testid="stNumberInput"] input,
-[data-testid="stTextArea"] textarea,
-[data-testid="stDateInput"] input {
-    background: rgba(6,12,24,.65) !important;
-    border: 1px solid var(--it-border) !important;
-    border-radius: 8px !important;
-    color: var(--it-text) !important;
-    font-family: 'Plus Jakarta Sans', sans-serif !important;
-}
-[data-testid="stTextInput"] input:focus,
-[data-testid="stNumberInput"] input:focus,
-[data-testid="stTextArea"] textarea:focus {
-    border-color: var(--it-accent) !important;
-    box-shadow: 0 0 0 2px rgba(124,58,237,.22) !important;
-}
-
-/* Select / Multiselect */
-[data-baseweb="select"] > div {
-    background: rgba(6,12,24,.65) !important;
-    border: 1px solid var(--it-border) !important;
+    border-color: var(--it-border) !important;
     border-radius: 8px !important;
 }
+[data-testid="stExpander"] { margin-bottom: .5rem !important; }
+[data-testid="stExpander"] summary { padding: 10px 16px !important; font-weight: 500 !important; }
+[data-testid="stExpander"] summary:hover { color: var(--it-text) !important; }
 
-/* Tabs — main nav + inner pages */
-[data-baseweb="tab-list"] {
-    background: rgba(12,24,40,0.75) !important;
-    border-radius: 12px !important;
-    padding: 5px !important;
-    border: 1px solid rgba(124,58,237,0.15) !important;
-    gap: 3px !important;
-    margin-bottom: 1rem !important;
-}
-[data-baseweb="tab"] {
-    border-radius: 8px !important;
-    padding: 8px 18px !important;
-    color: var(--it-muted) !important;
-    font-weight: 500 !important;
-    font-size: 0.9rem !important;
-    font-family: 'Plus Jakarta Sans', sans-serif !important;
-    transition: background .15s !important;
-}
-[data-baseweb="tab"][aria-selected="true"] {
-    background: rgba(124,58,237,0.28) !important;
-    color: #C4B5FD !important;
-    font-weight: 700 !important;
-    box-shadow: 0 0 12px rgba(124,58,237,0.25) !important;
-}
-[data-baseweb="tab-border"] { display: none !important; }
-
-/* Buttons (form submit) */
-[data-testid="stFormSubmitButton"] button {
-    background: linear-gradient(135deg, #5B21B6, #1D4ED8) !important;
-    color: white !important;
-    border: none !important;
-    border-radius: 10px !important;
-    font-weight: 600 !important;
-    font-family: 'Plus Jakarta Sans', sans-serif !important;
-    width: 100%;
-    transition: transform .15s, box-shadow .15s;
-}
-[data-testid="stFormSubmitButton"] button:hover {
-    background: linear-gradient(135deg, #4C1D95, #1E40AF) !important;
-    transform: translateY(-1px);
-    box-shadow: 0 6px 24px rgba(124,58,237,0.38) !important;
-}
-
-/* Regular buttons (non-sidebar, non-login) */
-[data-testid="stMain"] [data-testid="stButton"] button {
-    background: rgba(124,58,237,0.12) !important;
-    border: 1px solid rgba(124,58,237,0.3) !important;
-    color: #C4B5FD !important;
-    border-radius: 8px !important;
-    font-family: 'Plus Jakarta Sans', sans-serif !important;
-    font-weight: 500 !important;
-    transition: all .15s !important;
-}
-[data-testid="stMain"] [data-testid="stButton"] button:hover {
-    background: rgba(124,58,237,0.22) !important;
-    border-color: var(--it-accent) !important;
-    color: #E2E8F0 !important;
-    transform: translateY(-1px) !important;
-}
-
-/* Dataframes */
-[data-testid="stDataFrame"] {
-    border: 1px solid var(--it-border) !important;
-    border-radius: 12px !important;
-}
-
-/* Alerts */
-[data-testid="stAlert"] { border-radius: 10px !important; }
-
-/* Multiselect tags */
-[data-baseweb="tag"] {
-    background: rgba(124,58,237,0.2) !important;
-    border: 1px solid rgba(124,58,237,0.35) !important;
+/* Inputs: the visible box is BaseWeb's outer wrapper (data-baseweb=input/textarea),
+   which takes the theme's secondary colour; the inner base-input and the password
+   reveal button sit on top of it, so they go transparent and the wrapper is styled */
+[data-baseweb="input"], [data-baseweb="textarea"], [data-baseweb="select"] > div {
+    background: var(--it-bg) !important;
+    border-color: var(--it-border) !important;
     border-radius: 6px !important;
-    color: #C4B5FD !important;
 }
+[data-baseweb="input"]:focus-within, [data-baseweb="textarea"]:focus-within,
+[data-baseweb="select"] > div:focus-within { border-color: var(--it-accent) !important; }
+[data-baseweb="base-input"], [data-baseweb="base-input"] input, [data-baseweb="base-input"] textarea,
+[data-baseweb="input"] input, [data-baseweb="textarea"] textarea, [data-baseweb="input"] button {
+    background: transparent !important;
+    color: var(--it-text) !important;
+}
+[data-testid="stWidgetLabel"] p { color: var(--it-muted) !important; font-size: 13px !important; }
 
-/* Dividers */
+/* Buttons: one filled primary (form submit), everything else outlined */
+[data-testid="stFormSubmitButton"] button {
+    background: var(--it-accent) !important;
+    color: var(--it-accent-ink) !important;
+    border: 1px solid var(--it-accent) !important;
+    border-radius: 6px !important;
+    font-weight: 600 !important;
+    width: 100%;
+}
+[data-testid="stFormSubmitButton"] button p { color: var(--it-accent-ink) !important; }
+[data-testid="stFormSubmitButton"] button:hover { filter: brightness(1.07); }
+[data-testid="stMain"] [data-testid="stButton"] button,
+[data-testid="stMain"] [data-testid="stDownloadButton"] button {
+    background: var(--it-card) !important;
+    border: 1px solid var(--it-border) !important;
+    color: var(--it-text) !important;
+    border-radius: 6px !important;
+    font-weight: 500 !important;
+    transition: background .15s, border-color .15s !important;
+}
+[data-testid="stMain"] [data-testid="stButton"] button:hover,
+[data-testid="stMain"] [data-testid="stDownloadButton"] button:hover {
+    background: var(--it-raise) !important;
+    border-color: var(--it-faint) !important;
+}
+[data-testid="stMain"] [data-testid="stButton"] button:disabled { opacity: .45; }
+
+/* Dataframes, alerts, captions, dividers */
+[data-testid="stDataFrame"] { border: 1px solid var(--it-border) !important; border-radius: 8px !important; overflow: hidden; }
+[data-testid="stAlert"] { border-radius: 8px !important; }
+[data-testid="stCaptionContainer"], [data-testid="stCaptionContainer"] p { color: var(--it-muted) !important; }
+[data-baseweb="tag"] {
+    background: rgba(217,164,65,0.14) !important;
+    border: 1px solid rgba(217,164,65,0.3) !important;
+    border-radius: 4px !important;
+    color: var(--it-accent) !important;
+}
 hr { border-color: var(--it-border) !important; }
+:focus-visible { outline: 2px solid var(--it-accent) !important; outline-offset: 2px; }
 
 /* Hide the native Streamlit tab-list — navbar replaces it */
 [data-baseweb="tab-list"] { display: none !important; }
-</style>""".replace("__CANDLE_SVG__", _svg_b64), unsafe_allow_html=True)
+@media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+</style>""", unsafe_allow_html=True)
 
 # -- Logo (Tim.fin) --
 _logo_path = os.path.join(DIR, "Tim.fin Logo.png")
@@ -346,24 +224,34 @@ def sb_update_password(new_pass: str) -> tuple[bool, str]:
         return False, str(e)
 
 
+# 16px line icons for the navbar (stroke follows the button's text colour)
+_ICON_EYE = ('<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4">'
+             '<path d="M1 8s2.5-5 7-5 7 5 7 5-2.5 5-7 5-7-5-7-5Z"/><circle cx="8" cy="8" r="2"/></svg>')
+_ICON_EYE_OFF = ('<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4">'
+                 '<path d="M2 2l12 12M6.6 3.2A7 7 0 0 1 8 3c4.5 0 7 5 7 5a12 12 0 0 1-2 2.6'
+                 'M10 12.6A6 6 0 0 1 8 13c-4.5 0-7-5-7-5a12 12 0 0 1 2.6-3"/></svg>')
+_ICON_USER = ('<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4">'
+              '<circle cx="8" cy="5.5" r="2.8"/><path d="M2.5 14c.8-2.8 3-4.2 5.5-4.2s4.7 1.4 5.5 4.2"/></svg>')
+
+
 def _inject_navbar(logo_src: str, email: str, curr: str, rate: float,
                    hide_amt: bool = False) -> str:
     """Inject navbar HTML+CSS+JS into the parent page via window.parent (components.html iframe)."""
     thb_cls = "on" if curr == "THB" else ""
     usd_cls = "on" if curr == "USD" else ""
-    logo_tag = f'<img src="{logo_src}" class="tfin-brand-img">' if logo_src else '<span style="font-size:1.3rem;line-height:1">📊</span>'
+    logo_tag = f'<img src="{logo_src}" class="tfin-brand-img" alt="">' if logo_src else ""
     em_short = (email[:22] + "…") if len(email) > 24 else email
     rate_str = f"{rate:.2f}"
 
     nav_html = (
         f'<div id="tfin-nav">'
-        f'<div class="tfin-brand">{logo_tag}<span class="tfin-brand-name">Investment Tracker</span></div>'
+        f'<div class="tfin-brand">{logo_tag}<span class="tfin-brand-name">Tim.fin OS</span></div>'
         f'<div class="tfin-nav-tabs">'
-        f'<button class="tfin-nt on" id="tnt0">📊 Overview</button>'
-        f'<button class="tfin-nt" id="tnt1">💼 Investment</button>'
-        f'<button class="tfin-nt" id="tnt2">📈 Trade</button>'
-        f'<button class="tfin-nt" id="tnt3">💵 Cash</button>'
-        f'<button class="tfin-nt" id="tnt4">📓 Log</button>'
+        f'<button class="tfin-nt on" id="tnt0">Overview</button>'
+        f'<button class="tfin-nt" id="tnt1">Investment</button>'
+        f'<button class="tfin-nt" id="tnt2">Trade</button>'
+        f'<button class="tfin-nt" id="tnt3">Cash</button>'
+        f'<button class="tfin-nt" id="tnt4">Log</button>'
         f'</div>'
         f'<div class="tfin-nav-right">'
         f'<span class="tfin-rate">฿{rate_str}/USD</span>'
@@ -373,101 +261,88 @@ def _inject_navbar(logo_src: str, email: str, curr: str, rate: float,
         f'</div>'
         f'<button class="tfin-eye{" off" if hide_amt else ""}" id="tfin-eye" '
         f'title="{"แสดงยอดเงิน" if hide_amt else "ซ่อนยอดเงิน"}">'
-        f'{"🙈" if hide_amt else "👁"}</button>'
+        f'{_ICON_EYE_OFF if hide_amt else _ICON_EYE}</button>'
         f'<div class="tfin-aw">'
-        f'<button class="tfin-ab" id="tfin-acct-btn" title="{email}">👤</button>'
+        f'<button class="tfin-ab" id="tfin-acct-btn" title="{email}">{_ICON_USER}</button>'
         f'<div class="tfin-dd" id="tfin-acct-dd">'
         f'<div class="tfin-dd-email">{em_short}</div>'
         f'<hr class="tfin-dd-hr">'
-        f'<button class="tfin-ddbtn red" id="tfin-logout-btn">🚪 ออกจากระบบ</button>'
+        f'<button class="tfin-ddbtn red" id="tfin-logout-btn">ออกจากระบบ</button>'
         f'</div></div></div></div>'
     )
 
     nav_css = (
         "#tfin-nav{position:fixed!important;top:0!important;left:0!important;right:0!important;"
-        "height:58px!important;background:rgba(6,11,22,0.97)!important;"
-        "backdrop-filter:blur(20px)!important;-webkit-backdrop-filter:blur(20px)!important;"
-        "border-bottom:1px solid rgba(124,58,237,0.18)!important;"
+        "height:56px!important;background:#0D1012!important;"
+        "border-bottom:1px solid #262C31!important;"
         "display:flex!important;align-items:center!important;justify-content:space-between!important;"
         "padding:0 20px!important;z-index:2147483647!important;"
-        "box-shadow:0 2px 28px rgba(0,0,0,0.5)!important;"
-        "font-family:'Plus Jakarta Sans','Syne',sans-serif!important;gap:10px!important;}"
-        ".tfin-brand{display:flex;align-items:center;gap:8px;flex-shrink:0;}"
-        ".tfin-brand-img{height:30px;width:30px;border-radius:6px;object-fit:cover;}"
-        ".tfin-brand-name{font-size:.88rem;font-weight:700;color:#E2E8F0;letter-spacing:-.02em;}"
-        ".tfin-nav-tabs{display:flex;align-items:center;gap:2px;flex:1;justify-content:center;}"
-        ".tfin-nt{background:transparent;border:none;cursor:pointer;color:rgba(148,163,184,.7);"
-        "font-size:.8rem;font-weight:500;padding:6px 13px;border-radius:8px;transition:all .15s;"
-        "white-space:nowrap;font-family:'Plus Jakarta Sans',sans-serif;line-height:1;}"
-        ".tfin-nt:hover{background:rgba(124,58,237,.12);color:#e2e8f0;}"
-        ".tfin-nt.on{background:rgba(124,58,237,.22);color:#C4B5FD;font-weight:700;"
-        "box-shadow:0 0 0 1px rgba(124,58,237,.3) inset;}"
-        ".tfin-nav-right{display:flex;align-items:center;gap:10px;flex-shrink:0;}"
-        ".tfin-rate{font-size:.7rem;color:rgba(148,163,184,.5);}"
-        ".tfin-curr-wrap{display:flex;background:rgba(255,255,255,.05);border-radius:7px;padding:3px;}"
-        ".tfin-cb{background:transparent;border:none;cursor:pointer;font-size:.75rem;font-weight:600;"
-        "padding:4px 10px;border-radius:5px;transition:all .14s;color:rgba(148,163,184,.6);"
-        "font-family:'Plus Jakarta Sans',sans-serif;}"
-        ".tfin-cb.on{background:rgba(124,58,237,.38);color:#C4B5FD;}"
-        ".tfin-eye{background:rgba(255,255,255,.05);border:1px solid rgba(124,58,237,.2);"
-        "border-radius:7px;cursor:pointer;font-size:.82rem;line-height:1;padding:6px 9px;"
-        "transition:all .14s;flex-shrink:0;}"
-        ".tfin-eye:hover{background:rgba(124,58,237,.2);}"
-        ".tfin-eye.off{background:rgba(239,68,68,.14);border-color:rgba(239,68,68,.3);}"
+        "font-family:'IBM Plex Sans Thai',sans-serif!important;gap:16px!important;}"
+        ".tfin-brand{display:flex;align-items:center;gap:9px;flex-shrink:0;}"
+        ".tfin-brand-img{height:28px;width:28px;border-radius:6px;object-fit:cover;}"
+        ".tfin-brand-name{font-size:15px;font-weight:700;color:#E9E6DF;}"
+        ".tfin-nav-tabs{display:flex;align-items:center;gap:2px;flex:1;justify-content:flex-start;}"
+        ".tfin-nt{background:transparent;border:none;cursor:pointer;color:#8B9196;"
+        "font-size:14px;font-weight:500;padding:7px 12px;border-radius:6px;"
+        "transition:color .15s,background .15s;white-space:nowrap;font-family:inherit;line-height:1.2;}"
+        ".tfin-nt:hover{color:#E9E6DF;}"
+        ".tfin-nt.on{background:#1A1F23;color:#E9E6DF;}"
+        ".tfin-nav-right{display:flex;align-items:center;gap:8px;flex-shrink:0;}"
+        ".tfin-rate{font-size:12px;color:#5B6268;font-family:'IBM Plex Mono',monospace;margin-right:4px;}"
+        ".tfin-curr-wrap{display:flex;border:1px solid #262C31;border-radius:6px;padding:2px;gap:2px;}"
+        ".tfin-cb{background:transparent;border:none;cursor:pointer;font-size:12px;font-weight:500;"
+        "padding:4px 10px;border-radius:4px;transition:color .15s,background .15s;color:#8B9196;"
+        "font-family:'IBM Plex Mono',monospace;}"
+        ".tfin-cb:hover{color:#E9E6DF;}"
+        ".tfin-cb.on{background:#1A1F23;color:#E9E6DF;}"
+        ".tfin-eye,.tfin-ab{background:transparent;border:1px solid #262C31;border-radius:6px;cursor:pointer;"
+        "width:32px;height:32px;padding:0;color:#8B9196;display:flex;align-items:center;justify-content:center;"
+        "transition:color .15s,border-color .15s;flex-shrink:0;}"
+        ".tfin-eye svg,.tfin-ab svg{width:16px;height:16px;display:block;}"
+        ".tfin-eye:hover,.tfin-ab:hover{color:#E9E6DF;border-color:#5B6268;}"
+        ".tfin-eye.off{color:#D9A441;border-color:rgba(217,164,65,.45);}"
         ".tfin-aw{position:relative;}"
-        ".tfin-ab{background:rgba(124,58,237,.1);border:1px solid rgba(124,58,237,.28);"
-        "border-radius:50%;width:33px;height:33px;cursor:pointer;color:#C4B5FD;font-size:.9rem;"
-        "display:flex;align-items:center;justify-content:center;transition:all .15s;padding:0;}"
-        ".tfin-ab:hover{background:rgba(124,58,237,.24);}"
-        ".tfin-dd{display:none;position:fixed;top:58px;right:20px;min-width:192px;"
-        "background:#0C1828;border:1px solid rgba(124,58,237,.22);border-radius:12px;"
-        "padding:10px;box-shadow:0 10px 40px rgba(0,0,0,.65);z-index:2147483646;}"
-        ".tfin-dd-email{font-size:.74rem;color:rgba(148,163,184,.65);padding:4px 8px 6px;word-break:break-all;}"
-        ".tfin-dd-hr{border:none;border-top:1px solid rgba(124,58,237,.14);margin:5px 0;}"
+        ".tfin-dd{display:none;position:fixed;top:56px;right:20px;min-width:200px;"
+        "background:#14181B;border:1px solid #262C31;border-radius:8px;"
+        "padding:8px;box-shadow:0 12px 32px rgba(0,0,0,.5);z-index:2147483646;}"
+        ".tfin-dd-email{font-size:12px;color:#8B9196;padding:4px 8px 6px;word-break:break-all;}"
+        ".tfin-dd-hr{border:none;border-top:1px solid #262C31;margin:4px 0;}"
         ".tfin-ddbtn{display:block;width:100%;text-align:left;background:transparent;border:none;"
-        "color:#E2E8F0;font-size:.79rem;padding:7px 9px;border-radius:7px;"
+        "color:#E9E6DF;font-size:13px;padding:8px 9px;border-radius:6px;"
         "cursor:pointer;font-family:inherit;transition:background .12s;}"
-        ".tfin-ddbtn:hover{background:rgba(124,58,237,.14);}"
-        ".tfin-ddbtn.red{color:#f87171;}"
-        ".tfin-ddbtn.red:hover{background:rgba(239,68,68,.1);}"
+        ".tfin-ddbtn:hover{background:#1A1F23;}"
+        ".tfin-ddbtn.red{color:#EF5F55;}"
         "[data-baseweb='tab-list']{display:none!important;}"
         # ---- Narrow screens. Streamlit already stacks st.columns on its own at 640px,
         # so the navbar is the only thing that breaks: below its minimum width the
         # currency toggle, privacy toggle and account button end up past the right edge
         # and cannot be tapped. That minimum grows every time a control is added to the
-        # bar — it was ~865px, then the eye button pushed it past 900 — so this sits well
-        # clear of the measured edge rather than on it. ANY new control in tfin-nav-right
-        # means re-measuring this number. Up to here the 5 tabs move to a bottom bar and
-        # the top row keeps identity + currency + privacy + account. Pure CSS, DOM order
-        # untouched, so the navbar's click delegation behaves as it does on desktop.
+        # bar, so this sits well clear of the measured edge rather than on it. ANY new
+        # control in tfin-nav-right means re-measuring this number. Up to here the 5 tabs
+        # move to a bottom bar and the top row keeps identity + currency + privacy +
+        # account. Pure CSS, DOM order untouched, so the navbar's click delegation
+        # behaves as it does on desktop.
         "@media(max-width:960px){"
-        # backdrop-filter makes #tfin-nav a containing block for fixed-position
-        # descendants, which would anchor the tab bar to the navbar instead of the
-        # viewport. Drop the blur here (solid background reads the same, and skipping
-        # a full-width blur is cheaper on phones anyway).
-        "#tfin-nav{height:50px!important;padding:0 10px!important;gap:6px!important;"
-        "backdrop-filter:none!important;-webkit-backdrop-filter:none!important;"
-        "background:#070D19!important;}"
+        # no backdrop-filter anywhere in the bar: it would make #tfin-nav a containing
+        # block for fixed-position descendants and pin the tab bar to the navbar
+        "#tfin-nav{height:52px!important;padding:0 12px!important;gap:8px!important;}"
         ".tfin-brand-name{display:none!important;}"
         ".tfin-brand-img{height:26px!important;width:26px!important;}"
-        ".tfin-rate{font-size:.62rem!important;white-space:nowrap;}"
-        ".tfin-cb{padding:6px 11px!important;font-size:.72rem!important;}"
-        ".tfin-ab{width:36px!important;height:36px!important;}"
+        ".tfin-rate{font-size:11px!important;white-space:nowrap;}"
+        ".tfin-cb{padding:7px 11px!important;}"
+        ".tfin-eye,.tfin-ab{width:38px!important;height:38px!important;}"
         ".tfin-dd{top:54px!important;right:8px!important;}"
         ".tfin-nav-tabs{position:fixed!important;left:0!important;right:0!important;"
-        "bottom:0!important;top:auto!important;height:54px!important;"
-        "background:rgba(6,11,22,0.98)!important;"
-        "backdrop-filter:blur(20px)!important;-webkit-backdrop-filter:blur(20px)!important;"
-        "border-top:1px solid rgba(124,58,237,0.18)!important;"
-        "justify-content:space-around!important;gap:0!important;"
-        "padding:0 2px env(safe-area-inset-bottom,0px)!important;"
-        "box-shadow:0 -2px 20px rgba(0,0,0,.5)!important;z-index:2147483647!important;}"
+        "bottom:0!important;top:auto!important;height:56px!important;"
+        "background:#0D1012!important;border-top:1px solid #262C31!important;"
+        "justify-content:space-around!important;gap:2px!important;"
+        "padding:0 4px env(safe-area-inset-bottom,0px)!important;z-index:2147483647!important;}"
         ".tfin-nt{flex:1 1 0!important;min-width:0!important;min-height:44px!important;"
-        "font-size:.56rem!important;font-weight:600!important;padding:4px 2px!important;"
+        "font-size:12px!important;padding:4px 2px!important;"
         "display:flex!important;align-items:center!important;justify-content:center!important;"
-        "border-radius:9px!important;overflow:hidden!important;text-overflow:ellipsis!important;}"
+        "overflow:hidden!important;text-overflow:ellipsis!important;}"
         # keep the last rows clear of the bottom bar
-        "[data-testid='stMain']{padding-bottom:66px!important;}"
+        "[data-testid='stMain']{padding-bottom:68px!important;}"
         "}"
         # iOS Safari zooms the whole page in whenever a focused field is under 16px,
         # and never zooms back out. Touch widths only.
@@ -484,6 +359,7 @@ def _inject_navbar(logo_src: str, email: str, curr: str, rate: float,
     usd_js = "true" if curr == "USD" else "false"
     hide_js = "true" if hide_amt else "false"
     rate_js = json.dumps(f"฿{rate_str}/USD")
+    eye_on_js, eye_off_js = json.dumps(_ICON_EYE), json.dumps(_ICON_EYE_OFF)
 
     return f"""<script>
 (function(){{
@@ -508,7 +384,7 @@ def _inject_navbar(logo_src: str, email: str, curr: str, rate: float,
   var eye = doc.getElementById('tfin-eye');
   if(eye){{
     eye.classList.toggle('off', {hide_js});
-    eye.textContent = {hide_js} ? '🙈' : '👁';
+    eye.innerHTML = {hide_js} ? {eye_off_js} : {eye_on_js};
     eye.title = {hide_js} ? 'แสดงยอดเงิน' : 'ซ่อนยอดเงิน';
   }}
 
@@ -567,7 +443,7 @@ def _inject_navbar(logo_src: str, email: str, curr: str, rate: float,
     if(hit && b){{
       var off = want === 'ซ่อนยอด';
       b.classList.toggle('off', off);
-      b.textContent = off ? '🙈' : '👁';
+      b.innerHTML = off ? {eye_off_js} : {eye_on_js};
       b.title = off ? 'แสดงยอดเงิน' : 'ซ่อนยอดเงิน';
     }}
   }}
@@ -801,7 +677,7 @@ def acc_label(acc: dict) -> str:
 def source_selector(cash: list, form_key: str) -> tuple:
     """Returns (selectbox_index, other_name_input, other_currency_input) inside a form."""
     ids     = [a["id"] for a in cash] + ["other"]
-    labels  = [acc_label(a) for a in cash] + ["💼 Other Cash (ระบุเอง)"]
+    labels  = [acc_label(a) for a in cash] + ["Other Cash (ระบุเอง)"]
     sc1, sc2, sc3 = st.columns(3)
     idx          = sc1.selectbox("จ่ายจากบัญชีไหน", range(len(ids)),
                                   format_func=lambda i: labels[i], key=f"src_{form_key}")
@@ -1009,36 +885,40 @@ def days_held_str(entry_date_str: str) -> str:
 
 
 # -- Chart Helpers --
+# categorical slices — kept clear of the green/red that mean profit/loss elsewhere
+ALLOC_COLORS = ["#D9A441", "#6E8FB5", "#8F7AB8", "#5AA39A", "#C0855A",
+                "#9AA3AD", "#B5677A", "#A3A15A", "#6FB0C8", "#C9B48A"]
+
 CHART_LAYOUT = dict(
     plot_bgcolor="rgba(0,0,0,0)",
     paper_bgcolor="rgba(0,0,0,0)",
-    font=dict(color="#e2e8f0", size=13),
+    font=dict(color="#E9E6DF", size=13, family="IBM Plex Sans Thai, sans-serif"),
+    hoverlabel=dict(font=dict(family="IBM Plex Sans Thai, sans-serif")),
     showlegend=False,
     margin=dict(t=32, b=8, l=8, r=8),
-    xaxis=dict(showgrid=False, tickfont=dict(size=12, color="#94a3b8")),
+    xaxis=dict(showgrid=False, tickfont=dict(size=12, color="#8B9196")),
     yaxis=dict(showgrid=True, gridcolor="rgba(255,255,255,0.06)",
-               tickfont=dict(size=11, color="#64748b"), zeroline=True,
+               tickfont=dict(size=11, color="#6B7176"), zeroline=True,
                zerolinecolor="rgba(255,255,255,0.15)"),
 )
 
 def allocation_pie(labels, vals_thb, disp, rate, title, height=320):
     vals = [to_display(v, disp, rate) for v in vals_thb]
     total = sum(v for v in vals if v)
-    colors = ["#5865f2","#22c55e","#f59e0b","#ef4444","#06b6d4",
-              "#a855f7","#ec4899","#84cc16","#f97316","#14b8a6"]
+    colors = ALLOC_COLORS
     fig = go.Figure(go.Pie(
         labels=labels, values=vals, hole=0.45,
-        textinfo="label+percent", textfont=dict(size=12, color="#e2e8f0"),
+        textinfo="label+percent", textfont=dict(size=12, color="#E9E6DF"),
         marker=dict(colors=colors[:len(labels)],
-                    line=dict(color="rgba(0,0,0,0.3)", width=1)),
+                    line=dict(color="#0D1012", width=2)),
     ))
     sym = "฿" if disp == "THB" else "$"
     fig.update_layout(**{**CHART_LAYOUT,
-        "title": dict(text=title, font=dict(size=14, color="#94a3b8"), x=0),
+        "title": dict(text=title, font=dict(size=14, color="#8B9196"), x=0),
         "height": height, "showlegend": True,
-        "legend": dict(font=dict(color="#94a3b8", size=11), orientation="v"),
+        "legend": dict(font=dict(color="#8B9196", size=11), orientation="v"),
         "annotations": [dict(text=money(total, sym), x=0.5, y=0.5,
-                              font=dict(size=15, color="#e2e8f0"), showarrow=False)],
+                              font=dict(size=15, color="#E9E6DF"), showarrow=False)],
     })
     return fig
 
@@ -1085,23 +965,23 @@ def portfolio_line_chart(open_items: list, cash_thb: float, rate: float,
 
     dates = list(combined.index)
     pct = (port_vals[-1] - port_vals[0]) / port_vals[0] * 100 if port_vals[0] else 0
-    color_pct = "#22c55e" if pct >= 0 else "#ef4444"
+    color_pct = "#3DBE7F" if pct >= 0 else "#EF5F55"
     sym = "฿" if disp == "THB" else "$"
     sign = "+" if pct >= 0 else ""
 
     fig = go.Figure(go.Scatter(
         x=dates, y=port_vals, mode="lines",
-        line=dict(color="#5865f2", width=2.5),
-        fill="tozeroy", fillcolor="rgba(88,101,242,0.08)",
+        line=dict(color="#D9A441", width=2.5),
+        fill="tozeroy", fillcolor="rgba(217,164,65,0.08)",
     ))
     fig.update_layout(**{**CHART_LAYOUT,
         "title": dict(
             text=f"Portfolio Value  "
                  f"<span style='color:{color_pct};font-size:14px'>{sign}{pct:.2f}%</span>",
-            font=dict(size=14, color="#94a3b8"), x=0),
+            font=dict(size=14, color="#8B9196"), x=0),
         "yaxis_title": f"Value ({sym})", "height": height,
         "yaxis_tickformat": ",.0f",
-        "xaxis": dict(showgrid=False, tickfont=dict(size=11, color="#94a3b8")),
+        "xaxis": dict(showgrid=False, tickfont=dict(size=11, color="#8B9196")),
     })
     return fig
 
@@ -1142,17 +1022,17 @@ def portfolio_return_chart(open_items: list, rate: float, disp: str, period_labe
     ret_pcts = [(v - base) / base * 100 for v in port_vals]
     dates    = list(combined.index)
     final    = ret_pcts[-1]
-    col      = "#22c55e" if final >= 0 else "#ef4444"
+    col      = "#3DBE7F" if final >= 0 else "#EF5F55"
     sign     = "+" if final >= 0 else ""
 
     fig = go.Figure()
     fig.add_trace(go.Scatter(
         x=dates, y=ret_pcts, mode="lines", name="Portfolio",
-        line=dict(color="#5865f2", width=2.5),
-        fill="tozeroy", fillcolor="rgba(88,101,242,0.08)",
+        line=dict(color="#D9A441", width=2.5),
+        fill="tozeroy", fillcolor="rgba(217,164,65,0.08)",
     ))
 
-    for ticker, label, color in [("SPY", "S&P 500", "#f59e0b"), ("QQQ", "NASDAQ 100", "#a78bfa")]:
+    for ticker, label, color in [("SPY", "S&P 500", "#6E8FB5"), ("QQQ", "NASDAQ 100", "#8F7AB8")]:
         if (ticker == "SPY" and show_spy) or (ticker == "QQQ" and show_qqq):
             h = get_history(ticker, period, interval)
             if h is not None:
@@ -1169,11 +1049,11 @@ def portfolio_return_chart(open_items: list, rate: float, disp: str, period_labe
     fig.update_layout(**{**CHART_LAYOUT,
         "title": dict(
             text=(f"Return %  <span style='color:{col};font-size:14px'>{sign}{final:.2f}%</span>"
-                  f"<br><span style='font-size:10px;color:#64748b'>ราคา-based · ไม่นับเวลาที่ซื้อจริง</span>"),
-            font=dict(size=14, color="#94a3b8"), x=0),
+                  f"<br><span style='font-size:10px;color:#6B7176'>ราคา-based · ไม่นับเวลาที่ซื้อจริง</span>"),
+            font=dict(size=14, color="#8B9196"), x=0),
         "yaxis_title": "Return (%)", "height": height,
         "yaxis_tickformat": ".2f", "yaxis_ticksuffix": "%",
-        "xaxis": dict(showgrid=False, tickfont=dict(size=11, color="#94a3b8")),
+        "xaxis": dict(showgrid=False, tickfont=dict(size=11, color="#8B9196")),
         "legend": dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
     })
     return fig
@@ -1294,54 +1174,54 @@ def build_activity_log(investments: list, trades: list, cash: list | None = None
     for inv in investments:
         ticker = inv.get("ticker","—")
         if inv.get("entry_date"):
-            events.append({"วันที่": inv.get("entry_date",""), "ประเภท": "💼 Invest",
-                "Action": "🟢 ซื้อ", "Ticker": ticker,
+            events.append({"วันที่": inv.get("entry_date",""), "ประเภท": "Invest",
+                "Action": "ซื้อ", "Ticker": ticker,
                 "รายละเอียด": f"เปิด · {get_shares(inv)} shares @ {inv.get('entry_price','—')}"})
         for bh in inv.get("buy_history", []):
-            events.append({"วันที่": bh.get("date",""), "ประเภท": "💼 Invest",
-                "Action": "➕ ซื้อเพิ่ม", "Ticker": ticker,
+            events.append({"วันที่": bh.get("date",""), "ประเภท": "Invest",
+                "Action": "ซื้อเพิ่ม", "Ticker": ticker,
                 "รายละเอียด": f"+{bh.get('shares','?')} shares @ {bh.get('price','—')}"})
         for sh in inv.get("sell_history", []):
             pnl_s = money(sh.get('pnl_thb'))
-            events.append({"วันที่": sh.get("date",""), "ประเภท": "💼 Invest",
-                "Action": "🔴 ขายบางส่วน", "Ticker": ticker,
+            events.append({"วันที่": sh.get("date",""), "ประเภท": "Invest",
+                "Action": "ขายบางส่วน", "Ticker": ticker,
                 "รายละเอียด": f"-{sh.get('shares','?')} shares @ {sh.get('price','—')} · P&L {pnl_s}"})
         if inv.get("status") == "closed" and inv.get("exit_date"):
-            events.append({"วันที่": inv.get("exit_date",""), "ประเภท": "💼 Invest",
-                "Action": "🔴 ปิด", "Ticker": ticker,
+            events.append({"วันที่": inv.get("exit_date",""), "ประเภท": "Invest",
+                "Action": "ปิด", "Ticker": ticker,
                 "รายละเอียด": f"ปิด @ {inv.get('exit_price','—')} · P&L {fmt_pct(inv.get('pnl_pct'))}"})
     for t in trades:
         ticker = t.get("ticker","—")
         arr = "↑" if t.get("direction") == "Long" else "↓"
         if t.get("open_date"):
-            events.append({"วันที่": t.get("open_date",""), "ประเภท": "📈 Trade",
-                "Action": "🟢 เปิด", "Ticker": f"{ticker} {arr}",
+            events.append({"วันที่": t.get("open_date",""), "ประเภท": "Trade",
+                "Action": "เปิด", "Ticker": f"{ticker} {arr}",
                 "รายละเอียด": f"{get_shares(t)} shares @ {t.get('entry_price','—')} · SL {t.get('stop_loss','—')} · TP {t.get('take_profit','—')}"})
         for bh in t.get("buy_history", []):
-            events.append({"วันที่": bh.get("date",""), "ประเภท": "📈 Trade",
-                "Action": "➕ ซื้อเพิ่ม", "Ticker": f"{ticker} {arr}",
+            events.append({"วันที่": bh.get("date",""), "ประเภท": "Trade",
+                "Action": "ซื้อเพิ่ม", "Ticker": f"{ticker} {arr}",
                 "รายละเอียด": f"+{bh.get('shares','?')} shares @ {bh.get('price','—')}"})
         for sh in t.get("sell_history", []):
             pnl_s = money(sh.get('pnl_thb'))
-            events.append({"วันที่": sh.get("date",""), "ประเภท": "📈 Trade",
-                "Action": "🔴 ขายบางส่วน", "Ticker": f"{ticker} {arr}",
+            events.append({"วันที่": sh.get("date",""), "ประเภท": "Trade",
+                "Action": "ขายบางส่วน", "Ticker": f"{ticker} {arr}",
                 "รายละเอียด": f"-{sh.get('shares','?')} shares @ {sh.get('price','—')} · P&L {pnl_s}"})
         if t.get("status") == "closed" and t.get("close_date"):
-            events.append({"วันที่": t.get("close_date",""), "ประเภท": "📈 Trade",
-                "Action": "🔴 ปิด", "Ticker": f"{ticker} {arr}",
+            events.append({"วันที่": t.get("close_date",""), "ประเภท": "Trade",
+                "Action": "ปิด", "Ticker": f"{ticker} {arr}",
                 "รายละเอียด": f"ปิด @ {t.get('exit_price','—')} · P&L {fmt_pct(t.get('pnl_pct'))} · {t.get('win_loss','')}"})
     # money moving in and out of the portfolio, so the log shows the whole story
     for d in build_deposits(cash or []):
         sym = "$" if d["currency"] == "USD" else "฿"
-        events.append({"วันที่": d["date"], "ประเภท": "💵 Cash",
-            "Action": "💰 เติมเงิน", "Ticker": d["account"],
+        events.append({"วันที่": d["date"], "ประเภท": "Cash",
+            "Action": "เติมเงิน", "Ticker": d["account"],
             "รายละเอียด": f"+{money(d['amount'], sym, 2)}"
                           + (f" (≈{money(d['amount_thb'])})" if d["currency"] != "THB" else "")
                           + (f" · {d['note']}" if d["note"] else "")})
     for c in build_cashouts(cash or []):
         sym = "$" if c["currency"] == "USD" else "฿"
-        events.append({"วันที่": c["date"], "ประเภท": "💵 Cash",
-            "Action": "💸 ถอนเงิน", "Ticker": c["account"],
+        events.append({"วันที่": c["date"], "ประเภท": "Cash",
+            "Action": "ถอนเงิน", "Ticker": c["account"],
             "รายละเอียด": f"−{money(c['amount'], sym, 2)}"
                           + (f" (≈{money(c['amount_thb'])})" if c["currency"] != "THB" else "")
                           + (" · โอนเข้าไทย" if c["remitted"] else "")
@@ -1352,17 +1232,17 @@ def build_activity_log(investments: list, trades: list, cash: list | None = None
 def pnl_bar_chart(labels, vals_thb, disp, rate, title, height=280):
     vals   = [to_display(v, disp, rate) for v in vals_thb]
     texts  = [fmt_money(v, disp, rate) for v in vals_thb]
-    colors = ["#22c55e" if (v or 0) >= 0 else "#ef4444" for v in vals_thb]
+    colors = ["#3DBE7F" if (v or 0) >= 0 else "#EF5F55" for v in vals_thb]
     fig = go.Figure(go.Bar(
         x=labels, y=vals,
         marker=dict(color=colors, opacity=0.85,
                     line=dict(color="rgba(255,255,255,0.1)", width=1)),
         text=texts, textposition="outside",
-        textfont=dict(size=13, color="#e2e8f0"), cliponaxis=False,
+        textfont=dict(size=13, color="#E9E6DF"), cliponaxis=False,
     ))
     sym = "฿" if disp == "THB" else "$"
     fig.update_layout(**{**CHART_LAYOUT,
-        "title": dict(text=title, font=dict(size=14, color="#94a3b8"), x=0),
+        "title": dict(text=title, font=dict(size=14, color="#8B9196"), x=0),
         "yaxis_title": f"P&L ({sym})", "height": height, "yaxis_tickformat": ",.0f",
     })
     if vals:
@@ -1417,122 +1297,81 @@ def page_login():
         st.session_state["login_theme"] = "dark"
     dark = st.session_state["login_theme"] == "dark"
 
+    # same tokens as the app (dark) and the mockup's light set
     if dark:
-        page_bg  = "#060C18"
-        card_bg  = "rgba(8,15,28,0.88)"
-        card_bdr = "rgba(124,58,237,0.32)"
-        txt      = "#E2E8F0"
-        sub      = "#94A3B8"
-        sep      = "rgba(255,255,255,0.08)"
-        inp_bg   = "rgba(255,255,255,0.06)"
-        inp_clr  = "#E2E8F0"
-        inp_bdr  = "#192537"
-        blob1    = "rgba(124,58,237,0.22)"
-        blob2    = "rgba(37,99,235,0.18)"
-        blob3    = "rgba(20,184,166,0.12)"
-        dot      = "rgba(255,255,255,0.04)"
-        tog_lbl  = "☀️ Light"
+        bg, card, line, txt, sub, acc, acc_ink = ("#0D1012", "#14181B", "#262C31", "#E9E6DF",
+                                                  "#8B9196", "#D9A441", "#1A1408")
+        tog_lbl = "Light"
     else:
-        page_bg  = "#EDF2F8"
-        card_bg  = "rgba(255,255,255,0.96)"
-        card_bdr = "rgba(124,58,237,0.22)"
-        txt      = "#0F172A"
-        sub      = "#475569"
-        sep      = "rgba(0,0,0,0.08)"
-        inp_bg   = "#F1F5F9"
-        inp_clr  = "#0F172A"
-        inp_bdr  = "#CBD5E1"
-        blob1    = "rgba(124,58,237,0.14)"
-        blob2    = "rgba(37,99,235,0.12)"
-        blob3    = "rgba(20,184,166,0.08)"
-        dot      = "rgba(0,0,0,0.04)"
-        tog_lbl  = "🌙 Dark"
+        bg, card, line, txt, sub, acc, acc_ink = ("#F4F3EF", "#FFFFFF", "#E2DFD8", "#17191B",
+                                                  "#63686D", "#9C7218", "#FFFFFF")
+        tog_lbl = "Dark"
 
     st.markdown(f"""<style>
 header[data-testid="stHeader"]{{display:none!important}}
 [data-testid="stToolbar"]{{display:none!important}}
-.stApp{{background:{page_bg}!important}}
-/* block-container = the card */
-[data-testid="stMain"] .block-container{{
-    max-width:440px!important;
-    margin:3rem auto 2rem!important;
-    padding:2rem 1.75rem 2.25rem!important;
-    background:{card_bg}!important;
-    border:1px solid {card_bdr}!important;
-    border-radius:20px!important;
-    backdrop-filter:blur(24px)!important;
-    -webkit-backdrop-filter:blur(24px)!important;
-    box-shadow:0 0 60px rgba(124,58,237,0.14),0 24px 64px rgba(0,0,0,0.28)!important;
-    position:relative;z-index:1;
-}}
-/* text */
-[data-testid="stMain"] .block-container p,
-[data-testid="stMain"] .block-container label,
-[data-testid="stMain"] .block-container .stMarkdown p{{
-    color:{sub}!important;
-}}
-/* inputs */
-[data-testid="stTextInput"] input{{
-    background:{inp_bg}!important;
-    border:1px solid {inp_bdr}!important;
-    color:{inp_clr}!important;
-    border-radius:8px!important;
-    font-family:'Plus Jakarta Sans',sans-serif!important;
-}}
-[data-testid="stTextInput"] input:focus{{
-    border-color:#7C3AED!important;
-    box-shadow:0 0 0 2px rgba(124,58,237,0.25)!important;
-}}
-[data-testid="stTextInput"] label{{
-    color:{sub}!important;font-size:.82rem!important;font-weight:500!important;
-}}
-/* tabs */
-[data-baseweb="tab-list"]{{background:transparent!important;border-bottom:1px solid {sep}!important}}
-[data-baseweb="tab"]{{color:{sub}!important}}
+.stApp,[data-testid="stMain"]{{background:{bg}!important}}
+[data-testid="stMain"] .block-container{{max-width:1040px!important;padding-top:9vh!important}}
+[data-testid="stMain"] p,[data-testid="stMain"] label,[data-testid="stWidgetLabel"] p{{color:{sub}!important}}
+/* the app hides Streamlit's tab-list because the navbar replaces it; the login
+   tabs (sign in / sign up) are real tabs and must stay visible */
+[data-testid="stMain"] [data-baseweb="tab-list"]{{display:flex!important;background:transparent!important;
+    border-bottom:1px solid {line}!important;gap:4px!important}}
+[data-baseweb="tab"]{{color:{sub}!important;padding:8px 4px!important;margin-right:14px!important}}
+[data-baseweb="tab"] p{{color:inherit!important;font-weight:500!important}}
 [data-baseweb="tab"][aria-selected="true"]{{color:{txt}!important}}
-/* theme toggle button */
-[data-testid="stMain"] [data-testid="stButton"] button{{
-    background:transparent!important;border:1px solid {card_bdr}!important;
-    color:{sub}!important;border-radius:20px!important;
-    font-size:.75rem!important;padding:.25rem 1rem!important;
-    font-family:'Plus Jakarta Sans',sans-serif!important;
-    width:auto!important;
+[data-baseweb="tab-highlight"]{{background:{acc}!important}}
+[data-baseweb="tab-border"]{{display:none!important}}
+/* form card */
+[data-testid="stForm"]{{background:{card}!important;border:1px solid {line}!important;border-radius:10px!important;
+    padding:22px 22px 18px!important}}
+[data-baseweb="input"]{{background:{bg}!important;border-color:{line}!important;border-radius:6px!important}}
+[data-baseweb="input"]:focus-within{{border-color:{acc}!important}}
+[data-baseweb="base-input"],[data-baseweb="input"] input,[data-baseweb="input"] button{{background:transparent!important;color:{txt}!important}}
+[data-baseweb="input"] button svg{{fill:{sub}!important;color:{sub}!important}}
+[data-testid="stFormSubmitButton"] button{{background:{acc}!important;border-color:{acc}!important}}
+[data-testid="stFormSubmitButton"] button p{{color:{acc_ink}!important;font-weight:600!important}}
+[data-testid="stMain"] [data-testid="stButton"] button{{background:transparent!important;border:1px solid {line}!important;
+    border-radius:6px!important;padding:.2rem .9rem!important;min-height:0!important}}
+[data-testid="stMain"] [data-testid="stButton"] button p{{color:{sub}!important;font-size:13px!important}}
+.lp-h{{font-size:40px;line-height:1.15;font-weight:700;color:{txt};margin:18px 0 14px;letter-spacing:-.01em}}
+.lp-p{{color:{sub};font-size:16px;margin:0 0 26px;max-width:40ch}}
+.lp-brand{{display:flex;align-items:center;gap:10px;font-weight:700;font-size:16px;color:{txt}}}
+.lp-brand img{{width:30px;height:30px;border-radius:7px}}
+.lp-line{{width:100%;max-width:440px;height:auto;display:block}}
+.lp-line path.l{{stroke-dasharray:900;stroke-dashoffset:900;animation:lpdraw 1.6s cubic-bezier(.3,.6,.2,1) .2s forwards}}
+.lp-line circle{{opacity:0;animation:lpfade .4s ease 1.6s forwards}}
+@keyframes lpdraw{{to{{stroke-dashoffset:0}}}}
+@keyframes lpfade{{to{{opacity:1}}}}
+@media (prefers-reduced-motion:reduce){{.lp-line path.l{{animation:none;stroke-dashoffset:0}}.lp-line circle{{animation:none;opacity:1}}}}
+@media (max-width:640px){{
+  [data-testid="stMain"] .block-container{{padding-top:4vh!important}}
+  .lp-h{{font-size:30px;margin:14px 0 8px}} .lp-p{{margin-bottom:8px}} .lp-line{{display:none}}
 }}
-/* blobs */
-.lp-blobs{{position:fixed;inset:0;pointer-events:none;z-index:0;overflow:hidden}}
-.lp-blobs .b1{{position:absolute;top:-12%;left:-18%;width:65%;height:65%;
-    background:radial-gradient(circle,{blob1} 0%,transparent 68%);filter:blur(50px)}}
-.lp-blobs .b2{{position:absolute;top:25%;right:-12%;width:55%;height:55%;
-    background:radial-gradient(circle,{blob2} 0%,transparent 68%);filter:blur(44px)}}
-.lp-blobs .b3{{position:absolute;bottom:-8%;left:28%;width:50%;height:50%;
-    background:radial-gradient(circle,{blob3} 0%,transparent 68%);filter:blur(38px)}}
-.lp-blobs .dots{{position:absolute;inset:0;
-    background-image:radial-gradient(circle,{dot} 1px,transparent 1px);
-    background-size:22px 22px}}
-</style>
-<div class="lp-blobs"><div class="b1"></div><div class="b2"></div><div class="b3"></div><div class="dots"></div></div>
-""", unsafe_allow_html=True)
+</style>""", unsafe_allow_html=True)
 
-    # Logo + title (inline styles to bypass Streamlit theme overrides)
-    logo_html = (f'<img src="data:image/png;base64,{_LOGO_B64}" '
-                 f'style="height:48px;display:block;margin:0 auto .6rem">'
-                 if _LOGO_B64 else "")
-    st.markdown(f"""
-{logo_html}
-<h1 style="text-align:center;font-family:'Syne',sans-serif;font-size:1.55rem;
-    font-weight:800;color:{txt};margin:0 0 .25rem;line-height:1.2">Investment Tracker</h1>
-<p style="text-align:center;color:{sub};font-size:.8rem;margin:0 0 1.1rem">
-    ระบบติดตาม Portfolio ส่วนตัว</p>
-<hr style="border:none;border-top:1px solid {sep};margin:0 0 1rem">
-""", unsafe_allow_html=True)
-
-    # Theme toggle centered
-    _c1, _c2, _c3 = st.columns([3, 2, 3])
-    with _c2:
+    logo_html = (f'<img src="data:image/png;base64,{_LOGO_B64}" alt="">' if _LOGO_B64 else "")
+    # a fixed, illustrative curve; it draws itself once on load (not account data)
+    _pts = [62, 58, 60, 51, 54, 47, 49, 40, 44, 36, 38, 30, 33, 24, 27, 18, 20, 12]
+    _d = "M" + " L".join(f"{i * 440 / (len(_pts) - 1):.1f},{y * 1.6:.1f}" for i, y in enumerate(_pts))
+    pitch, form_col = st.columns([1.15, 1], gap="large")
+    with pitch:
+        st.markdown(f"""<div class="lp-brand">{logo_html}<span>Tim.fin OS</span></div>
+<div class="lp-h">พอร์ตทั้งหมด<br>ในสมุดเล่มเดียว</div>
+<p class="lp-p">หุ้น เทรด เงินสด และบันทึกภาษี รวมไว้ที่เดียว ดูได้ทั้งบาทและดอลลาร์</p>
+<svg class="lp-line" viewBox="0 0 440 110" aria-hidden="true">
+<line x1="0" y1="109" x2="440" y2="109" stroke="{line}"/>
+<path class="l" d="{_d}" fill="none" stroke="{acc}" stroke-width="2.2" stroke-linejoin="round"/>
+<circle cx="440" cy="{_pts[-1] * 1.6:.1f}" r="4.5" fill="{acc}"/></svg>""", unsafe_allow_html=True)
         if st.button(tog_lbl, key="login_theme_toggle"):
             st.session_state["login_theme"] = "light" if dark else "dark"
             st.rerun()
 
+    with form_col:
+        _render_login_forms()
+
+
+def _render_login_forms():
     tab_in, tab_up = st.tabs(["เข้าสู่ระบบ", "สมัครสมาชิก"])
 
     with tab_in:
@@ -1545,7 +1384,7 @@ header[data-testid="stHeader"]{{display:none!important}}
                 else:
                     result = sb_signin(email.strip(), password)
                     if result == "connection_error":
-                        st.error("⚠️ เชื่อมต่อเซิร์ฟเวอร์ไม่ได้ กรุณารีเฟรชหน้าแล้วลองใหม่")
+                        st.error("เชื่อมต่อเซิร์ฟเวอร์ไม่ได้ กรุณารีเฟรชหน้าแล้วลองใหม่")
                     elif result and "access_token" in result:
                         st.session_state["sb_session"] = result
                         if result.get("refresh_token"):
@@ -1564,7 +1403,7 @@ header[data-testid="stHeader"]{{display:none!important}}
                 else:
                     result, err = sb_signup(email.strip(), password)
                     if result is not None:
-                        st.success("✅ สมัครสมาชิกสำเร็จ! กรุณาตรวจสอบ Email เพื่อยืนยันตัวตน แล้วกลับมา Login")
+                        st.success("สมัครสมาชิกสำเร็จ กรุณาตรวจสอบ Email เพื่อยืนยันตัวตน แล้วกลับมา Login")
                     else:
                         st.error(f"สมัครไม่สำเร็จ: {err}")
 
@@ -1709,7 +1548,7 @@ def page_overview(trades: list, investments: list, cash: list, disp: str, rate: 
                     pie_labels.append(item.get("ticker","?"))
                     pie_vals.append(pos)
             if cash_thb > 0:
-                pie_labels.append("💵 Cash")
+                pie_labels.append("Cash")
                 pie_vals.append(cash_thb)
             if pie_labels:
                 st.plotly_chart(allocation_pie(pie_labels, pie_vals, disp, rate,
@@ -1741,10 +1580,10 @@ def page_overview(trades: list, investments: list, cash: list, disp: str, rate: 
     # -- Stats + Cash compact row --
     if open_all or cash:
         s1, s2, s3, s4 = st.columns(4)
-        s1.metric("💼 Investments",   len(open_inv))
-        s2.metric("📈 Open Trades",   len(open_trades))
-        s3.metric("🔒 Closed Trades", len(closed_trades))
-        s4.metric("🏆 Win Rate",      f"{win_rate:.1f}%" if win_rate is not None else "—")
+        s1.metric("Investments",   len(open_inv))
+        s2.metric("Open Trades",   len(open_trades))
+        s3.metric("Closed Trades", len(closed_trades))
+        s4.metric("Win Rate",      f"{win_rate:.1f}%" if win_rate is not None else "—")
         if cash:
             cash_parts = []
             for a in cash:
@@ -1754,7 +1593,7 @@ def page_overview(trades: list, investments: list, cash: list, disp: str, rate: 
                 if a["currency"] == "USD":
                     part += f" (≈{money(val_c)})"
                 cash_parts.append(part)
-            st.markdown("<small>💵 " + "  ·  ".join(cash_parts) + "</small>", unsafe_allow_html=True)
+            st.markdown("<small>Cash · " + "  ·  ".join(cash_parts) + "</small>", unsafe_allow_html=True)
 
     # -- Portfolio Snapshot --
     if open_inv or open_trades:
@@ -1774,7 +1613,7 @@ def page_overview(trades: list, investments: list, cash: list, disp: str, rate: 
             cost_thb = _sv * _ev * (rate if get_currency(item) == "USD" else 1) if _sv and _ev else None
             pos_rows.append({
                 "_pnl_raw":       pnl_thb or 0,
-                "Type":           "💼 Invest",
+                "Type":           "Invest",
                 "Ticker":         item.get("ticker","—"),
                 "Account":        item.get("source_account_name","—") or "ไม่ระบุ",
                 "Market Price":   f"{price:,.4f}" if price else "—",
@@ -1798,7 +1637,7 @@ def page_overview(trades: list, investments: list, cash: list, disp: str, rate: 
             cost_thb = _sv * _ev * (rate if get_currency(item) == "USD" else 1) if _sv and _ev else None
             pos_rows.append({
                 "_pnl_raw":       pnl_thb or 0,
-                "Type":           f"📈 Trade {arr}",
+                "Type":           f"Trade {arr}",
                 "Ticker":         item.get("ticker","—"),
                 "Account":        item.get("source_account_name","—") or "ไม่ระบุ",
                 "Market Price":   f"{price:,.4f}" if price else "—",
@@ -1812,13 +1651,13 @@ def page_overview(trades: list, investments: list, cash: list, disp: str, rate: 
         pos_rows.sort(key=lambda r: -r["_pnl_raw"])
 
         def _col_pnl_ov(val):
-            if isinstance(val, str) and val.startswith("+"): return "color:#22c55e;font-weight:600"
-            if isinstance(val, str) and val.startswith("-"): return "color:#ef4444;font-weight:600"
+            if isinstance(val, str) and val.startswith("+"): return "color:#3DBE7F;font-weight:600"
+            if isinstance(val, str) and val.startswith("-"): return "color:#EF5F55;font-weight:600"
             return ""
         df_ov = pd.DataFrame(pos_rows).drop(columns=["_pnl_raw"])
         _all_cols_ov = list(df_ov.columns)
 
-        with st.expander("📋 Portfolio Snapshot", expanded=True):
+        with st.expander("Portfolio Snapshot", expanded=True):
             _pnl_sub = [c for c in ["P&L %", _pc_col] if c in _all_cols_ov]
             try:
                 styled_ov = df_ov.style.map(_col_pnl_ov, subset=_pnl_sub).hide(axis="index") if _pnl_sub else df_ov.style.hide(axis="index")
@@ -1907,19 +1746,19 @@ def page_investment(investments: list, trades: list, cash: list, disp: str, rate
     acct_total_thb = total_val_thb + cash_total_thb
     acct_total_s   = fmt_money(acct_total_thb, disp, rate, sign=False)
     st.markdown(
-        f"<div style='background:rgba(88,101,242,0.08);border:1px solid rgba(88,101,242,0.25);"
+        f"<div style='background:rgba(217,164,65,0.08);border:1px solid rgba(217,164,65,0.25);"
         f"border-radius:8px;padding:8px 16px;margin:6px 0 4px 0;line-height:1.5'>"
-        f"<span style='font-size:11px;color:#64748b;text-transform:uppercase;"
-        f"letter-spacing:0.06em'>💵 Cash</span>"
+        f"<span style='font-size:11px;color:#6B7176;text-transform:uppercase;"
+        f"letter-spacing:0.06em'>Cash</span>"
         f"&nbsp;&nbsp;"
-        f"<span style='font-size:15px;font-weight:600;color:#e2e8f0'>{cash_inline}</span>"
-        f"&nbsp;&nbsp;<span style='font-size:11px;color:#64748b'>· จัดการที่หน้า 💵 Cash</span>"
+        f"<span style='font-size:15px;font-weight:600;color:#E9E6DF'>{cash_inline}</span>"
+        f"&nbsp;&nbsp;<span style='font-size:11px;color:#6B7176'>· จัดการที่หน้า Cash</span>"
         f"&nbsp;&nbsp;&nbsp;│&nbsp;&nbsp;&nbsp;"
-        f"<span style='font-size:11px;color:#64748b;text-transform:uppercase;"
+        f"<span style='font-size:11px;color:#6B7176;text-transform:uppercase;"
         f"letter-spacing:0.06em'>Account Total</span>"
         f"&nbsp;&nbsp;"
-        f"<span style='font-size:15px;font-weight:700;color:#94a3b8'>{acct_total_s}</span>"
-        f"<span style='font-size:10px;color:#475569'>&nbsp;(positions + cash)</span>"
+        f"<span style='font-size:15px;font-weight:700;color:#8B9196'>{acct_total_s}</span>"
+        f"<span style='font-size:10px;color:#5B6268'>&nbsp;(positions + cash)</span>"
         f"</div>",
         unsafe_allow_html=True,
     )
@@ -1979,7 +1818,7 @@ def page_investment(investments: list, trades: list, cash: list, disp: str, rate
         inv_with_target = [r for r in raw if r["inv"].get("target_pct") is not None]
         if inv_with_target and total_val_thb:
             st.markdown("<div style='height:0.5rem'></div>", unsafe_allow_html=True)
-            section("🎯 Target Allocation")
+            section("Target Allocation")
 
             t_tickers  = [r["inv"]["ticker"] for r in inv_with_target]
             curr_pcts  = [r["pos_thb"] / total_val_thb * 100 if total_val_thb else 0
@@ -1989,40 +1828,40 @@ def page_investment(investments: list, trades: list, cash: list, disp: str, rate
             total_tgt  = sum(t for t in tgt_pcts if t)
 
             def _tgt_color(d):
-                if abs(d) <= 3: return "#22c55e"
+                if abs(d) <= 3: return "#3DBE7F"
                 if abs(d) <= 8: return "#f59e0b"
-                return "#ef4444"
+                return "#EF5F55"
             bar_colors = [_tgt_color(d) for d in deltas]
 
             fig_tgt = go.Figure()
             fig_tgt.add_trace(go.Bar(
                 name="Target %", y=t_tickers, x=tgt_pcts, orientation="h",
                 marker_color="rgba(148,163,184,0.25)",
-                marker_line=dict(color="#94a3b8", width=1),
+                marker_line=dict(color="#8B9196", width=1),
                 text=[f"{p:.0f}%" for p in tgt_pcts], textposition="inside",
-                textfont=dict(size=11, color="#94a3b8"),
+                textfont=dict(size=11, color="#8B9196"),
             ))
             fig_tgt.add_trace(go.Bar(
                 name="Current %", y=t_tickers, x=curr_pcts, orientation="h",
                 marker_color=bar_colors, opacity=0.85,
                 text=[f"{p:.1f}%" for p in curr_pcts], textposition="outside",
-                textfont=dict(size=11, color="#e2e8f0"),
+                textfont=dict(size=11, color="#E9E6DF"),
             ))
             fig_tgt.update_layout(
                 **{**CHART_LAYOUT,
                    "barmode": "overlay",
                    "height": max(200, len(t_tickers) * 45 + 70),
                    "showlegend": True,
-                   "legend": dict(orientation="h", y=1.1, x=0, font=dict(size=11, color="#94a3b8")),
+                   "legend": dict(orientation="h", y=1.1, x=0, font=dict(size=11, color="#8B9196")),
                    "margin": dict(t=50, b=8, l=8, r=80),
                    "xaxis": dict(showgrid=True, gridcolor="rgba(255,255,255,0.06)",
-                                 ticksuffix="%", tickfont=dict(size=11, color="#94a3b8")),
-                   "yaxis": dict(showgrid=False, tickfont=dict(size=12, color="#e2e8f0")),
+                                 ticksuffix="%", tickfont=dict(size=11, color="#8B9196")),
+                   "yaxis": dict(showgrid=False, tickfont=dict(size=12, color="#E9E6DF")),
                    "title": dict(
                        text=(f"Current vs Target  "
-                             f"<span style='font-size:11px;color:#64748b'>"
+                             f"<span style='font-size:11px;color:#6B7176'>"
                              f"Target รวม {total_tgt:.0f}% · Cash {max(0, 100-total_tgt):.0f}%</span>"),
-                       font=dict(size=13, color="#94a3b8"), x=0),
+                       font=dict(size=13, color="#8B9196"), x=0),
                 }
             )
             st.plotly_chart(fig_tgt, use_container_width=True)
@@ -2035,11 +1874,11 @@ def page_investment(investments: list, trades: list, cash: list, disp: str, rate
                 if tgt_p == 0:
                     action = "—"
                 elif delta > 3:
-                    action = f"🔴 ขายลด {money(action_disp, sym_r)}"
+                    action = f"ขายลด {money(action_disp, sym_r)}"
                 elif delta < -3:
-                    action = f"🟢 ซื้อเพิ่ม {money(action_disp, sym_r)}"
+                    action = f"ซื้อเพิ่ม {money(action_disp, sym_r)}"
                 else:
-                    action = "✅ ใกล้เป้า"
+                    action = "ใกล้เป้า"
                 rebal_rows.append({
                     "Ticker":   r["inv"]["ticker"],
                     "Current":  f"{curr_p:.1f}%",
@@ -2073,7 +1912,7 @@ def page_investment(investments: list, trades: list, cash: list, disp: str, rate
                 "Shares":        get_shares(inv),
                 "Avg Cost":      inv.get("entry_price","—"),
                 "Total Cost":    fmt_money(r["cost_thb"] or None, disp, rate, sign=False) if r["cost_thb"] else "—",
-                "Current Price": (f"📌 {price:.2f}" if inv.get("manual_price") else f"{price:.2f}") if price else "—",
+                "Current Price": (f"{price:.2f} (manual)" if inv.get("manual_price") else f"{price:.2f}") if price else "—",
                 "Market Value":  fmt_money(r["pos_thb"] or None, disp, rate, sign=False),
                 "P&L %":         fmt_pct(r["pnl_pct"]) if price else "—",
                 f"P&L ({sym})":  fmt_money(r["pnl_thb"] or None, disp, rate) if price else "—",
@@ -2085,7 +1924,7 @@ def page_investment(investments: list, trades: list, cash: list, disp: str, rate
         total_pnl_pct_row = total_pnl_disp / (total_mv - total_pnl_disp) * 100 if (total_mv - total_pnl_disp) else 0
         rows.append({
             "#":             "—",
-            "Ticker":        "📊 TOTAL",
+            "Ticker":        "TOTAL",
             "Shares":        "—",
             "Avg Cost":      "—",
             "Total Cost":    money(total_cost_disp, sym_p),
@@ -2101,14 +1940,14 @@ def page_investment(investments: list, trades: list, cash: list, disp: str, rate
 
         def _color_pnl(val):
             if isinstance(val, str) and val.startswith("+"):
-                return "color: #22c55e; font-weight: 600"
+                return "color: #3DBE7F; font-weight: 600"
             if isinstance(val, str) and val.startswith("-"):
-                return "color: #ef4444; font-weight: 600"
+                return "color: #EF5F55; font-weight: 600"
             return ""
 
         def _style_total(row):
-            if row["Ticker"] == "📊 TOTAL":
-                return ["background-color: rgba(88,101,242,0.12); font-weight: 700"] * len(row)
+            if row["Ticker"] == "TOTAL":
+                return ["background-color: rgba(217,164,65,0.12); font-weight: 700"] * len(row)
             return [""] * len(row)
 
         df_inv = pd.DataFrame(rows)
@@ -2129,14 +1968,13 @@ def page_investment(investments: list, trades: list, cash: list, disp: str, rate
         # raised StreamlitAPIException and killed everything under the table,
         # so edit/close/delete was unreachable.
         st.markdown("<div style='height:0.75rem'></div>", unsafe_allow_html=True)
-        section(f"⚙️ Position Actions ({len(open_inv)})")
+        section(f"Positions ({len(open_inv)})")
         with st.container():
             for inv in open_inv:
                 price   = get_price(inv.get("ticker",""))
                 pnl_thb = calc_pnl_thb(inv.get("entry_price"), price, get_shares(inv),
                                         get_currency(inv), rate) if price else None
                 pnl_pct = calc_pnl_pct(inv.get("entry_price"), price) if price else None
-                icon    = "🟢" if (pnl_thb or 0) >= 0 else "🔴"
 
                 _ihc    = "green" if (pnl_thb or 0) >= 0 else "red"
                 _isv    = parse(get_shares(inv))
@@ -2144,19 +1982,19 @@ def page_investment(investments: list, trades: list, cash: list, disp: str, rate
                 _imval  = (_isv * price * (rate if get_currency(inv) == "USD" else 1)) if price and _isv else None
                 _ics    = fmt_money(_icost, disp, rate, sign=False) if _icost else "—"
                 _ivs    = fmt_money(_imval, disp, rate, sign=False) if _imval else "—"
-                inv_label = (f"{icon} **{inv['ticker']}**  ·  "
+                inv_label = (f"**{inv['ticker']}**  ·  "
                              f"AVG {inv.get('entry_price','—')} → {f'{price:.2f}' if price else '—'}  ·  "
                              f"{_ics} → {_ivs}"
                              f"  |  :{_ihc}[{fmt_pct(pnl_pct)}  {fmt_money(pnl_thb, disp, rate)}]"
                              ).replace("$", r"\$")
                 with st.expander(inv_label, expanded=False):
                     # P&L banner
-                    _pc2 = "#22c55e" if (pnl_thb or 0) >= 0 else "#ef4444"
-                    _bg2 = "rgba(34,197,94,0.08)" if (pnl_thb or 0) >= 0 else "rgba(239,68,68,0.08)"
+                    _pc2 = "#3DBE7F" if (pnl_thb or 0) >= 0 else "#EF5F55"
+                    _bg2 = "rgba(61,190,127,0.08)" if (pnl_thb or 0) >= 0 else "rgba(239,95,85,0.08)"
                     st.markdown(
                         f"<div style='background:{_bg2};border-left:3px solid {_pc2};"
                         f"border-radius:0 6px 6px 0;padding:10px 14px;margin-bottom:10px'>"
-                        f"<div style='font-size:10px;color:#94a3b8;text-transform:uppercase;"
+                        f"<div style='font-size:10px;color:#8B9196;text-transform:uppercase;"
                         f"letter-spacing:0.07em;margin-bottom:2px'>Unrealized P&L</div>"
                         f"<span style='font-size:22px;font-weight:700;color:{_pc2}'>"
                         f"{fmt_money(pnl_thb, disp, rate) if pnl_thb is not None else '—'}</span>"
@@ -2171,32 +2009,32 @@ def page_investment(investments: list, trades: list, cash: list, disp: str, rate
                                delta=fmt_pct(pnl_pct) if pnl_pct else None)
                     st.caption(f"Shares: {get_shares(inv)}  ·  {get_currency(inv)}")
                     ca, cb, cc, _, cd = st.columns([2, 2, 2, 1, 1])
-                    if ca.button("🔴 ขาย", key=f"ci_{inv['id']}"):
+                    if ca.button("ขาย", key=f"ci_{inv['id']}"):
                         st.session_state[f"sell_inv_{inv['id']}"] = True
                         st.session_state.pop(f"edit_inv_{inv['id']}", None)
                         st.session_state.pop(f"add_inv_{inv['id']}", None)
-                    if cb.button("✏️ แก้ไข", key=f"ei_{inv['id']}"):
+                    if cb.button("แก้ไข", key=f"ei_{inv['id']}"):
                         st.session_state[f"edit_inv_{inv['id']}"] = True
                         st.session_state.pop(f"sell_inv_{inv['id']}", None)
                         st.session_state.pop(f"add_inv_{inv['id']}", None)
-                    if cc.button("➕ ซื้อเพิ่ม", key=f"ai_{inv['id']}"):
+                    if cc.button("ซื้อเพิ่ม", key=f"ai_{inv['id']}"):
                         st.session_state[f"add_inv_{inv['id']}"] = True
                         st.session_state.pop(f"edit_inv_{inv['id']}", None)
                         st.session_state.pop(f"sell_inv_{inv['id']}", None)
-                    if cd.button("🗑️", key=f"di_{inv['id']}"):
+                    if cd.button("ลบ", key=f"di_{inv['id']}"):
                         investments[:] = [x for x in investments if x["id"] != inv["id"]]
                         save_investments(investments)
                         st.rerun()
 
                     if st.session_state.get(f"add_inv_{inv['id']}"):
-                        st.markdown("**➕ ซื้อเพิ่ม**")
+                        st.markdown("**ซื้อเพิ่ม**")
                         with st.form(f"form_add_inv_{inv['id']}"):
                             aa1, aa2, aa3 = st.columns(3)
                             add_shares = aa1.text_input("จำนวนหุ้นที่ซื้อเพิ่ม *", placeholder="เช่น 5")
                             add_price  = aa2.text_input("ราคาที่ซื้อ *", placeholder="เช่น 80")
                             add_date   = aa3.date_input("วันที่ซื้อ", value=date.today())
                             src_id, other_name, other_curr = source_selector(cash, f"add_inv_{inv['id']}")
-                            if st.form_submit_button("✅ ซื้อเพิ่ม"):
+                            if st.form_submit_button("ยืนยันซื้อเพิ่ม"):
                                 s_add = parse(add_shares)
                                 p_add = parse(add_price)
                                 if s_add and p_add:
@@ -2238,11 +2076,11 @@ def page_investment(investments: list, trades: list, cash: list, disp: str, rate
                                 placeholder="เช่น 20  (ว่าง = ไม่ตั้ง)",
                             )
                             new_manual_price = st.text_input(
-                                "📌 Manual Price (DR / หุ้นที่ดึงราคาไม่ได้)",
+                                "Manual Price (DR / หุ้นที่ดึงราคาไม่ได้)",
                                 value=str(inv["manual_price"]) if inv.get("manual_price") is not None else "",
                                 placeholder="ใส่ราคาปัจจุบัน เช่น 85.50  (ว่าง = ดึงจาก yfinance)",
                             )
-                            if st.form_submit_button("💾 บันทึก"):
+                            if st.form_submit_button("บันทึก"):
                                 upd = {
                                     "ticker":      new_ticker.upper().strip(),
                                     "shares":      new_shares,
@@ -2266,7 +2104,7 @@ def page_investment(investments: list, trades: list, cash: list, disp: str, rate
                                 st.rerun()
 
                     if st.session_state.get(f"sell_inv_{inv['id']}"):
-                        st.markdown("**🔴 ขาย**")
+                        st.markdown("**ขาย**")
                         s_current = parse(get_shares(inv)) or 0
                         st.caption(f"ถืออยู่ {s_current:,.10g} หุ้น · AVG {inv.get('entry_price','—')}")
                         with st.form(f"form_sell_inv_{inv['id']}"):
@@ -2275,7 +2113,7 @@ def page_investment(investments: list, trades: list, cash: list, disp: str, rate
                             sv1, svm, sv2, sv3 = st.columns([3, 1, 3, 3])
                             sell_shares = sv1.text_input("จำนวนที่ขาย *", placeholder=f"สูงสุด {s_current:,.10g}")
                             with svm:
-                                st.markdown("<div style='height:29px'></div>", unsafe_allow_html=True)
+                                st.markdown("<div style='height:35px'></div>", unsafe_allow_html=True)
                                 sell_max = st.checkbox("Max", key=f"sell_inv_max_{inv['id']}", help="ขายหมดทั้ง position ไม่ต้องพิมพ์จำนวน")
                             exit_p      = sv2.text_input("ราคาที่ขาย *", placeholder="เช่น 420")
                             exit_d      = sv3.date_input("วันที่ขาย", value=date.today())
@@ -2285,7 +2123,7 @@ def page_investment(investments: list, trades: list, cash: list, disp: str, rate
                             emotion   = sv5.selectbox("Emotion (ถ้าปิด position)",
                                                        ["ปกติ", "กลัว", "โลภ", "FOMO"])
                             lesson    = st.text_input("Lesson ที่ได้ (optional, ถ้าปิด position)")
-                            if st.form_submit_button("✅ ยืนยันขาย"):
+                            if st.form_submit_button("ยืนยันขาย"):
                                 s_sell = s_current if sell_max else parse(sell_shares)
                                 ep     = parse(exit_p)
                                 if not s_sell or not ep:
@@ -2314,7 +2152,7 @@ def page_investment(investments: list, trades: list, cash: list, disp: str, rate
                                             save_cash(cash)
                                         save_investments(investments)
                                         st.session_state.pop(f"sell_inv_{inv['id']}", None)
-                                        st.success(f"ปิด Position ✅  P&L = {fmt_money(pnl_thb_v, disp, rate)}")
+                                        st.success(f"ปิด Position · P&L = {fmt_money(pnl_thb_v, disp, rate)}")
                                     else:
                                         s_remain  = round(s_current - s_sell, 8)
                                         pnl_thb_p = calc_pnl_thb(inv["entry_price"], ep, str(s_sell), currency, rate)
@@ -2336,7 +2174,7 @@ def page_investment(investments: list, trades: list, cash: list, disp: str, rate
                                             save_cash(cash)
                                         save_investments(investments)
                                         st.session_state.pop(f"sell_inv_{inv['id']}", None)
-                                        st.success(f"ขาย {s_sell} หุ้น @ {ep} ✅  เหลือ {s_remain} หุ้น · P&L = {fmt_money(pnl_thb_p, disp, rate)}")
+                                        st.success(f"ขาย {s_sell} หุ้น @ {ep} · เหลือ {s_remain} หุ้น · P&L = {fmt_money(pnl_thb_p, disp, rate)}")
                                     st.rerun()
 
     # -- Closed --
@@ -2351,12 +2189,12 @@ def page_investment(investments: list, trades: list, cash: list, disp: str, rate
 
     # -- Add Investment (collapsed) --
     st.markdown("<div style='height:1rem'></div>", unsafe_allow_html=True)
-    with st.expander("➕ เพิ่ม / ซื้อเพิ่ม Investment"):
+    with st.expander("เพิ่ม / ซื้อเพิ่ม Investment"):
         existing_tickers = sorted({inv["ticker"] for inv in open_inv})
-        ticker_options   = existing_tickers + ["➕ Ticker ใหม่"]
+        ticker_options   = existing_tickers + ["+ Ticker ใหม่"]
         selected_ticker  = st.selectbox("เลือก Ticker", ticker_options, key="new_inv_select")
 
-        if selected_ticker != "➕ Ticker ใหม่":
+        if selected_ticker != "+ Ticker ใหม่":
             # -- ซื้อเพิ่มใน position ที่มีอยู่ --
             existing = next((inv for inv in investments
                              if inv["ticker"] == selected_ticker and inv["status"] == "open"), None)
@@ -2370,8 +2208,8 @@ def page_investment(investments: list, trades: list, cash: list, disp: str, rate
                     add_date   = b3.date_input("วันที่ซื้อ", value=date.today())
                     st.markdown("---")
                     src_id, other_name, other_curr = source_selector(cash, "add_pos")
-                    is_import = st.checkbox("📥 ไม่หักเงินจาก Cash (Import เก่า)", key="import_add_pos")
-                    if st.form_submit_button("✅ ซื้อเพิ่ม"):
+                    is_import = st.checkbox("ไม่หักเงินจาก Cash (Import เก่า)", key="import_add_pos")
+                    if st.form_submit_button("ยืนยันซื้อเพิ่ม"):
                         s_add = parse(add_shares)
                         p_add = parse(add_price)
                         if not s_add or not p_add:
@@ -2401,7 +2239,7 @@ def page_investment(investments: list, trades: list, cash: list, disp: str, rate
                             })
                             save_investments(investments)
                             st.success(
-                                f"✅ ซื้อเพิ่ม {add_shares} หุ้น @ {add_price}  ·  "
+                                f"ซื้อเพิ่ม {add_shares} หุ้น @ {add_price}  ·  "
                                 f"AVG ใหม่ = {round(p_avg, 4)} {cur}  ·  "
                                 f"รวม {round(s_new, 4)} หุ้น"
                             )
@@ -2423,8 +2261,8 @@ def page_investment(investments: list, trades: list, cash: list, disp: str, rate
                                                  placeholder="เช่น 20  — สัดส่วนเป้าหมายในพอร์ต")
                 st.markdown("---")
                 src_id, other_name, other_curr = source_selector(cash, "inv")
-                is_import = st.checkbox("📥 Import position เก่า (ไม่หักเงินจาก Cash)", key="import_inv")
-                if st.form_submit_button("✅ บันทึก"):
+                is_import = st.checkbox("Import position เก่า (ไม่หักเงินจาก Cash)", key="import_inv")
+                if st.form_submit_button("บันทึก"):
                     e, s = parse(entry), parse(shares)
                     if not ticker or e is None or s is None:
                         st.error("กรุณากรอก Ticker, จำนวนหุ้น และ Entry Price")
@@ -2450,7 +2288,7 @@ def page_investment(investments: list, trades: list, cash: list, disp: str, rate
                             new_inv["target_pct"] = t_pct_v
                         investments.append(new_inv)
                         save_investments(investments)
-                        st.success(f"✅ บันทึก {ticker.upper()}")
+                        st.success(f"บันทึก {ticker.upper()}")
                         st.rerun()
 
 
@@ -2536,7 +2374,7 @@ def page_trade(trades: list, cash: list, disp: str, rate: float):
         _sym_p = "฿" if disp == "THB" else "$"
         _tr_pnl_pct_tot = _tr_total_pnl / (_tr_total_mv - _tr_total_pnl) * 100 if (_tr_total_mv - _tr_total_pnl) else 0
         _tr_rows.append({
-            "#": "—", "Dir": "—", "Ticker": "📊 TOTAL", "Shares": "—",
+            "#": "—", "Dir": "—", "Ticker": "TOTAL", "Shares": "—",
             "AVG Price": "—", "Current Price": "—",
             "Cost":          money(_tr_total_cost, _sym_p),
             "Mkt Value":     money(_tr_total_mv, _sym_p),
@@ -2547,13 +2385,13 @@ def page_trade(trades: list, cash: list, disp: str, rate: float):
         _pnl_cols_t = ["P&L %", f"P&L ({sym})"]
         def _color_pnl_t(val):
             if isinstance(val, str) and val.startswith("+"):
-                return "color: #22c55e; font-weight: 600"
+                return "color: #3DBE7F; font-weight: 600"
             if isinstance(val, str) and val.startswith("-"):
-                return "color: #ef4444; font-weight: 600"
+                return "color: #EF5F55; font-weight: 600"
             return ""
         def _style_total_t(row):
-            if row["Ticker"] == "📊 TOTAL":
-                return ["background-color: rgba(88,101,242,0.12); font-weight: 700"] * len(row)
+            if row["Ticker"] == "TOTAL":
+                return ["background-color: rgba(217,164,65,0.12); font-weight: 700"] * len(row)
             return [""] * len(row)
         _df_tr = pd.DataFrame(_tr_rows)
         try:
@@ -2585,7 +2423,6 @@ def page_trade(trades: list, cash: list, disp: str, rate: float):
                                     get_currency(t), rate, t.get("direction","Long")) if tp_val else None
             sl_thb  = calc_pnl_thb(t.get("entry_price"), sl_val, get_shares(t),
                                     get_currency(t), rate, t.get("direction","Long")) if sl_val else None
-            icon  = "🟢" if (pnl_thb or 0) >= 0 else "🔴"
             arrow = "↑" if t.get("direction") == "Long" else "↓"
             _hc   = "green" if (pnl_thb or 0) >= 0 else "red"
             _cs   = fmt_money(pos_thb, disp, rate, sign=False) if pos_thb else "—"
@@ -2595,7 +2432,7 @@ def page_trade(trades: list, cash: list, disp: str, rate: float):
             # money actually at risk — show ROE (on margin), the figure Binance shows
             _pct_s = (f"{fmt_pct(pnl_pct * _lev)} ROE" if _lev > 1 and pnl_pct is not None
                       else fmt_pct(pnl_pct))
-            header = (f"{icon} **{t['ticker']}** {arrow}"
+            header = (f"**{t['ticker']}** {arrow}"
                       + (f" `{_lev:g}x`" if _lev > 1 else "") + "  ·  "
                       f"AVG {t.get('entry_price','—')} → {f'{price:.2f}' if price else '—'}  ·  "
                       f"{_cs} → {_vs}"
@@ -2604,12 +2441,12 @@ def page_trade(trades: list, cash: list, disp: str, rate: float):
 
             with st.expander(header):
                 # P&L banner
-                _pc = "#22c55e" if (pnl_thb or 0) >= 0 else "#ef4444"
-                _bg = "rgba(34,197,94,0.08)" if (pnl_thb or 0) >= 0 else "rgba(239,68,68,0.08)"
+                _pc = "#3DBE7F" if (pnl_thb or 0) >= 0 else "#EF5F55"
+                _bg = "rgba(61,190,127,0.08)" if (pnl_thb or 0) >= 0 else "rgba(239,95,85,0.08)"
                 st.markdown(
                     f"<div style='background:{_bg};border-left:3px solid {_pc};"
                     f"border-radius:0 6px 6px 0;padding:10px 14px;margin-bottom:10px'>"
-                    f"<div style='font-size:10px;color:#94a3b8;text-transform:uppercase;"
+                    f"<div style='font-size:10px;color:#8B9196;text-transform:uppercase;"
                     f"letter-spacing:0.07em;margin-bottom:2px'>Unrealized P&L</div>"
                     f"<span style='font-size:22px;font-weight:700;color:{_pc}'>"
                     f"{fmt_money(pnl_thb, disp, rate) if pnl_thb is not None else '—'}</span>"
@@ -2630,23 +2467,23 @@ def page_trade(trades: list, cash: list, disp: str, rate: float):
                 r2c1, r2c2, r2c3 = st.columns(3)
                 with r2c1:
                     st.markdown(
-                        f"<div style='font-size:12px;color:#64748b;margin-bottom:2px'>TP</div>"
+                        f"<div style='font-size:12px;color:#6B7176;margin-bottom:2px'>TP</div>"
                         f"<div style='font-size:18px;font-weight:600'>{t.get('take_profit','—')}</div>"
-                        f"<div style='font-size:12px;color:#22c55e'>"
+                        f"<div style='font-size:12px;color:#3DBE7F'>"
                         f"Profit {fmt_money(tp_thb, disp, rate) if tp_thb is not None else '—'}</div>",
                         unsafe_allow_html=True)
                 with r2c2:
                     st.markdown(
-                        f"<div style='font-size:12px;color:#64748b;margin-bottom:2px'>SL</div>"
+                        f"<div style='font-size:12px;color:#6B7176;margin-bottom:2px'>SL</div>"
                         f"<div style='font-size:18px;font-weight:600'>{t.get('stop_loss','—')}</div>"
-                        f"<div style='font-size:12px;color:#ef4444'>"
+                        f"<div style='font-size:12px;color:#EF5F55'>"
                         f"Loss {fmt_money(sl_thb, disp, rate) if sl_thb is not None else '—'}</div>",
                         unsafe_allow_html=True)
                 with r2c3:
                     st.markdown(
-                        f"<div style='font-size:12px;color:#64748b;margin-bottom:2px'>R:R &amp; Info</div>"
+                        f"<div style='font-size:12px;color:#6B7176;margin-bottom:2px'>R:R &amp; Info</div>"
                         f"<div style='font-size:15px;font-weight:600'>{t.get('rr','—')}</div>"
-                        f"<div style='font-size:11px;color:#64748b'>{get_currency(t)} · เปิด {t.get('open_date','—')}</div>",
+                        f"<div style='font-size:11px;color:#6B7176'>{get_currency(t)} · เปิด {t.get('open_date','—')}</div>",
                         unsafe_allow_html=True)
 
                 st.caption(f"Thesis: {t.get('thesis','—')}")
@@ -2658,7 +2495,7 @@ def page_trade(trades: list, cash: list, disp: str, rate: float):
                 if _trims:
                     _sold = sum(parse(x.get("shares")) or 0 for x in _trims)
                     _rpnl = sum(x.get("pnl_thb") or 0 for x in _trims)
-                    st.markdown(f"**✂️ ขายไปแล้วบางส่วน** · {_sold:,.10g} shares · "
+                    st.markdown(f"**ขายไปแล้วบางส่วน** · {_sold:,.10g} shares · "
                                 f"กำไรที่ realize แล้ว {fmt_money(_rpnl, disp, rate)}")
                     st.dataframe([{
                         "วันที่":       x.get("date", "—"),
@@ -2673,32 +2510,32 @@ def page_trade(trades: list, cash: list, disp: str, rate: float):
                 st.divider()
 
                 ca, cb, cc, _, cd = st.columns([2, 2, 2, 1, 1])
-                if ca.button("🔴 ขาย", key=f"btn_close_{t['id']}"):
+                if ca.button("ขาย", key=f"btn_close_{t['id']}"):
                     st.session_state[f"show_close_{t['id']}"] = True
                     st.session_state.pop(f"show_edit_{t['id']}", None)
                     st.session_state.pop(f"show_add_{t['id']}", None)
-                if cb.button("✏️ แก้ไข", key=f"btn_edit_{t['id']}"):
+                if cb.button("แก้ไข", key=f"btn_edit_{t['id']}"):
                     st.session_state[f"show_edit_{t['id']}"] = True
                     st.session_state.pop(f"show_close_{t['id']}", None)
                     st.session_state.pop(f"show_add_{t['id']}", None)
-                if cc.button("➕ ซื้อเพิ่ม", key=f"btn_add_{t['id']}"):
+                if cc.button("ซื้อเพิ่ม", key=f"btn_add_{t['id']}"):
                     st.session_state[f"show_add_{t['id']}"] = True
                     st.session_state.pop(f"show_close_{t['id']}", None)
                     st.session_state.pop(f"show_edit_{t['id']}", None)
-                if cd.button("🗑️", key=f"btn_del_{t['id']}"):
+                if cd.button("ลบ", key=f"btn_del_{t['id']}"):
                     trades[:] = [x for x in trades if x["id"] != t["id"]]
                     save_trades(trades)
                     st.rerun()
 
                 if st.session_state.get(f"show_add_{t['id']}"):
-                    st.markdown("**➕ ซื้อเพิ่ม**")
+                    st.markdown("**ซื้อเพิ่ม**")
                     with st.form(f"form_add_{t['id']}"):
                         ta1, ta2, ta3 = st.columns(3)
                         add_shares = ta1.text_input("จำนวน Shares ที่ซื้อเพิ่ม *", placeholder="เช่น 2")
                         add_price  = ta2.text_input("ราคาที่ซื้อ *", placeholder="เช่น 420")
                         add_date   = ta3.date_input("วันที่ซื้อ", value=date.today())
                         src_id, other_name, other_curr = source_selector(cash, f"add_trade_{t['id']}")
-                        if st.form_submit_button("✅ ซื้อเพิ่ม"):
+                        if st.form_submit_button("ยืนยันซื้อเพิ่ม"):
                             s_add = parse(add_shares)
                             p_add = parse(add_price)
                             if s_add and p_add:
@@ -2756,7 +2593,7 @@ def page_trade(trades: list, cash: list, disp: str, rate: float):
                         new_strat  = st.selectbox(
                             "Strategy", _strat_opts,
                             index=_strat_opts.index(_cur_strat) if _cur_strat in _strat_opts else 0)
-                        if st.form_submit_button("💾 บันทึก"):
+                        if st.form_submit_button("บันทึก"):
                             _matched = next((a for a in cash if a["name"] == new_acct), None)
                             t.update({
                                 "ticker": new_ticker.upper().strip(),
@@ -2775,7 +2612,7 @@ def page_trade(trades: list, cash: list, disp: str, rate: float):
                             st.rerun()
 
                 if st.session_state.get(f"show_close_{t['id']}"):
-                    st.markdown("**🔴 ขาย**")
+                    st.markdown("**ขาย**")
                     s_current = parse(get_shares(t)) or 0
                     st.caption(f"ถืออยู่ {s_current:,.10g} shares · AVG {t.get('entry_price','—')}")
                     with st.form(f"form_close_{t['id']}"):
@@ -2784,7 +2621,7 @@ def page_trade(trades: list, cash: list, disp: str, rate: float):
                         tc1, tcm, tc2, tc3 = st.columns([3, 1, 3, 3])
                         sell_shares = tc1.text_input("จำนวน Shares ที่ขาย *", placeholder=f"สูงสุด {s_current:,.10g}")
                         with tcm:
-                            st.markdown("<div style='height:29px'></div>", unsafe_allow_html=True)
+                            st.markdown("<div style='height:35px'></div>", unsafe_allow_html=True)
                             sell_max = st.checkbox("Max", key=f"close_max_{t['id']}",
                                                    help="ขายหมดทั้ง position ไม่ต้องพิมพ์จำนวน")
                         exit_p      = tc2.text_input("Exit Price *")
@@ -2815,12 +2652,12 @@ def page_trade(trades: list, cash: list, disp: str, rate: float):
                             format_func=lambda i: "— ไม่คืนเงินเข้า Cash" if i is None else _dest_lbl[i],
                             key=f"close_dest_{t['id']}")
                         if t.get("is_import"):
-                            st.caption("⚠️ Position Import — ตั้งไว้ไม่คืนเงิน ถ้าเงินเข้าบัญชีจริงให้เลือกบัญชี")
+                            st.caption("Position Import — ตั้งไว้ไม่คืนเงิน ถ้าเงินเข้าบัญชีจริงให้เลือกบัญชี")
                         allow_neg = st.checkbox("ยืนยันว่าขาดทุนเกินเงินที่วางจริง (cross margin)",
                                                 key=f"close_neg_{t['id']}",
                                                 help="ติ๊กเฉพาะเมื่อขาดทุนเกินเงินที่วางไว้จริง "
                                                      "เช่น futures แบบ cross margin")
-                        if st.form_submit_button("✅ ยืนยันขาย"):
+                        if st.form_submit_button("ยืนยันขาย"):
                             s_sell = s_current if sell_max else parse(sell_shares)
                             ep     = parse(exit_p)
                             if not s_sell or not ep:
@@ -2836,7 +2673,7 @@ def page_trade(trades: list, cash: list, disp: str, rate: float):
                                                           get_currency(t), rate,
                                                           t.get("direction", "Long")),
                                              rate) < 0 and not allow_neg):
-                                st.error("⚠️ ราคาปิดนี้ทำให้ขาดทุนเกินเงินที่วางไว้ — บัญชีจะถูกหักเพิ่ม "
+                                st.error("ราคาปิดนี้ทำให้ขาดทุนเกินเงินที่วางไว้ — บัญชีจะถูกหักเพิ่ม "
                                          "ตรวจ Exit Price อีกครั้ง ถ้าถูกต้องจริง (cross margin) "
                                          "ให้ติ๊กช่องยืนยันแล้วกดใหม่")
                             else:
@@ -2871,7 +2708,7 @@ def page_trade(trades: list, cash: list, disp: str, rate: float):
                                     st.session_state.pop(f"show_close_{t['id']}", None)
                                     _where = (f" · คืน {fmt_money(_settle, disp, rate, sign=False)} เข้า {_dest['name']}"
                                               if _dest else " · ไม่ได้คืนเงินเข้า Cash")
-                                    st.success(f"ปิด Trade ✅  P&L = {fmt_money(pnl_thb_v, disp, rate)}{_where}")
+                                    st.success(f"ปิด Trade · P&L = {fmt_money(pnl_thb_v, disp, rate)}{_where}")
                                 else:
                                     s_remain   = round(s_current - s_sell, 8)
                                     pnl_thb_p  = calc_pnl_thb(t["entry_price"], ep, str(s_sell), currency, rate, direction)
@@ -2902,7 +2739,7 @@ def page_trade(trades: list, cash: list, disp: str, rate: float):
                                         save_cash(cash)
                                     save_trades(trades)
                                     st.session_state.pop(f"show_close_{t['id']}", None)
-                                    st.success(f"ขาย {s_sell} shares @ {ep} ✅  เหลือ {s_remain} shares · P&L = {fmt_money(pnl_thb_p, disp, rate)}")
+                                    st.success(f"ขาย {s_sell} shares @ {ep} · เหลือ {s_remain} shares · P&L = {fmt_money(pnl_thb_p, disp, rate)}")
                                 st.rerun()
 
     # -- Analytics --
@@ -2912,7 +2749,7 @@ def page_trade(trades: list, cash: list, disp: str, rate: float):
         st.info("ยังไม่มีการขาย")
     if _sales:
         section("สรุปผลงาน")
-        G, R, MUTED, TXT = "#22c55e", "#ef4444", "#94a3b8", "#e2e8f0"
+        G, R, MUTED, TXT = "#3DBE7F", "#EF5F55", "#8B9196", "#E9E6DF"
 
         def _m(v):  # money for HTML; a bare $ pair would be read as LaTeX
             return fmt_money(v, disp, rate).replace("$", "&#36;")
@@ -3055,7 +2892,7 @@ def page_trade(trades: list, cash: list, disp: str, rate: float):
     if _perf:
         _perf.sort(key=lambda r: r["date"], reverse=True)
         _hide = hidden_amounts()
-        _G, _R = "#22c55e", "#ef4444"
+        _G, _R = "#3DBE7F", "#EF5F55"
 
         # ① Equity curve: cumulative realized after each sale, with the drop from the
         # running peak underneath. Answers "is this getting better or worse".
@@ -3069,19 +2906,19 @@ def page_trade(trades: list, cash: list, disp: str, rate: float):
         fig_eq = make_subplots(rows=2, cols=1, shared_xaxes=True, row_heights=[0.72, 0.28],
                                vertical_spacing=0.04)
         fig_eq.add_trace(go.Scatter(
-            x=_dts, y=eq, mode="lines+markers", line=dict(color="#94a3b8", width=2, shape="hv"),
+            x=_dts, y=eq, mode="lines+markers", line=dict(color="#8B9196", width=2, shape="hv"),
             marker=dict(size=8, color=[_G if x["pnl"] > 0 else _R for x in _seq],
-                        line=dict(color="#0e1117", width=1)),
+                        line=dict(color="#14181B", width=1.5)),
             text=_hv, hovertemplate="%{text}<extra></extra>"), row=1, col=1)
         fig_eq.add_trace(go.Scatter(
             x=_dts, y=dd, mode="lines", line=dict(color=_R, width=1, shape="hv"),
-            fill="tozeroy", fillcolor="rgba(239,68,68,0.18)", hoverinfo="skip"), row=2, col=1)
+            fill="tozeroy", fillcolor="rgba(239,95,85,0.18)", hoverinfo="skip"), row=2, col=1)
         fig_eq.update_layout(**{**CHART_LAYOUT, "height": 340,
-            "title": dict(text="Realized สะสม · Drawdown", font=dict(size=14, color="#94a3b8"), x=0)})
+            "title": dict(text="Realized สะสม · Drawdown", font=dict(size=14, color="#8B9196"), x=0)})
         fig_eq.update_yaxes(automargin=True, showgrid=True, gridcolor="rgba(255,255,255,0.06)", tickformat=",.0f",
-                            tickfont=dict(size=11, color="#64748b"), showticklabels=not _hide,
+                            tickfont=dict(size=11, color="#6B7176"), showticklabels=not _hide,
                             zeroline=True, zerolinecolor="rgba(255,255,255,0.15)")
-        fig_eq.update_xaxes(automargin=True, showgrid=False, tickfont=dict(size=11, color="#94a3b8"))
+        fig_eq.update_xaxes(automargin=True, showgrid=False, tickfont=dict(size=11, color="#8B9196"))
         if _hide:
             fig_eq.update_traces(hoverinfo="skip", hovertemplate=None)
 
@@ -3094,7 +2931,7 @@ def page_trade(trades: list, cash: list, disp: str, rate: float):
                   for r in _bt],
             textposition="none", hovertemplate="%{text}<extra></extra>"))
         fig_bt.update_layout(**{**CHART_LAYOUT, "height": 300, "bargap": 0.25,
-            "title": dict(text="P&L รายเทรด", font=dict(size=14, color="#94a3b8"), x=0)})
+            "title": dict(text="P&L รายเทรด", font=dict(size=14, color="#8B9196"), x=0)})
         fig_bt.update_xaxes(automargin=True, tickvals=list(range(len(_bt))),
                             ticktext=[r["t"].get("ticker", "—").replace(".BK", "") for r in _bt],
                             tickangle=-45 if len(_bt) > 8 else 0)
@@ -3110,7 +2947,7 @@ def page_trade(trades: list, cash: list, disp: str, rate: float):
         n_pages = (len(_perf) - 1) // PER + 1
         pg = min(max(st.session_state.get("pp_page", 1), 1), n_pages)
         section(f"Past Performance ({len(_perf)} trades)")
-        G, R, MUTED, TXT, LINE = "#22c55e", "#ef4444", "#94a3b8", "#e2e8f0", "rgba(255,255,255,0.07)"
+        G, R, MUTED, TXT, LINE = "#3DBE7F", "#EF5F55", "#8B9196", "#E9E6DF", "rgba(255,255,255,0.07)"
 
         def _h(v):  # escape for HTML; a bare $ pair would be read as LaTeX
             return html.escape(str(v)).replace("$", "&#36;")
@@ -3158,7 +2995,7 @@ def page_trade(trades: list, cash: list, disp: str, rate: float):
         _sale_rows.sort(key=lambda r: r["ปิด"] or "", reverse=True)
         _n_trim = len(_sale_rows) - len(closed_trades)
         st.markdown("<div style='height:0.5rem'></div>", unsafe_allow_html=True)
-        with st.expander(f"📋 Closed Trades — ทุกครั้งที่ขาย ({len(_sale_rows)})"
+        with st.expander(f"Closed Trades — ทุกครั้งที่ขาย ({len(_sale_rows)})"
                          + (f" · ขายบางส่วน {_n_trim}" if _n_trim else "")):
             st.dataframe(pd.DataFrame(_sale_rows), use_container_width=True, hide_index=True)
 
@@ -3167,7 +3004,7 @@ def page_trade(trades: list, cash: list, disp: str, rate: float):
 
         # Journal fields only. Price, size and dates stay locked: the cash has already
         # settled against them, and changing them here would desync every balance.
-        with st.expander("✏️ แก้ไขบันทึก Trade (Strategy / Lesson)"):
+        with st.expander("แก้ไขบันทึก Trade (Strategy / Lesson)"):
             _ct_sorted = sorted(_journal, key=lambda x: x.get("close_date") or max(
                 (h.get("date", "") for h in x.get("sell_history", [])), default=""), reverse=True)
             _ct_lbl = {t["id"]: f"{t.get('ticker','—')} · "
@@ -3199,7 +3036,7 @@ def page_trade(trades: list, cash: list, disp: str, rate: float):
                 _trim_les.append(st.text_input(
                     f"Lesson ขายบางส่วน {_h.get('date','—')} · {_h.get('shares','—')} @ {_h.get('price','—')}",
                     value=_h.get("lesson", ""), key=f"ct_tles_{ct_id}_{_i}"))
-            if st.button("💾 บันทึกการแก้ไข", key=f"ct_save_{ct_id}"):
+            if st.button("บันทึกการแก้ไข", key=f"ct_save_{ct_id}"):
                 if not (ct_strategy or "").strip():
                     st.error("กรุณาระบุ Strategy")
                 else:
@@ -3214,7 +3051,7 @@ def page_trade(trades: list, cash: list, disp: str, rate: float):
 
     # -- New Trade Form (collapsed) --
     st.markdown("<div style='height:1rem'></div>", unsafe_allow_html=True)
-    with st.expander("➕ เปิด Trade ใหม่"):
+    with st.expander("เปิด Trade ใหม่"):
         strategy = strategy_input("nt")
         with st.form("new_trade"):
             c1, c2, c3, c4 = st.columns(4)
@@ -3235,8 +3072,8 @@ def page_trade(trades: list, cash: list, disp: str, rate: float):
             open_date = st.date_input("วันที่เปิด", value=date.today())
             st.markdown("---")
             src_id, other_name, other_curr = source_selector(cash, "trade")
-            is_import = st.checkbox("📥 Import position เก่า (ไม่หักเงินจาก Cash)", key="import_trade")
-            if st.form_submit_button("✅ บันทึก Trade"):
+            is_import = st.checkbox("Import position เก่า (ไม่หักเงินจาก Cash)", key="import_trade")
+            if st.form_submit_button("บันทึก Trade"):
                 e, s = parse(entry), parse(shares)
                 # accept "10x" — the field is labelled (x), and treating it as unparseable
                 # used to fall back to 1x and deduct the full notional, the very bug this
@@ -3277,7 +3114,7 @@ def page_trade(trades: list, cash: list, disp: str, rate: float):
                     save_trades(trades)
                     _lev_txt = (f" · {lev:g}x · Margin {fmt_money(margin_thb, disp, rate, sign=False)}"
                                 if lev > 1 else "")
-                    st.success(f"✅ บันทึก! R:R = {rr} · Position: "
+                    st.success(f"บันทึกแล้ว · R:R = {rr} · Position: "
                                f"{fmt_money(pos_thb, disp, rate, sign=False)}{_lev_txt}")
                     st.rerun()
 
@@ -3334,7 +3171,7 @@ def page_cash(trades: list, investments: list, cash: list, disp: str, rate: floa
 
         with col_cards:
             for acc in cash:
-                clr     = "#22c55e" if acc["amount"] >= 0 else "#ef4444"
+                clr     = "#3DBE7F" if acc["amount"] >= 0 else "#EF5F55"
                 sym     = "$" if acc["currency"] == "USD" else "฿"
                 fmt     = money(acc['amount'], sym, 2 if acc["currency"] == "USD" else 0)
                 val_thb = acc["amount"] * rate if acc["currency"] == "USD" else acc["amount"]
@@ -3345,14 +3182,14 @@ def page_cash(trades: list, investments: list, cash: list, disp: str, rate: floa
                     f"border:1px solid rgba(255,255,255,0.07);border-radius:12px 12px 0 0;"
                     f"padding:14px 20px;display:flex;justify-content:space-between;"
                     f"align-items:center;margin-bottom:0'>"
-                    f"<span style='font-size:0.7rem;color:#94a3b8;text-transform:uppercase;"
+                    f"<span style='font-size:0.7rem;color:#8B9196;text-transform:uppercase;"
                     f"letter-spacing:0.09em;min-width:80px'>{acc['name']}</span>"
                     f"<span style='font-size:1.55rem;font-weight:700;color:{clr}'>{fmt}</span>"
-                    f"<span style='font-size:0.72rem;color:#64748b;text-align:right'>{sub}</span>"
+                    f"<span style='font-size:0.72rem;color:#6B7176;text-align:right'>{sub}</span>"
                     f"</div>",
                     unsafe_allow_html=True
                 )
-                with st.expander("✏️ จัดการ", expanded=False):
+                with st.expander("จัดการ", expanded=False):
                     other_accs = [a for a in cash if a["id"] != acc["id"]]
                     _ec1, _ec2, _ec3 = st.columns([3, 3, 2])
 
@@ -3365,7 +3202,7 @@ def page_cash(trades: list, investments: list, cash: list, disp: str, rate: floa
                             new_amount = st.text_input("ยอด", value=str(acc["amount"]),
                                                        label_visibility="collapsed",
                                                        placeholder="ยอดเงิน")
-                            if st.form_submit_button("💾 บันทึก", use_container_width=True):
+                            if st.form_submit_button("บันทึก", use_container_width=True):
                                 acc["name"]   = new_name.strip() or acc["name"]
                                 acc["amount"] = round(parse(new_amount) or 0, 2)
                                 save_cash(cash)
@@ -3373,7 +3210,7 @@ def page_cash(trades: list, investments: list, cash: list, disp: str, rate: floa
 
                     if other_accs:
                         with _ec2:
-                            st.caption("🔀 Reassign")
+                            st.caption("Reassign")
                             with st.form(f"reassign_{acc['id']}"):
                                 t_idx = st.selectbox("ย้ายเข้า", range(len(other_accs)),
                                                       format_func=lambda i: acc_label(other_accs[i]),
@@ -3390,13 +3227,13 @@ def page_cash(trades: list, investments: list, cash: list, disp: str, rate: floa
                                     save_cash(cash)
                                     save_trades(trades)
                                     save_investments(investments)
-                                    st.success(f"ย้าย → '{target['name']}' ✅")
+                                    st.success(f"ย้ายเข้า '{target['name']}' แล้ว")
                                     st.rerun()
 
                     with _ec3:
                         st.caption("ลบ")
                         st.markdown("<div style='height:1.55rem'></div>", unsafe_allow_html=True)
-                        if st.button("🗑️ ลบ", key=f"del_acc_{acc['id']}",
+                        if st.button("ลบ", key=f"del_acc_{acc['id']}",
                                      use_container_width=True):
                             cash[:] = [a for a in cash if a["id"] != acc["id"]]
                             save_cash(cash)
@@ -3407,7 +3244,7 @@ def page_cash(trades: list, investments: list, cash: list, disp: str, rate: floa
 
     # -- Deposit (money coming into the portfolio from outside) --
     if cash:
-        with st.expander("💰 Deposit — เติมเงินเข้าพอร์ต"):
+        with st.expander("Deposit — เติมเงินเข้าพอร์ต"):
             # picker outside the form so the currency in the amount label follows
             # the chosen account immediately (inside a form it only updates on submit)
             _dopts = [acc_label(a) for a in cash]
@@ -3420,7 +3257,7 @@ def page_cash(trades: list, investments: list, cash: list, disp: str, rate: floa
                 d_dt   = dc2.date_input("วันที่เติม", value=date.today())
                 d_note = dc3.text_input("บันทึก (ไม่บังคับ)", "",
                                         placeholder="เช่น เงินเดือน / โอนจาก SCB / DCA")
-                if st.form_submit_button("💰 เติมเงิน", use_container_width=True):
+                if st.form_submit_button("เติมเงิน", use_container_width=True):
                     amt = parse(d_amt)
                     if not amt or amt <= 0:
                         st.error("ใส่ยอดเติมให้ถูกต้อง")
@@ -3434,12 +3271,12 @@ def page_cash(trades: list, investments: list, cash: list, disp: str, rate: floa
                         _dacc["amount"] = round(_dacc["amount"] + amt, 2)
                         save_cash(cash)
                         _s = "$" if _dacc["currency"] == "USD" else "฿"
-                        st.success(f"เติม {money(amt, _s, 2)} เข้า {_dacc['name']} ✅")
+                        st.success(f"เติม {money(amt, _s, 2)} เข้า {_dacc['name']} แล้ว")
                         st.rerun()
 
     # -- Cash out (money leaving the portfolio to be spent) --
     if cash:
-        with st.expander("💸 Cash Out — ถอนเงินออกไปใช้"):
+        with st.expander("Cash Out — ถอนเงินออกไปใช้"):
             with st.form("cashout_form", clear_on_submit=True):
                 oc1, oc2, oc3 = st.columns([4, 3, 3])
                 _opts = [acc_label(a) for a in cash]
@@ -3462,7 +3299,7 @@ def page_cash(trades: list, investments: list, cash: list, disp: str, rate: floa
                 o_note = oc5.text_input("บันทึก (ไม่บังคับ)", "",
                                         placeholder="เช่น ค่าเทอม / ซื้อของ / โอนเข้า SCB")
 
-                if st.form_submit_button("💸 ถอนเงิน", use_container_width=True):
+                if st.form_submit_button("ถอนเงิน", use_container_width=True):
                     amt = parse(o_amt)
                     if not amt or amt <= 0:
                         st.error("ใส่ยอดถอนให้ถูกต้อง")
@@ -3482,7 +3319,7 @@ def page_cash(trades: list, investments: list, cash: list, disp: str, rate: floa
                         _acc["amount"] = round(_acc["amount"] - amt, 2)
                         save_cash(cash)
                         _s = "$" if _acc["currency"] == "USD" else "฿"
-                        st.success(f"ถอนออก {money(amt, _s, 2)} จาก {_acc['name']} ✅")
+                        st.success(f"ถอนออก {money(amt, _s, 2)} จาก {_acc['name']} แล้ว")
                         st.rerun()
 
         # one table for both directions — reading in/out side by side is the point
@@ -3496,7 +3333,7 @@ def page_cash(trades: list, investments: list, cash: list, disp: str, rate: floa
             section(f"ประวัติเงินเข้า-ออก ({len(flows_io)})")
             st.dataframe([{
                 "วันที่":     f["date"],
-                "ประเภท":     "💰 เติม" if f["_kind"] == "in" else "💸 ถอน",
+                "ประเภท":     "เติม" if f["_kind"] == "in" else "ถอน",
                 "บัญชี":      f["account"],
                 "ยอด":        (("+" if f["_kind"] == "in" else "−")
                                + money(f["amount"], "$" if f["currency"] == "USD" else "฿", 2)
@@ -3504,21 +3341,21 @@ def page_cash(trades: list, investments: list, cash: list, disp: str, rate: floa
                 "เป็นบาท":    money(f["amount_thb"], dp=2),
                 "เรต":        f"{f['fx_rate']:.4f}" if f["fx_rate"] else "—",
                 "นำเข้าไทย":  ("—" if f["_kind"] == "in" or f["currency"] == "THB"
-                               else ("✅" if f["remitted"] else "ไม่")),
+                               else ("ใช่" if f["remitted"] else "ไม่")),
                 "บันทึก":     f["note"] or "—",
             } for f in flows_io], use_container_width=True, hide_index=True)
 
     st.markdown("<div style='height:0.5rem'></div>", unsafe_allow_html=True)
 
     # -- Add account --
-    with st.expander("➕ เพิ่มบัญชี Cash"):
+    with st.expander("เพิ่มบัญชี Cash"):
         with st.form("add_cash_page"):
             fc1, fc2, fc3 = st.columns(3)
             preset      = fc1.selectbox("แหล่ง Cash", CASH_PRESETS)
             custom_name = fc2.text_input("หรือพิมพ์ชื่อเอง", placeholder="เช่น Binance Thai")
             currency    = fc3.selectbox("สกุลเงิน", ["THB", "USD"])
             amount_str  = st.text_input("ยอดเริ่มต้น", placeholder="เช่น 50000 หรือ 1500.50")
-            if st.form_submit_button("💾 บันทึก"):
+            if st.form_submit_button("บันทึก"):
                 name   = custom_name.strip() if custom_name.strip() else preset
                 new_id = max((a["id"] for a in cash), default=0) + 1
                 cash.append({"id": new_id, "name": name, "currency": currency,
@@ -3613,7 +3450,7 @@ def page_log(trades: list, investments: list, cash: list, disp: str, rate: float
         a1, a2, a3 = st.columns([2, 2, 3])
         yr_pick = a1.selectbox("ปี", ["ทั้งหมด"] + years, key="log_year")
         mo_pick = a2.selectbox("เดือน", ["ทั้งหมด"] + list(range(1, 13)), key="log_month")
-        ty_pick = a3.selectbox("ประเภท", ["ทั้งหมด", "💼 Invest", "📈 Trade", "💵 Cash"], key="log_type")
+        ty_pick = a3.selectbox("ประเภท", ["ทั้งหมด", "Invest", "Trade", "Cash"], key="log_type")
 
         shown = activity
         if yr_pick != "ทั้งหมด":
@@ -3627,7 +3464,7 @@ def page_log(trades: list, investments: list, cash: list, disp: str, rate: float
         if shown:
             st.dataframe(shown, use_container_width=True, hide_index=True)
             st.download_button(
-                "⬇️ Export CSV", key="dl_activity",
+                "Export CSV", key="dl_activity",
                 data=pd.DataFrame(shown).to_csv(index=False).encode("utf-8-sig"),
                 file_name=f"timfin_activity_{date.today()}.csv", mime="text/csv",
             )
@@ -3682,7 +3519,7 @@ def page_log(trades: list, investments: list, cash: list, disp: str, rate: float
 
     st.dataframe(tax_tbl, use_container_width=True, hide_index=True)
     st.download_button(
-        "⬇️ Export CSV สำหรับยื่นภาษี", key="dl_tax",
+        "Export CSV สำหรับยื่นภาษี", key="dl_tax",
         data=pd.DataFrame(tax_tbl).to_csv(index=False).encode("utf-8-sig"),
         file_name=f"timfin_tax_{pick}.csv", mime="text/csv",
     )
@@ -3718,7 +3555,7 @@ def main():
             st.session_state.pop("sb_session", None)
             st.query_params.pop("_s", None)
             st.rerun()
-        st.error(f"⚠️ โหลดข้อมูลไม่ได้: {_e}")
+        st.error(f"โหลดข้อมูลไม่ได้: {_e}")
         st.stop()
 
     rate = get_usd_thb()
@@ -3770,7 +3607,7 @@ def main():
     )
 
     # -- Tabs --
-    _tabs = st.tabs(["📊 Overview", "💼 Investment", "📈 Trade", "💵 Cash", "📓 Log"])
+    _tabs = st.tabs(["Overview", "Investment", "Trade", "Cash", "Log"])
     with _tabs[0]: page_overview(trades, investments, cash, disp, rate)
     with _tabs[1]: page_investment(investments, trades, cash, disp, rate)
     with _tabs[2]: page_trade(trades, cash, disp, rate)
