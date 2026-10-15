@@ -15,6 +15,7 @@ import requests as _req
 import streamlit as st
 import streamlit.components.v1 as _components
 import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 from PIL import Image as _PILImage
 
 
@@ -1733,7 +1734,6 @@ def page_overview(trades: list, investments: list, cash: list, disp: str, rate: 
                 fig_ret = portfolio_return_chart(ret_items, rate, disp, ret_period,
                                                  show_spy=cspy, show_qqq=cqqq, height=270)
                 if fig_ret:
-                    st.caption("📊 การเปลี่ยนแปลงราคาในช่วงที่เลือก · ไม่ใช่ return จากต้นทุนจริง")
                     st.plotly_chart(fig_ret, use_container_width=True)
                 else:
                     st.info("ไม่มีข้อมูลราคาย้อนหลัง")
@@ -2050,8 +2050,6 @@ def page_investment(investments: list, trades: list, cash: list, disp: str, rate
             st.dataframe(rebal_rows, use_container_width=True, hide_index=True)
 
             no_target = [r["inv"]["ticker"] for r in raw if r["inv"].get("target_pct") is None]
-            if no_target:
-                st.caption(f"ยังไม่ตั้ง Target %: {', '.join(no_target)} — กดแก้ไขใน position เพื่อตั้งค่า")
 
         raw.sort(key=lambda r: -r["pnl_thb"])
 
@@ -2270,7 +2268,7 @@ def page_investment(investments: list, trades: list, cash: list, disp: str, rate
                     if st.session_state.get(f"sell_inv_{inv['id']}"):
                         st.markdown("**🔴 ขาย**")
                         s_current = parse(get_shares(inv)) or 0
-                        st.caption(f"ถืออยู่ {s_current} หุ้น · AVG {inv.get('entry_price','—')} · ใส่ครบ = ปิด position")
+                        st.caption(f"ถืออยู่ {s_current:,.10g} หุ้น · AVG {inv.get('entry_price','—')}")
                         with st.form(f"form_sell_inv_{inv['id']}"):
                             # a button can't fill a field inside a form, so Max is a tick
                             # read on submit — it sells exactly what is held, no typing
@@ -2474,9 +2472,11 @@ def page_trade(trades: list, cash: list, disp: str, rate: float):
         _st = t.get("strategy") or "—"
         for x in t.get("sell_history", []):
             if x.get("pnl_thb") is not None:
-                _sales.append({"strategy": _st, "pnl": x["pnl_thb"]})
+                _sales.append({"strategy": _st, "pnl": x["pnl_thb"], "date": x.get("date") or "",
+                               "ticker": t.get("ticker", "—")})
         if t.get("status") == "closed" and t.get("pnl_thb") is not None:
-            _sales.append({"strategy": _st, "pnl": t["pnl_thb"]})
+            _sales.append({"strategy": _st, "pnl": t["pnl_thb"], "date": t.get("close_date") or "",
+                           "ticker": t.get("ticker", "—")})
     wins   = [x for x in _sales if x["pnl"] > 0]
     losses = [x for x in _sales if x["pnl"] <= 0]
     win_rate       = len(wins) / len(_sales) * 100 if _sales else None
@@ -2777,7 +2777,7 @@ def page_trade(trades: list, cash: list, disp: str, rate: float):
                 if st.session_state.get(f"show_close_{t['id']}"):
                     st.markdown("**🔴 ขาย**")
                     s_current = parse(get_shares(t)) or 0
-                    st.caption(f"ถืออยู่ {s_current} shares · AVG {t.get('entry_price','—')} · ใส่ครบ = ปิด trade")
+                    st.caption(f"ถืออยู่ {s_current:,.10g} shares · AVG {t.get('entry_price','—')}")
                     with st.form(f"form_close_{t['id']}"):
                         # a button can't fill a field inside a form, so Max is a tick
                         # read on submit — it sells exactly what is held, no typing
@@ -2814,14 +2814,8 @@ def page_trade(trades: list, cash: list, disp: str, rate: float):
                             "คืนเงินเข้าบัญชี", _dest_ids, index=_dest_idx,
                             format_func=lambda i: "— ไม่คืนเงินเข้า Cash" if i is None else _dest_lbl[i],
                             key=f"close_dest_{t['id']}")
-                        _lev = trade_leverage(t)
-                        st.caption(
-                            ("คืน = margin + กำไร/ขาดทุน · "
-                             f"{_lev:g}x ระบบไม่คืนเงินเต็มขนาด position" if _lev > 1
-                             else "คืน = ต้นทุน + กำไร/ขาดทุน")
-                            + (" · ⚠️ position นี้ Import มา (ตอนเปิดไม่ได้หักเงิน) จึงตั้งไว้ว่า"
-                               "ไม่คืนเงิน — ถ้าเงินจากการขายเข้าบัญชีจริง ให้เลือกบัญชีด้านบน"
-                               if t.get("is_import") else ""))
+                        if t.get("is_import"):
+                            st.caption("⚠️ Position Import — ตั้งไว้ไม่คืนเงิน ถ้าเงินเข้าบัญชีจริงให้เลือกบัญชี")
                         allow_neg = st.checkbox("ยืนยันว่าขาดทุนเกินเงินที่วางจริง (cross margin)",
                                                 key=f"close_neg_{t['id']}",
                                                 help="ติ๊กเฉพาะเมื่อขาดทุนเกินเงินที่วางไว้จริง "
@@ -2915,7 +2909,7 @@ def page_trade(trades: list, cash: list, disp: str, rate: float):
     # Plain-language scorecard instead of a win/loss donut and an axis chart: it has
     # to answer "how much did I win, how many times, with which strategy" at a glance.
     if not _sales and open_trades:
-        st.info("📊 สรุปผลงานจะขึ้นหลังจากขายครั้งแรก")
+        st.info("ยังไม่มีการขาย")
     if _sales:
         section("สรุปผลงาน")
         G, R, MUTED, TXT = "#22c55e", "#ef4444", "#94a3b8", "#e2e8f0"
@@ -2972,7 +2966,6 @@ def page_trade(trades: list, cash: list, disp: str, rate: float):
         st.markdown(f"<div style='font-size:13px;color:{MUTED};margin:20px 0 2px'>"
                     f"แยกตาม Strategy — เรียงจากทำเงินได้มากสุด</div>{''.join(rows)}",
                     unsafe_allow_html=True)
-        st.caption("นับทุกครั้งที่ขาย รวมขายบางส่วน · ตรงกับ Realized P&L ด้านบน")
 
     # -- Closed Trades Table --
     # Every sale, not only full closes: a trim on a still-open trade locks in profit
@@ -3061,6 +3054,58 @@ def page_trade(trades: list, cash: list, disp: str, rate: float):
 
     if _perf:
         _perf.sort(key=lambda r: r["date"], reverse=True)
+        _hide = hidden_amounts()
+        _G, _R = "#22c55e", "#ef4444"
+
+        # ① Equity curve: cumulative realized after each sale, with the drop from the
+        # running peak underneath. Answers "is this getting better or worse".
+        _seq = sorted(_sales, key=lambda x: x["date"])
+        _cum, _peak, eq, dd = 0.0, 0.0, [], []
+        for x in _seq:
+            _cum += x["pnl"]; _peak = max(_peak, _cum)
+            eq.append(to_display(_cum, disp, rate)); dd.append(to_display(_cum - _peak, disp, rate))
+        _dts = [x["date"] for x in _seq]
+        _hv = [f"{x['date']} · {x['ticker']}<br>{fmt_money(x['pnl'], disp, rate)}" for x in _seq]
+        fig_eq = make_subplots(rows=2, cols=1, shared_xaxes=True, row_heights=[0.72, 0.28],
+                               vertical_spacing=0.04)
+        fig_eq.add_trace(go.Scatter(
+            x=_dts, y=eq, mode="lines+markers", line=dict(color="#94a3b8", width=2, shape="hv"),
+            marker=dict(size=8, color=[_G if x["pnl"] > 0 else _R for x in _seq],
+                        line=dict(color="#0e1117", width=1)),
+            text=_hv, hovertemplate="%{text}<extra></extra>"), row=1, col=1)
+        fig_eq.add_trace(go.Scatter(
+            x=_dts, y=dd, mode="lines", line=dict(color=_R, width=1, shape="hv"),
+            fill="tozeroy", fillcolor="rgba(239,68,68,0.18)", hoverinfo="skip"), row=2, col=1)
+        fig_eq.update_layout(**{**CHART_LAYOUT, "height": 340,
+            "title": dict(text="Realized สะสม · Drawdown", font=dict(size=14, color="#94a3b8"), x=0)})
+        fig_eq.update_yaxes(automargin=True, showgrid=True, gridcolor="rgba(255,255,255,0.06)", tickformat=",.0f",
+                            tickfont=dict(size=11, color="#64748b"), showticklabels=not _hide,
+                            zeroline=True, zerolinecolor="rgba(255,255,255,0.15)")
+        fig_eq.update_xaxes(automargin=True, showgrid=False, tickfont=dict(size=11, color="#94a3b8"))
+        if _hide:
+            fig_eq.update_traces(hoverinfo="skip", hovertemplate=None)
+
+        # ② P&L per trade in time order: shows whether losses are small next to wins
+        _bt = sorted(_perf, key=lambda r: r["date"])
+        fig_bt = go.Figure(go.Bar(
+            x=list(range(len(_bt))), y=[to_display(r["pnl"], disp, rate) for r in _bt],
+            marker=dict(color=[_G if r["pnl"] > 0 else _R for r in _bt], opacity=0.9),
+            text=[f"{r['date']} · {r['t'].get('ticker','—')}<br>{fmt_money(r['pnl'], disp, rate)}"
+                  for r in _bt],
+            textposition="none", hovertemplate="%{text}<extra></extra>"))
+        fig_bt.update_layout(**{**CHART_LAYOUT, "height": 300, "bargap": 0.25,
+            "title": dict(text="P&L รายเทรด", font=dict(size=14, color="#94a3b8"), x=0)})
+        fig_bt.update_xaxes(automargin=True, tickvals=list(range(len(_bt))),
+                            ticktext=[r["t"].get("ticker", "—").replace(".BK", "") for r in _bt],
+                            tickangle=-45 if len(_bt) > 8 else 0)
+        fig_bt.update_yaxes(automargin=True, tickformat=",.0f", showticklabels=not _hide)
+        if _hide:
+            fig_bt.update_traces(hoverinfo="skip", hovertemplate=None)
+
+        _c1, _c2 = st.columns(2)
+        _c1.plotly_chart(fig_eq, use_container_width=True)
+        _c2.plotly_chart(fig_bt, use_container_width=True)
+
         PER = 15
         n_pages = (len(_perf) - 1) // PER + 1
         pg = min(max(st.session_state.get("pp_page", 1), 1), n_pages)
@@ -3074,18 +3119,17 @@ def page_trade(trades: list, cash: list, disp: str, rate: float):
               f"letter-spacing:0.05em;border-bottom:1px solid {LINE};white-space:nowrap")
         td = f"padding:9px 10px;border-bottom:1px solid {LINE};white-space:nowrap"
         heads = [("วันที่ขาย", "left"), ("Ticker", "left"), ("Strategy", "left"), ("ถือ", "right"),
-                 ("Size", "right"), ("Entry → Exit เฉลี่ย", "right"), ("Return", "right"), ("P&L", "right")]
+                 ("Size", "right"), ("Return", "right"), ("P&L", "right")]
         out = ["<div style='overflow-x:auto'><table style='width:100%;border-collapse:collapse;"
                f"font-size:14px;color:{TXT};font-variant-numeric:tabular-nums'><thead><tr>"
                + "".join(f"<th style='{th};text-align:{al}'>{h}</th>" for h, al in heads)
                + "</tr></thead><tbody>"]
         for r in _perf[(pg - 1) * PER: pg * PER]:
-            t = r["t"]; c = G if r["pnl"] > 0 else R
+            t = r["t"]; c = G if r["pnl"] > 0 else (R if r["pnl"] < 0 else MUTED)
             badge = (f" <span style='font-size:11px;color:{MUTED};border:1px solid {LINE};"
                      f"border-radius:4px;padding:1px 5px'>ยังถืออยู่</span>" if r["open"] else "")
             lev_b = (f" <span style='font-size:11px;color:{MUTED}'>{r['lev']:g}x</span>"
                      if r["lev"] > 1 else "")
-            ax = f"{r['avg_exit']:,.4g}" if r["avg_exit"] is not None else "—"
             held = "—" if r["days"] is None else f"{r['days']} วัน"
             pct = (fmt_pct(r["pct"]) + (" ROE" if r["lev"] > 1 else "")) if r["pct"] is not None else "—"
             out.append(
@@ -3096,7 +3140,6 @@ def page_trade(trades: list, cash: list, disp: str, rate: float):
                 f"<td style='{td};text-align:right;color:{MUTED}'>"
                 f"{held}</td>"
                 f"<td style='{td};text-align:right'>{_h(fmt_money(r['cost'], disp, rate, sign=False) if r['cost'] else '—')}{lev_b}</td>"
-                f"<td style='{td};text-align:right;color:{MUTED}'>{_h(t.get('entry_price','—'))} → {_h(ax)}</td>"
                 f"<td style='{td};text-align:right;color:{c}'>{_h(pct)}</td>"
                 f"<td style='{td};text-align:right;color:{c};font-weight:700'>{_h(fmt_money(r['pnl'], disp, rate))}</td>"
                 "</tr>")
@@ -3110,8 +3153,6 @@ def page_trade(trades: list, cash: list, disp: str, rate: float):
                         f"หน้า {pg} / {n_pages}</div>", unsafe_allow_html=True)
             if p3.button("ถัดไป →", key="pp_next", disabled=pg >= n_pages, use_container_width=True):
                 st.session_state["pp_page"] = pg + 1; st.rerun()
-        st.caption("1 แถว = 1 trade รวมทุกครั้งที่ขาย · Size = ต้นทุนส่วนที่ขายไปแล้ว · "
-                   "Exit เฉลี่ยถ่วงตามจำนวน")
 
     if _sale_rows:
         _sale_rows.sort(key=lambda r: r["ปิด"] or "", reverse=True)
@@ -3268,8 +3309,7 @@ def page_cash(trades: list, investments: list, cash: list, disp: str, rate: floa
               fmt_money(cashout_thb, disp, rate, sign=False) if cashouts else "—")
     if cashouts:
         _rem = sum(c["amount_thb"] or 0 for c in cashouts if c["remitted"])
-        m5.caption(f"{len(cashouts)} ครั้ง · โอนเข้าไทยจากบัญชีต่างสกุล "
-                   f"{fmt_money(_rem, disp, rate, sign=False)}")
+        m5.caption(f"{len(cashouts)} ครั้ง · เข้าไทย {fmt_money(_rem, disp, rate, sign=False)}")
 
     st.markdown("<div style='height:1rem'></div>", unsafe_allow_html=True)
 
@@ -3419,7 +3459,6 @@ def page_cash(trades: list, investments: list, cash: list, disp: str, rate: floa
                                                "เกี่ยวกับภาษี ถ้าเก็บไว้ต่างประเทศให้ติ๊กออก")
                 else:
                     o_thai = False
-                    oc4.caption("บัญชี THB — เงินอยู่ในไทยแล้ว\nไม่ใช่การนำเงินเข้า")
                 o_note = oc5.text_input("บันทึก (ไม่บังคับ)", "",
                                         placeholder="เช่น ค่าเทอม / ซื้อของ / โอนเข้า SCB")
 
@@ -3552,7 +3591,7 @@ def page_cash(trades: list, investments: list, cash: list, disp: str, rate: floa
         flows.sort(key=lambda x: x["วันที่"], reverse=True)
         st.dataframe(flows, use_container_width=True, hide_index=True)
     else:
-        st.caption("ยังไม่มีรายการ — จะแสดงเมื่อมี trade/investment ที่เลือก source account")
+        st.caption("ยังไม่มีรายการ")
 
 
 # -- Page 5: Log --
@@ -3601,7 +3640,7 @@ def page_log(trades: list, investments: list, cash: list, disp: str, rate: float
 
     realized = build_realized_events(investments, trades)
     if not realized:
-        st.info("ยังไม่มีการขาย — ตารางนี้จะขึ้นเมื่อปิด position หรือขายบางส่วน")
+        st.info("ยังไม่มีการขาย")
         return
 
     tax_years = sorted({e["sell_date"][:4] for e in realized if len(e["sell_date"]) >= 4},
@@ -3648,11 +3687,8 @@ def page_log(trades: list, investments: list, cash: list, disp: str, rate: float
         file_name=f"timfin_tax_{pick}.csv", mime="text/csv",
     )
     if any(e["fx_rate"] is None for e in yr_rows):
-        st.caption("⚠️ รายการที่เรตขึ้น “—” ปิดก่อนระบบเริ่มเก็บเรต — ยอดบาทคำนวณจากเรตปัจจุบัน "
-                   "ไม่ใช่เรตวันขาย ถ้าต้องใช้ยื่นจริงให้กรอกเรตวันนั้นเอง")
-    st.caption("ℹ️ ตารางนี้เป็น **บันทึกรายการ** ไม่ใช่การคำนวณภาษี — ยอด “นำเงินเข้าไทย” "
-               "ยังไม่ได้หักเงินต้นที่ส่งออกไปลงทุนตอนแรก (ระบบไม่ได้ track ขาส่งออก) "
-               "ตัวเลขที่ต้องยื่นจริงให้ยืนยันกับบัญชีอีกครั้ง")
+        st.caption("⚠️ เรต “—” = ใช้เรตปัจจุบัน ไม่ใช่เรตวันขาย")
+    st.caption("บันทึกรายการ ไม่ใช่การคำนวณภาษี — ยืนยันกับนักบัญชีก่อนยื่น")
 
 
 # -- Main --
