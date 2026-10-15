@@ -2,6 +2,7 @@
 Tim.fin Personal OS — Investment & Trade Dashboard
 """
 import base64 as _b64
+import html
 import io
 import json
 import math
@@ -2454,26 +2455,41 @@ def page_investment(investments: list, trades: list, cash: list, disp: str, rate
 def page_trade(trades: list, cash: list, disp: str, rate: float):
     open_trades   = [t for t in trades if t.get("status") == "open"]
     closed_trades = [t for t in trades if t.get("status") == "closed"]
-    wins   = [t for t in closed_trades if t.get("win_loss") == "Win"]
-    losses = [t for t in closed_trades if t.get("win_loss") == "Loss"]
     sym    = "฿" if disp == "THB" else "$"
 
     # trade side only, but via the shared builder so partial sells count here too
     _tr_realized   = [e for e in build_realized_events([], trades)]
     realized_thb   = sum(e["pnl_thb"] or 0 for e in _tr_realized)
-    win_rate       = len(wins) / len(closed_trades) * 100 if closed_trades else None
-    total_win_thb  = sum(t.get("pnl_thb", 0) or 0 for t in wins)
-    total_loss_thb = abs(sum(t.get("pnl_thb", 0) or 0 for t in losses))
+
+    # Win rate and the analytics count every sale, trims included, the same unit as
+    # Realized above. Counting only fully closed trades left a trimmed position's
+    # locked-in profit in Realized but out of the win/loss numbers next to it.
+    _sales = []
+    for t in trades:
+        _st = t.get("strategy") or "—"
+        for x in t.get("sell_history", []):
+            if x.get("pnl_thb") is not None:
+                _sales.append({"strategy": _st, "pnl": x["pnl_thb"]})
+        if t.get("status") == "closed" and t.get("pnl_thb") is not None:
+            _sales.append({"strategy": _st, "pnl": t["pnl_thb"]})
+    wins   = [x for x in _sales if x["pnl"] > 0]
+    losses = [x for x in _sales if x["pnl"] <= 0]
+    win_rate       = len(wins) / len(_sales) * 100 if _sales else None
+    total_win_thb  = sum(x["pnl"] for x in wins)
+    total_loss_thb = abs(sum(x["pnl"] for x in losses))
     profit_factor  = round(total_win_thb / total_loss_thb, 2) if total_loss_thb > 0 else None
 
     # -- Performance KPIs --
     section("Performance")
     k1, k2, k3, k4, k5 = st.columns(5)
     k1.metric("Open Trades",   len(open_trades))
-    k2.metric("Win Rate",      f"{win_rate:.1f}%" if win_rate is not None else "—")
-    k3.metric("Profit Factor", f"{profit_factor:.2f}" if profit_factor else "—")
+    k2.metric("Win Rate",      f"{win_rate:.1f}%" if win_rate is not None else "—",
+              help="สัดส่วนครั้งที่ขายแล้วได้กำไร นับทุกครั้งที่ขาย รวมขายบางส่วน")
+    k3.metric("Profit Factor", f"{profit_factor:.2f}" if profit_factor else "—",
+              help="กำไรรวม ÷ ขาดทุนรวม — มากกว่า 1 แปลว่าได้มากกว่าเสีย")
     k4.metric("Realized P&L",  fmt_money(realized_thb, disp, rate) if _tr_realized else "—")
-    k5.metric("Closed Trades", len(closed_trades))
+    k5.metric("ขายไปแล้ว", f"{len(_sales)} ครั้ง",
+              help=f"ปิดหมด {len(closed_trades)} trade · ที่เหลือคือขายบางส่วน")
 
     st.markdown("<div style='height:1rem'></div>", unsafe_allow_html=True)
 
@@ -2883,39 +2899,67 @@ def page_trade(trades: list, cash: list, disp: str, rate: float):
                                 st.rerun()
 
     # -- Analytics --
-    closed_with_pnl = [t for t in closed_trades if t.get("pnl_thb") is not None]
-    if not closed_with_pnl and open_trades:
-        st.info("📊 กราฟ Analytics จะขึ้นหลังจากปิด Trade แรก")
-    if closed_with_pnl:
-        section("Analytics")
-        col_wl, col_strat = st.columns(2)
+    # Plain-language scorecard instead of a win/loss donut and an axis chart: it has
+    # to answer "how much did I win, how many times, with which strategy" at a glance.
+    if not _sales and open_trades:
+        st.info("📊 สรุปผลงานจะขึ้นหลังจากขายครั้งแรก")
+    if _sales:
+        section("สรุปผลงาน")
+        G, R, MUTED, TXT = "#22c55e", "#ef4444", "#94a3b8", "#e2e8f0"
 
-        with col_wl:
-            win_count, loss_count = len(wins), len(losses)
-            if win_count + loss_count > 0:
-                fig_pie = go.Figure(go.Pie(
-                    labels=["Win", "Loss"], values=[win_count, loss_count],
-                    marker=dict(colors=["#22c55e", "#ef4444"]),
-                    hole=0.5, textinfo="percent+value",
-                    textfont=dict(size=13, color="#e2e8f0"),
-                ))
-                fig_pie.update_layout(**{**CHART_LAYOUT, "height": 240,
-                    "title": dict(text="Win / Loss Distribution",
-                                  font=dict(size=14, color="#94a3b8"), x=0),
-                    "showlegend": True, "legend": dict(font=dict(color="#94a3b8")),
-                })
-                st.plotly_chart(fig_pie, use_container_width=True)
+        def _m(v):  # money for HTML; a bare $ pair would be read as LaTeX
+            return fmt_money(v, disp, rate).replace("$", "&#36;")
 
-        with col_strat:
-            strat_pnl: dict[str, float] = {}
-            for t in closed_with_pnl:
-                s = t.get("strategy", "—")
-                strat_pnl[s] = strat_pnl.get(s, 0) + (t.get("pnl_thb") or 0)
-            if strat_pnl:
-                st.plotly_chart(
-                    pnl_bar_chart(list(strat_pnl.keys()), list(strat_pnl.values()),
-                                  disp, rate, "P&L by Strategy", height=240),
-                    use_container_width=True)
+        def _tile(label, big, sub, color):
+            return (f"<div style='flex:1;min-width:150px;background:rgba(255,255,255,0.03);"
+                    f"border:1px solid rgba(255,255,255,0.08);border-radius:8px;padding:12px 14px'>"
+                    f"<div style='font-size:12px;color:{MUTED}'>{label}</div>"
+                    f"<div style='font-size:24px;font-weight:700;color:{color};margin:2px 0'>{big}</div>"
+                    f"<div style='font-size:12px;color:{MUTED}'>{sub}</div></div>")
+
+        net = total_win_thb - total_loss_thb
+        _avg_w = total_win_thb / len(wins) if wins else None
+        _avg_l = -total_loss_thb / len(losses) if losses else None
+        tiles = "".join([
+            _tile(f"ชนะ {len(wins)} ครั้ง", _m(total_win_thb),
+                  f"เฉลี่ย {_m(_avg_w)} / ครั้ง" if wins else "ยังไม่มี", G),
+            _tile(f"แพ้ {len(losses)} ครั้ง", _m(-total_loss_thb),
+                  f"เฉลี่ย {_m(_avg_l)} / ครั้ง" if losses else "ยังไม่มี", R),
+            _tile("สุทธิ", _m(net), f"จากการขาย {len(_sales)} ครั้ง", G if net >= 0 else R),
+        ])
+        _wp = win_rate or 0
+        bar = (f"<div style='display:flex;justify-content:space-between;font-size:12px;"
+               f"color:{MUTED};margin:12px 0 4px'><span>ชนะ {_wp:.0f}%</span>"
+               f"<span>แพ้ {100 - _wp:.0f}%</span></div>"
+               f"<div style='display:flex;height:8px;border-radius:4px;overflow:hidden;"
+               f"background:{R}'><div style='width:{_wp:.1f}%;background:{G}'></div></div>")
+        st.markdown(f"<div style='display:flex;gap:10px;flex-wrap:wrap'>{tiles}</div>{bar}",
+                    unsafe_allow_html=True)
+
+        # by strategy, best first; bar length = share of the biggest absolute result
+        by: dict[str, dict] = {}
+        for x in _sales:
+            d = by.setdefault(x["strategy"], {"n": 0, "w": 0, "net": 0.0})
+            d["n"] += 1; d["w"] += x["pnl"] > 0; d["net"] += x["pnl"]
+        _mx = max(abs(d["net"]) for d in by.values()) or 1
+        rows = []
+        for name, d in sorted(by.items(), key=lambda kv: kv[1]["net"], reverse=True):
+            c = G if d["net"] >= 0 else R
+            rows.append(
+                f"<div style='padding:8px 0;border-bottom:1px solid rgba(255,255,255,0.06)'>"
+                f"<div style='display:flex;justify-content:space-between;gap:8px;align-items:baseline'>"
+                f"<span style='color:{TXT};font-weight:600'>{html.escape(name)}</span>"
+                f"<span style='color:{c};font-weight:700'>{_m(d['net'])}</span></div>"
+                f"<div style='display:flex;justify-content:space-between;gap:8px;font-size:12px;"
+                f"color:{MUTED};margin:2px 0 5px'><span>ชนะ {d['w']}/{d['n']} ครั้ง · "
+                f"{d['w'] / d['n'] * 100:.0f}%</span><span>เฉลี่ย {_m(d['net'] / d['n'])} / ครั้ง</span></div>"
+                f"<div style='height:5px;border-radius:3px;background:rgba(255,255,255,0.05)'>"
+                f"<div style='height:5px;border-radius:3px;width:{abs(d['net']) / _mx * 100:.1f}%;"
+                f"background:{c}'></div></div></div>")
+        st.markdown(f"<div style='font-size:13px;color:{MUTED};margin:20px 0 2px'>"
+                    f"แยกตาม Strategy — เรียงจากทำเงินได้มากสุด</div>{''.join(rows)}",
+                    unsafe_allow_html=True)
+        st.caption("นับทุกครั้งที่ขาย รวมขายบางส่วน · ตรงกับ Realized P&L ด้านบน")
 
     # -- Closed Trades Table --
     # Every sale, not only full closes: a trim on a still-open trade locks in profit
