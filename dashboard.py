@@ -2667,6 +2667,7 @@ def page_trade(trades: list, cash: list, disp: str, rate: float):
                         "P&L %":       fmt_pct(_trim_pct(x)),
                         f"P&L ({sym})": fmt_money(x.get("pnl_thb"), disp, rate),
                         "คืนเงินเข้า":  x.get("settled_to") or "—",
+                        "Lesson":      x.get("lesson") or "—",
                     } for x in sorted(_trims, key=lambda x: x.get("date", ""), reverse=True)],
                         use_container_width=True, hide_index=True)
                 st.divider()
@@ -2793,7 +2794,7 @@ def page_trade(trades: list, cash: list, disp: str, rate: float):
                                                      ["✅ ถูก", "❌ ผิด", "⚠️ บางส่วน"])
                         emotion     = tc5.selectbox("Emotion (ถ้าขายหมด)",
                                                      ["ปกติ", "กลัว", "โลภ", "FOMO"])
-                        lesson      = st.text_input("Lesson ที่ได้ (ถ้าขายหมด)")
+                        lesson      = st.text_input("Lesson ที่ได้", placeholder="ขายบางส่วนก็ใส่ได้ เช่น ขายก่อนเพราะชะล่าใจ")
                         # Choose where the money lands instead of always crediting the
                         # opening account in silence. Keyed by account id, not name:
                         # names change on rename and can repeat across currencies, and
@@ -2893,6 +2894,7 @@ def page_trade(trades: list, cash: list, disp: str, rate: float):
                                         "fx_rate": round(rate, 4),
                                         "settled_thb": round(_settle_p, 2),
                                         "settled_to": _dest["name"] if _dest else "",
+                                        "lesson": lesson.strip(),
                                     })
                                     new_pos_thb = (t.get("position_thb") or 0) * (s_remain / s_current)
                                     t.update({
@@ -3018,45 +3020,154 @@ def page_trade(trades: list, cash: list, disp: str, rate: float):
                 "P&L %":        _pct_txt(t, _trim_pct(x)),
                 f"P&L ({sym})": fmt_money(_p, disp, rate),
                 "W/L":          "—" if _p is None else ("Win" if _p > 0 else "Loss"),
-                "Lesson":       "—",
+                "Lesson":       x.get("lesson") or "—",
             })
+    # -- Past Performance --
+    # One row per trade, every sale folded together: the reader wants "what did this
+    # trade make", not the trim-by-trim mechanics, which stay in Closed Trades below.
+    _perf = []
+    for t in trades:
+        legs = []  # (date, shares, price, pnl, cost)
+        # cost from what was stored at sale time; rebuilt from entry x shares only for
+        # old rows that predate it, at the rate saved with the sale when there is one
+        def _cost_fb(shares, fx):
+            return calc_position_thb(t.get("entry_price"), shares, get_currency(t), fx or rate)
+        for x in t.get("sell_history", []):
+            if x.get("pnl_thb") is None: continue
+            _c = (x["thb"] - x["pnl_thb"]) if x.get("thb") is not None \
+                 else _cost_fb(x.get("shares"), x.get("fx_rate"))
+            legs.append((x.get("date") or "", parse(x.get("shares")), parse(x.get("price")),
+                         x["pnl_thb"], _c))
+        if t.get("status") == "closed" and t.get("pnl_thb") is not None:
+            _c = (t["proceeds_thb"] - t["pnl_thb"]) if t.get("proceeds_thb") is not None \
+                 else (t.get("position_thb") or _cost_fb(get_shares(t), t.get("fx_rate_at_close")))
+            legs.append((t.get("close_date") or "", parse(get_shares(t)),
+                         parse(t.get("exit_price")), t["pnl_thb"], _c))
+        if not legs: continue
+        pnl  = sum(l[3] for l in legs)
+        cost = sum(l[4] for l in legs if l[4] is not None)
+        _sw  = [(l[1], l[2]) for l in legs if l[1] and l[2] is not None]
+        avg_exit = (sum(a * b for a, b in _sw) / sum(a for a, _ in _sw)) if _sw else None
+        last = max(l[0] for l in legs)
+        try:
+            days = (date.fromisoformat(last[:10]) - date.fromisoformat(str(t.get("open_date"))[:10])).days
+        except Exception:
+            days = None
+        lev = trade_leverage(t)
+        pct = pnl / cost * 100 * lev if cost > 0 else None
+        _perf.append({"t": t, "date": last, "pnl": pnl, "cost": cost, "avg_exit": avg_exit,
+                      "days": days, "lev": lev, "pct": pct,
+                      "open": t.get("status") == "open"})
+
+    if _perf:
+        _perf.sort(key=lambda r: r["date"], reverse=True)
+        PER = 15
+        n_pages = (len(_perf) - 1) // PER + 1
+        pg = min(max(st.session_state.get("pp_page", 1), 1), n_pages)
+        section(f"Past Performance ({len(_perf)} trades)")
+        G, R, MUTED, TXT, LINE = "#22c55e", "#ef4444", "#94a3b8", "#e2e8f0", "rgba(255,255,255,0.07)"
+
+        def _h(v):  # escape for HTML; a bare $ pair would be read as LaTeX
+            return html.escape(str(v)).replace("$", "&#36;")
+
+        th = (f"padding:8px 10px;font-size:11px;font-weight:600;color:{MUTED};text-transform:uppercase;"
+              f"letter-spacing:0.05em;border-bottom:1px solid {LINE};white-space:nowrap")
+        td = f"padding:9px 10px;border-bottom:1px solid {LINE};white-space:nowrap"
+        heads = [("วันที่ขาย", "left"), ("Ticker", "left"), ("Strategy", "left"), ("ถือ", "right"),
+                 ("Size", "right"), ("Entry → Exit เฉลี่ย", "right"), ("Return", "right"), ("P&L", "right")]
+        out = ["<div style='overflow-x:auto'><table style='width:100%;border-collapse:collapse;"
+               f"font-size:14px;color:{TXT};font-variant-numeric:tabular-nums'><thead><tr>"
+               + "".join(f"<th style='{th};text-align:{al}'>{h}</th>" for h, al in heads)
+               + "</tr></thead><tbody>"]
+        for r in _perf[(pg - 1) * PER: pg * PER]:
+            t = r["t"]; c = G if r["pnl"] > 0 else R
+            badge = (f" <span style='font-size:11px;color:{MUTED};border:1px solid {LINE};"
+                     f"border-radius:4px;padding:1px 5px'>ยังถืออยู่</span>" if r["open"] else "")
+            lev_b = (f" <span style='font-size:11px;color:{MUTED}'>{r['lev']:g}x</span>"
+                     if r["lev"] > 1 else "")
+            ax = f"{r['avg_exit']:,.4g}" if r["avg_exit"] is not None else "—"
+            held = "—" if r["days"] is None else f"{r['days']} วัน"
+            pct = (fmt_pct(r["pct"]) + (" ROE" if r["lev"] > 1 else "")) if r["pct"] is not None else "—"
+            out.append(
+                "<tr>"
+                f"<td style='{td};color:{MUTED}'>{_h(r['date'])}</td>"
+                f"<td style='{td};font-weight:700'>{_h(t.get('ticker','—'))}{badge}</td>"
+                f"<td style='{td}'>{_h(t.get('strategy') or '—')}</td>"
+                f"<td style='{td};text-align:right;color:{MUTED}'>"
+                f"{held}</td>"
+                f"<td style='{td};text-align:right'>{_h(fmt_money(r['cost'], disp, rate, sign=False) if r['cost'] else '—')}{lev_b}</td>"
+                f"<td style='{td};text-align:right;color:{MUTED}'>{_h(t.get('entry_price','—'))} → {_h(ax)}</td>"
+                f"<td style='{td};text-align:right;color:{c}'>{_h(pct)}</td>"
+                f"<td style='{td};text-align:right;color:{c};font-weight:700'>{_h(fmt_money(r['pnl'], disp, rate))}</td>"
+                "</tr>")
+        out.append("</tbody></table></div>")
+        st.markdown("".join(out), unsafe_allow_html=True)
+        if n_pages > 1:
+            p1, p2, p3 = st.columns([1, 2, 1])
+            if p1.button("← ก่อนหน้า", key="pp_prev", disabled=pg <= 1, use_container_width=True):
+                st.session_state["pp_page"] = pg - 1; st.rerun()
+            p2.markdown(f"<div style='text-align:center;color:{MUTED};padding-top:8px'>"
+                        f"หน้า {pg} / {n_pages}</div>", unsafe_allow_html=True)
+            if p3.button("ถัดไป →", key="pp_next", disabled=pg >= n_pages, use_container_width=True):
+                st.session_state["pp_page"] = pg + 1; st.rerun()
+        st.caption("1 แถว = 1 trade รวมทุกครั้งที่ขาย · Size = ต้นทุนส่วนที่ขายไปแล้ว · "
+                   "Exit เฉลี่ยถ่วงตามจำนวน")
+
     if _sale_rows:
         _sale_rows.sort(key=lambda r: r["ปิด"] or "", reverse=True)
         _n_trim = len(_sale_rows) - len(closed_trades)
-        section(f"Closed Trades ({len(closed_trades)})"
-                + (f" · ขายบางส่วน {_n_trim} ครั้ง" if _n_trim else ""))
-        st.dataframe(pd.DataFrame(_sale_rows), use_container_width=True, hide_index=True)
+        st.markdown("<div style='height:0.5rem'></div>", unsafe_allow_html=True)
+        with st.expander(f"📋 Closed Trades — ทุกครั้งที่ขาย ({len(_sale_rows)})"
+                         + (f" · ขายบางส่วน {_n_trim}" if _n_trim else "")):
+            st.dataframe(pd.DataFrame(_sale_rows), use_container_width=True, hide_index=True)
 
-    if closed_trades:
+    _journal = [t for t in trades if t.get("status") == "closed" or t.get("sell_history")]
+    if _journal:
 
         # Journal fields only. Price, size and dates stay locked: the cash has already
         # settled against them, and changing them here would desync every balance.
-        with st.expander("✏️ แก้ไขบันทึก Trade ที่ปิดแล้ว (Strategy / Lesson)"):
-            _ct_sorted = sorted(closed_trades, key=lambda x: x.get("close_date", ""), reverse=True)
-            _ct_lbl = {t["id"]: f"{t.get('ticker','—')} · ปิด {t.get('close_date','—')} · "
-                                f"{t.get('strategy','—')}" for t in _ct_sorted}
+        with st.expander("✏️ แก้ไขบันทึก Trade (Strategy / Lesson)"):
+            _ct_sorted = sorted(_journal, key=lambda x: x.get("close_date") or max(
+                (h.get("date", "") for h in x.get("sell_history", [])), default=""), reverse=True)
+            _ct_lbl = {t["id"]: f"{t.get('ticker','—')} · "
+                                + (f"ปิด {t.get('close_date','—')}" if t.get("status") == "closed"
+                                   else "ยังถืออยู่ · ขายบางส่วนแล้ว")
+                                + f" · {t.get('strategy','—')}" for t in _ct_sorted}
             ct_id = st.selectbox("เลือก Trade", list(_ct_lbl), format_func=lambda i: _ct_lbl[i],
                                  key="ct_edit_pick")
-            ct = next(t for t in closed_trades if t["id"] == ct_id)
+            ct = next(t for t in _journal if t["id"] == ct_id)
+            _ct_closed = ct.get("status") == "closed"
             # outside a form so picking "Others" reveals its text box immediately
             ct_strategy = strategy_input(f"ct_{ct_id}", ct.get("strategy", ""))
-            _emo_opts = ["ปกติ", "กลัว", "โลภ", "FOMO"]
-            _th_opts  = ["✅ ถูก", "❌ ผิด", "⚠️ บางส่วน"]
-            ce1, ce2 = st.columns(2)
-            ct_emotion = ce1.selectbox(
-                "Emotion", _emo_opts, key=f"ct_emo_{ct_id}",
-                index=_emo_opts.index(ct["emotion"]) if ct.get("emotion") in _emo_opts else 0)
-            ct_thesis = ce2.selectbox(
-                "Thesis ถูกไหม", _th_opts, key=f"ct_th_{ct_id}",
-                index=_th_opts.index(ct["thesis_correct"]) if ct.get("thesis_correct") in _th_opts else 0)
-            ct_lesson = st.text_area("Lesson", value=ct.get("lesson", ""), height=80,
-                                     key=f"ct_les_{ct_id}")
+            if _ct_closed:
+                _emo_opts = ["ปกติ", "กลัว", "โลภ", "FOMO"]
+                _th_opts  = ["✅ ถูก", "❌ ผิด", "⚠️ บางส่วน"]
+                ce1, ce2 = st.columns(2)
+                ct_emotion = ce1.selectbox(
+                    "Emotion", _emo_opts, key=f"ct_emo_{ct_id}",
+                    index=_emo_opts.index(ct["emotion"]) if ct.get("emotion") in _emo_opts else 0)
+                ct_thesis = ce2.selectbox(
+                    "Thesis ถูกไหม", _th_opts, key=f"ct_th_{ct_id}",
+                    index=_th_opts.index(ct["thesis_correct"]) if ct.get("thesis_correct") in _th_opts else 0)
+                ct_lesson = st.text_area("Lesson (ตอนปิดหมด)", value=ct.get("lesson", ""), height=80,
+                                         key=f"ct_les_{ct_id}")
+            # a trim's lesson often only becomes clear later, e.g. sold half early out
+            # of complacency and the rest went much higher, so each one stays editable
+            _trim_les = []
+            for _i, _h in enumerate(ct.get("sell_history", [])):
+                _trim_les.append(st.text_input(
+                    f"Lesson ขายบางส่วน {_h.get('date','—')} · {_h.get('shares','—')} @ {_h.get('price','—')}",
+                    value=_h.get("lesson", ""), key=f"ct_tles_{ct_id}_{_i}"))
             if st.button("💾 บันทึกการแก้ไข", key=f"ct_save_{ct_id}"):
                 if not (ct_strategy or "").strip():
                     st.error("กรุณาระบุ Strategy")
                 else:
-                    ct.update({"strategy": ct_strategy.strip(), "emotion": ct_emotion,
-                               "thesis_correct": ct_thesis, "lesson": ct_lesson.strip()})
+                    ct["strategy"] = ct_strategy.strip()
+                    if _ct_closed:
+                        ct.update({"emotion": ct_emotion, "thesis_correct": ct_thesis,
+                                   "lesson": ct_lesson.strip()})
+                    for _h, _v in zip(ct.get("sell_history", []), _trim_les):
+                        _h["lesson"] = _v.strip()
                     save_trades(trades)
                     st.rerun()
 
