@@ -103,22 +103,25 @@ st.markdown("""<style>
 [data-testid="stMetricDelta"] { font-family: var(--it-mono) !important; }
 [data-testid="stMetricValue"] * { font-family: var(--it-mono) !important; }
 
-/* Radios as a segmented control: same widget and value, drawn like the THB/USD toggle */
-[data-testid="stMain"] [data-testid="stRadio"] [role="radiogroup"] {
+/* Radios as a segmented control: same widget and value, drawn like the THB/USD toggle.
+   Two selector sets because Streamlit changed the radio markup between versions:
+   role=radiogroup + label[data-baseweb=radio] (<=1.45) and stRadioGroup/stRadioOption (newer). */
+[data-testid="stMain"] [data-testid="stRadio"] [role="radiogroup"],
+[data-testid="stMain"] [data-testid="stRadioGroup"] {
     display: inline-flex !important; flex-wrap: wrap; gap: 2px !important;
     border: 1px solid var(--it-border); border-radius: 6px; padding: 2px;
 }
-[data-testid="stMain"] [data-testid="stRadio"] label[data-baseweb="radio"] {
+[data-testid="stMain"] [data-testid="stRadio"] label[data-baseweb="radio"],
+[data-testid="stMain"] [data-testid="stRadioOption"] {
     margin: 0 !important; padding: 4px 12px !important; border-radius: 4px; cursor: pointer;
     transition: background .15s;
 }
-[data-testid="stMain"] [data-testid="stRadio"] label[data-baseweb="radio"] > div:first-child { display: none !important; }
-[data-testid="stMain"] [data-testid="stRadio"] label[data-baseweb="radio"] p {
-    color: var(--it-muted) !important; font-size: 13px !important;
-}
-[data-testid="stMain"] [data-testid="stRadio"] label[data-baseweb="radio"]:has(input:checked) { background: var(--it-raise); }
-[data-testid="stMain"] [data-testid="stRadio"] label[data-baseweb="radio"]:has(input:checked) p { color: var(--it-text) !important; }
-[data-testid="stMain"] [data-testid="stRadio"] label[data-baseweb="radio"]:hover p { color: var(--it-text) !important; }
+[data-testid="stMain"] [data-testid="stRadio"] label[data-baseweb="radio"] > div:first-child,
+[data-testid="stMain"] [data-testid="stRadioOption"] > div > div:not([data-testid="stMarkdownContainer"]) { display: none !important; }
+[data-testid="stMain"] [data-testid="stRadio"] label p { color: var(--it-muted) !important; font-size: 13px !important; }
+[data-testid="stMain"] [data-testid="stRadio"] label:has(input:checked) { background: var(--it-raise); }
+[data-testid="stMain"] [data-testid="stRadio"] label:has(input:checked) p,
+[data-testid="stMain"] [data-testid="stRadio"] label:hover p { color: var(--it-text) !important; }
 
 /* Expanders */
 [data-testid="stExpander"] details,
@@ -134,13 +137,18 @@ st.markdown("""<style>
 /* Inputs: the visible box is BaseWeb's outer wrapper (data-baseweb=input/textarea),
    which takes the theme's secondary colour; the inner base-input and the password
    reveal button sit on top of it, so they go transparent and the wrapper is styled */
-[data-baseweb="input"], [data-baseweb="textarea"], [data-baseweb="select"] > div {
+[data-baseweb="input"], [data-baseweb="textarea"], [data-baseweb="select"] > div,
+[data-testid="stTextInputRootElement"], [data-testid="stTextAreaRootElement"],
+[data-testid="stSelectbox"] .react-aria-ComboBox [role="group"],
+[data-testid="stMultiSelect"] .react-aria-ComboBox [role="group"] {
     background: var(--it-bg) !important;
     border-color: var(--it-border) !important;
     border-radius: 6px !important;
 }
 [data-baseweb="input"]:focus-within, [data-baseweb="textarea"]:focus-within,
-[data-baseweb="select"] > div:focus-within { border-color: var(--it-accent) !important; }
+[data-baseweb="select"] > div:focus-within,
+[data-testid="stTextInputRootElement"]:focus-within, [data-testid="stTextAreaRootElement"]:focus-within,
+.react-aria-ComboBox [role="group"]:focus-within { border-color: var(--it-accent) !important; }
 [data-baseweb="base-input"], [data-baseweb="base-input"] input, [data-baseweb="base-input"] textarea,
 [data-baseweb="input"] input, [data-baseweb="textarea"] textarea, [data-baseweb="input"] button {
     background: transparent !important;
@@ -1362,8 +1370,11 @@ header[data-testid="stHeader"]{{display:none!important}}
 /* form card */
 [data-testid="stForm"]{{background:{card}!important;border:1px solid {line}!important;border-radius:10px!important;
     padding:22px 22px 18px!important}}
-[data-baseweb="input"]{{background:{bg}!important;border-color:{line}!important;border-radius:6px!important}}
-[data-baseweb="input"]:focus-within{{border-color:{acc}!important}}
+[data-baseweb="input"],[data-testid="stTextInputRootElement"]{{background:{bg}!important;border:1px solid {line}!important;border-radius:6px!important}}
+[data-baseweb="input"]:focus-within,[data-testid="stTextInputRootElement"]:focus-within{{border-color:{acc}!important}}
+[data-testid="stTextInputField"]{{color:{txt}!important;background:transparent!important}}
+[data-testid="stTextInputRootElement"] button{{background:transparent!important}}
+[data-testid="stTextInputRootElement"] button span{{color:{sub}!important}}
 [data-baseweb="base-input"],[data-baseweb="input"] input,[data-baseweb="input"] button{{background:transparent!important;color:{txt}!important}}
 [data-baseweb="input"] button svg{{fill:{sub}!important;color:{sub}!important}}
 [data-testid="stFormSubmitButton"] button{{background:{acc}!important;border-color:{acc}!important}}

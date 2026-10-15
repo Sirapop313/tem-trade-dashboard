@@ -5,6 +5,8 @@ primaryColor             = "#D9A441"   # accent ทองหม่น (ปุ่
 backgroundColor          = "#0D1012"   # พื้นหลัง
 secondaryBackgroundColor = "#14181B"   # การ์ด, ช่องกรอก
 textColor                = "#E9E6DF"
+borderColor              = "#262C31"   # เส้นขอบช่องกรอก/การ์ด
+showWidgetBorder         = true
 # ฟอนต์อยู่ใน static/fonts — โหลดจากแอปเอง ไม่พึ่ง Google Fonts
 # IBM Plex Sans Thai มีทั้งไทยและอังกฤษ ตัวหนังสือทั้งแอปเลยเป็นตระกูลเดียวกัน
 font                     = "IBM Plex Sans Thai, sans-serif"
