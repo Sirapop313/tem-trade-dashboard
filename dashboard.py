@@ -982,10 +982,17 @@ def allocation_treemap(labels, vals_thb, pcts, disp, rate, height=360):
     return fig
 
 
+try:
+    with open(os.path.join(DIR, "alloc_component.html"), encoding="utf-8") as _f:
+        _ALLOC_HTML = _f.read()
+except OSError:
+    _ALLOC_HTML = "<p style='color:#8B9196'>alloc_component.html missing</p>"
+
+
 def allocation_panel(labels, vals_thb, pcts, disp, rate, key: str) -> None:
-    """Donut with the total in the middle and a legend list beside it: ticker, share of
-    the portfolio and P&L %. Slice labels around the ring collide once there are more
-    than a few holdings, so the reading happens in the list instead."""
+    """Pie (default) or treemap of holdings. The pie is a small in-browser component
+    (alloc_component.html): clicking a slice or a legend row highlights it in both
+    places without a rerun, and an expand button opens a large view in the page."""
     view = st.radio("มุมมอง", ["Pie", "Treemap"], horizontal=True,
                     key=f"alloc_view_{key}", label_visibility="collapsed")
     if view == "Treemap":
@@ -994,37 +1001,20 @@ def allocation_panel(labels, vals_thb, pcts, disp, rate, key: str) -> None:
         return
     total = sum(vals_thb) or 1
     order = sorted(range(len(labels)), key=lambda i: -vals_thb[i])
-    cols = [ALLOC_COLORS[n % len(ALLOC_COLORS)] for n in range(len(order))]
-    # a name on every slice collides once there are a dozen holdings; label the ones
-    # at 3%+ and leave the slivers to the list beside the chart
-    shares = [vals_thb[i] / total * 100 for i in order]
-    names = [f"{labels[i]}<br>{sh:.0f}%" if sh >= 3 else "" for i, sh in zip(order, shares)]
-    fig = go.Figure(go.Pie(
-        labels=[labels[i] for i in order], values=[to_display(vals_thb[i], disp, rate) for i in order],
-        hole=0.6, sort=False, direction="clockwise",
-        text=names, textinfo="text", textposition="outside",
-        textfont=dict(size=11, color="#C9C6BF", family="IBM Plex Sans Thai, sans-serif"),
-        marker=dict(colors=cols, line=dict(color="#0D1012", width=2)),
-        hovertemplate="%{label}<br>%{percent}<extra></extra>", automargin=True,
-    ))
-    fig.update_layout(**{**CHART_LAYOUT, "height": 300, "margin": dict(t=30, b=30, l=50, r=50),
-        "annotations": [dict(text=("รวม<br><b>" + fmt_money(total, disp, rate, sign=False) + "</b>"),
-                             x=0.5, y=0.5, showarrow=False,
-                             font=dict(size=13, color="#E9E6DF", family="IBM Plex Mono, monospace"))]})
-    rows = []
-    for n, i in enumerate(order):
-        p = pcts[i]
-        pc = "#8B9196" if p is None else ("#3DBE7F" if p >= 0 else "#EF5F55")
-        rows.append(
-            f"<div class='al-it'><span class='al-sw' style='background:{cols[n]}'></span>"
-            f"<span class='al-tk'>{html.escape(str(labels[i]))}</span>"
-            f"<span class='al-w'>{vals_thb[i] / total * 100:.1f}%</span>"
-            f"<span class='al-p' style='color:{pc}'>{'' if p is None else fmt_pct(p)}</span></div>")
-    c1, c2 = st.columns([1, 1], vertical_alignment="center")
-    with c1:
-        st.plotly_chart(fig, use_container_width=True, key=f"alloc_{key}")
-    with c2:
-        st.markdown("<div class='al-list'>" + "".join(rows) + "</div>", unsafe_allow_html=True)
+    data = {
+        "key": key,
+        "total": fmt_money(total, disp, rate, sign=False),
+        "items": [{
+            "label": str(labels[i]),
+            "share": round(vals_thb[i] / total * 100, 4),
+            "pnl": None if pcts[i] is None else round(pcts[i], 4),
+            "money": fmt_money(vals_thb[i], disp, rate, sign=False),
+            "color": ALLOC_COLORS[n % len(ALLOC_COLORS)],
+        } for n, i in enumerate(order)],
+    }
+    # "</" escaped so a ticker can never close the component's <script> early
+    payload = json.dumps(data, ensure_ascii=False).replace("</", "<\\/")
+    _components.html(_ALLOC_HTML.replace("__DATA__", payload), height=340)
 
 
 def allocation_pie(labels, vals_thb, disp, rate, title, height=320):
