@@ -227,6 +227,14 @@ hr { border-color: var(--it-border) !important; }
     color: var(--it-red) !important; border-color: rgba(239,95,85,.35) !important; background: rgba(239,95,85,.10) !important; }
 [data-testid="stMain"] [class*="st-key-sellbtn_"] button p,
 [role="dialog"] [class*="st-key-sellbtn_"] button p { color: var(--it-red) !important; }
+/* "new" buttons (buy a new stock / open a new trade) are the page's primary action */
+[data-testid="stMain"] .st-key-btn_new_inv button, [data-testid="stMain"] .st-key-btn_new_trade button {
+    background: var(--it-accent) !important; border-color: var(--it-accent) !important; }
+[data-testid="stMain"] .st-key-btn_new_inv button p, [data-testid="stMain"] .st-key-btn_new_trade button p {
+    color: var(--it-accent-ink) !important; font-weight: 600 !important; }
+[data-testid="stMain"] .st-key-btn_new_inv button:hover, [data-testid="stMain"] .st-key-btn_new_trade button:hover { filter: brightness(1.07); }
+.tb-sel { font-size: 14px; color: var(--it-muted); } .tb-sel b { color: var(--it-text); }
+.st-key-inv_toolbar { margin-bottom: -6px; }
 /* position popup */
 [role="dialog"] { background: var(--it-card) !important; border: 1px solid var(--it-border) !important; }
 [role="dialog"] .pd-facts > div { background: var(--it-raise); }
@@ -1388,7 +1396,9 @@ def strategy_input(key: str, default: str = "") -> str:
     return choice
 
 def next_id(items: list) -> int:
-    return max((i["id"] for i in items), default=0) + 1
+    # ids are ints in every saved record; skip anything else rather than crash halfway
+    # through a save (cash may already have been deducted by then)
+    return max((i["id"] for i in items if isinstance(i.get("id"), int)), default=0) + 1
 
 def page_header(title: str, subtitle: str = "") -> tuple[str, float]:
     """Page title (left) + currency toggle (right). Returns (disp, rate)."""
@@ -1804,15 +1814,124 @@ def page_investment(investments: list, trades: list, cash: list, disp: str, rate
     closed_inv = [i for i in investments if i.get("status") == "closed"]
     sym = "฿" if disp == "THB" else "$"
 
-    # -- Account Filter --
+    # -- Buy: a new ticker, or more of one already held --
+    # Opened from the button at the top of the page; it used to be an expander at
+    # the very bottom, under every table, where it was hard to find.
+    @st.dialog("ซื้อหุ้น", width="large")
+    def _new_inv_dialog():
+        existing_tickers = sorted({inv["ticker"] for inv in open_inv})
+        ticker_options   = existing_tickers + ["+ Ticker ใหม่"]
+        selected_ticker  = st.selectbox("เลือก Ticker", ticker_options, key="new_inv_select")
+
+        if selected_ticker != "+ Ticker ใหม่":
+            # -- ซื้อเพิ่มใน position ที่มีอยู่ --
+            existing = next((inv for inv in investments
+                             if inv["ticker"] == selected_ticker and inv["status"] == "open"), None)
+            if existing:
+                cur = get_currency(existing)
+                st.caption(f"ถืออยู่: {get_shares(existing)} หุ้น  ·  AVG {existing.get('entry_price','—')}  ·  {cur}")
+                with st.form("add_to_pos"):
+                    b1, b2, b3 = st.columns(3)
+                    add_shares = b1.text_input("จำนวนที่ซื้อเพิ่ม *", placeholder="เช่น 5")
+                    add_price  = b2.text_input(f"ราคาที่ซื้อ ({cur}) *", placeholder="เช่น 420")
+                    add_date   = b3.date_input("วันที่ซื้อ", value=date.today())
+                    st.markdown("---")
+                    src_id, other_name, other_curr = source_selector(cash, "add_pos")
+                    is_import = st.checkbox("ไม่หักเงินจาก Cash (Import เก่า)", key="import_add_pos")
+                    if st.form_submit_button("ยืนยันซื้อเพิ่ม"):
+                        s_add = parse(add_shares)
+                        p_add = parse(add_price)
+                        if not s_add or not p_add:
+                            st.error("กรุณากรอกจำนวนและราคา")
+                        else:
+                            s_old = parse(get_shares(existing)) or 0
+                            p_old = parse(existing.get("entry_price", "0")) or 0
+                            s_new = s_old + s_add
+                            p_avg = (s_old * p_old + s_add * p_add) / s_new
+                            add_thb = s_add * p_add * (rate if cur == "USD" else 1)
+                            resolved = resolve_source(cash, src_id, other_name, other_curr)
+                            if not is_import:
+                                cash_deduct(cash, resolved, add_thb, rate)
+                                save_cash(cash)
+                            # append buy log
+                            history = existing.get("buy_history", [])
+                            history.append({
+                                "date": str(add_date), "shares": add_shares,
+                                "price": add_price, "thb": round(add_thb, 2),
+                                "note": "ซื้อเพิ่ม"
+                            })
+                            existing.update({
+                                "shares":       str(round(s_new, 8)),
+                                "entry_price":  str(round(p_avg, 4)),
+                                "position_thb": round((existing.get("position_thb") or 0) + add_thb, 2),
+                                "buy_history":  history,
+                            })
+                            save_investments(investments)
+                            st.success(
+                                f"ซื้อเพิ่ม {add_shares} หุ้น @ {add_price}  ·  "
+                                f"AVG ใหม่ = {round(p_avg, 4)} {cur}  ·  "
+                                f"รวม {round(s_new, 4)} หุ้น"
+                            )
+                            st.rerun()
+        else:
+            # -- Ticker ใหม่ --
+            with st.form("new_inv"):
+                c1, c2, c3 = st.columns(3)
+                ticker     = c1.text_input("Ticker *", placeholder="เช่น AOT.BK, AAPL")
+                shares     = c2.text_input("จำนวนหุ้น *", placeholder="เช่น 1000")
+                currency   = c3.selectbox("ราคาเป็น", ["THB", "USD"])
+                c4, c5     = st.columns(2)
+                entry      = c4.text_input("Entry Price *", placeholder="ราคาที่ซื้อ")
+                entry_date = c5.date_input("วันที่ซื้อ", value=date.today())
+                ni1, ni2 = st.columns(2)
+                thesis     = ni1.text_input("เหตุผลที่ลงทุน",
+                                             placeholder="เช่น พื้นฐานดี dividend สม่ำเสมอ...")
+                target_pct_inp = ni2.text_input("Target % (optional)",
+                                                 placeholder="เช่น 20  — สัดส่วนเป้าหมายในพอร์ต")
+                st.markdown("---")
+                src_id, other_name, other_curr = source_selector(cash, "inv")
+                is_import = st.checkbox("Import position เก่า (ไม่หักเงินจาก Cash)", key="import_inv")
+                if st.form_submit_button("บันทึก"):
+                    e, s = parse(entry), parse(shares)
+                    if not ticker or e is None or s is None:
+                        st.error("กรุณากรอก Ticker, จำนวนหุ้น และ Entry Price")
+                    else:
+                        pos_thb  = s * e * (rate if currency == "USD" else 1)
+                        t_pct_v  = parse(target_pct_inp)
+                        resolved = resolve_source(cash, src_id, other_name, other_curr)
+                        if not is_import:
+                            cash_deduct(cash, resolved, pos_thb, rate)
+                            save_cash(cash)
+                        new_inv = {
+                            "id": next_id(investments), "type": "investment", "status": "open",
+                            "ticker": ticker.upper().strip(), "shares": shares,
+                            "currency": currency, "entry_price": entry,
+                            "entry_date": str(entry_date), "thesis": thesis,
+                            "position_thb": round(pos_thb, 2),
+                            "source_account_id": resolved,
+                            "source_account_name": next((a["name"] for a in cash if a["id"] == resolved), ""),
+                            "buy_history": [{"date": str(entry_date), "shares": shares,
+                                             "price": entry, "thb": round(pos_thb, 2), "note": "เปิด position"}],
+                        }
+                        if t_pct_v is not None:
+                            new_inv["target_pct"] = t_pct_v
+                        investments.append(new_inv)
+                        save_investments(investments)
+                        st.success(f"บันทึก {ticker.upper()}")
+                        st.rerun()
+
+    # -- Account Filter + buy button --
     _UNASSIGNED     = "— ไม่ระบุ"
     inv_acct_names  = sorted({i.get("source_account_name","") for i in open_inv if i.get("source_account_name")})
     cash_acct_names = sorted({a["name"] for a in cash})
     _named_inv_opts = sorted(set(inv_acct_names) | set(cash_acct_names))
     _has_unassigned_inv = any(not i.get("source_account_name") for i in open_inv)
     acct_opts   = ([_UNASSIGNED] if _has_unassigned_inv else []) + _named_inv_opts
-    acct_filter = st.multiselect("พอร์ต (เลือกได้หลายอัน)", acct_opts,
-                                  placeholder="Overall — แสดงทั้งหมด", key="inv_acct_filter")
+    _fh1, _fh2 = st.columns([5, 1], vertical_alignment="bottom")
+    acct_filter = _fh1.multiselect("พอร์ต (เลือกได้หลายอัน)", acct_opts,
+                                    placeholder="Overall — แสดงทั้งหมด", key="inv_acct_filter")
+    if _fh2.button("+ ซื้อหุ้นใหม่", key="btn_new_inv", use_container_width=True):
+        _new_inv_dialog()
 
     if acct_filter:
         _show_unassigned_inv = _UNASSIGNED in acct_filter
@@ -2085,9 +2204,10 @@ def page_investment(investments: list, trades: list, cash: list, disp: str, rate
                       .applymap(_color_pnl, subset=pnl_cols)
                       .apply(_style_total, axis=1)
                       .hide(axis="index"))
-        # Clicking a row opens that position's drawer under the table, the way the
-        # mockup does it — one table instead of the table plus a second list of
-        # expanders repeating the same rows.
+        # Tick a row, then act on it from the toolbar above the table: the actions are
+        # always in view (greyed out until something is ticked), and each one opens
+        # its form directly instead of row → popup → button → form.
+        _toolbar = st.container(key="inv_toolbar")
         _ev = st.dataframe(styled, use_container_width=True, hide_index=True,
                            on_select="rerun", selection_mode="single-row", key="inv_hold_tbl",
                            height=(len(rows) + 1) * 35 + 3)
@@ -2095,7 +2215,7 @@ def page_investment(investments: list, trades: list, cash: list, disp: str, rate
         # The selected row opens as a popup over the page, where the eye already is,
         # rather than a panel below a long table. It opens once per new selection:
         # closing it with X and then changing currency must not pop it back up.
-        @st.dialog("จัดการ Position", width="large")
+        @st.dialog("จัดการ Position", width="large")  # opened from the toolbar
         def _inv_dialog(inv):
             price   = get_price(inv.get("ticker",""))
             pnl_thb = calc_pnl_thb(inv.get("entry_price"), price, get_shares(inv),
@@ -2122,24 +2242,14 @@ def page_investment(investments: list, trades: list, cash: list, disp: str, rate
                 f"<div><div class='l'>บัญชี</div><div class='v' style='font-family:inherit'>{html.escape(_acct)}</div></div>"
                 f"</div>".replace("$", "&#36;"),
                 unsafe_allow_html=True)
-            ca, cb, cc, _, cd = st.columns([1, 1, 1, 4, 1])
-            if cc.button("ขาย", key=f"sellbtn_{inv['id']}", use_container_width=True):
-                st.session_state[f"sell_inv_{inv['id']}"] = True
-                st.session_state.pop(f"edit_inv_{inv['id']}", None)
-                st.session_state.pop(f"add_inv_{inv['id']}", None)
-            if cb.button("แก้ไข", key=f"ei_{inv['id']}", use_container_width=True):
-                st.session_state[f"edit_inv_{inv['id']}"] = True
-                st.session_state.pop(f"sell_inv_{inv['id']}", None)
-                st.session_state.pop(f"add_inv_{inv['id']}", None)
-            if ca.button("ซื้อเพิ่ม", key=f"ai_{inv['id']}", use_container_width=True):
-                st.session_state[f"add_inv_{inv['id']}"] = True
-                st.session_state.pop(f"edit_inv_{inv['id']}", None)
-                st.session_state.pop(f"sell_inv_{inv['id']}", None)
-            if cd.button("ลบ", key=f"di_{inv['id']}", use_container_width=True):
-                investments[:] = [x for x in investments if x["id"] != inv["id"]]
-                save_investments(investments)
-                st.session_state.pop("inv_hold_tbl", None)
-                st.rerun()
+            if st.session_state.get(f"del_inv_{inv['id']}"):
+                st.markdown(f"ลบ **{html.escape(inv['ticker'])}** ออกจากรายการถาวร — ไม่มีการคืนเงินเข้า Cash")
+                if st.button("ยืนยันลบ", key=f"sellbtn_del_{inv['id']}"):
+                    investments[:] = [x for x in investments if x["id"] != inv["id"]]
+                    save_investments(investments)
+                    st.session_state.pop(f"del_inv_{inv['id']}", None)
+                    st.session_state.pop("inv_hold_tbl", None)
+                    st.rerun()
 
             if st.session_state.get(f"add_inv_{inv['id']}"):
                 st.markdown("**ซื้อเพิ่ม**")
@@ -2300,13 +2410,20 @@ def page_investment(investments: list, trades: list, cash: list, disp: str, rate
         except Exception:
             _sel_rows = []
         _sel_inv = raw[_sel_rows[0]]["inv"] if _sel_rows and _sel_rows[0] < len(raw) else None
-        if _sel_inv is None:
-            st.session_state.pop("inv_dlg_last", None)
-            st.caption("คลิกแถวในตารางเพื่อซื้อเพิ่ม / แก้ไข / ขาย")
-        elif st.session_state.get("inv_dlg_last") != _sel_inv["id"]:
-            st.session_state["inv_dlg_last"] = _sel_inv["id"]
-            for _f in ("add_inv_", "edit_inv_", "sell_inv_"):
-                st.session_state.pop(f"{_f}{_sel_inv['id']}", None)
+        with _toolbar:
+            _t0, _t1, _t2, _t3, _t4 = st.columns([4, 1, 1, 1, 1], vertical_alignment="center")
+            _t0.markdown(
+                f"<span class='tb-sel'>เลือก <b>{html.escape(_sel_inv['ticker'])}</b></span>" if _sel_inv
+                else "<span class='tb-sel'>ติ๊กหุ้นในตารางเพื่อจัดการ</span>", unsafe_allow_html=True)
+            _act = None
+            if _t1.button("ซื้อเพิ่ม", key="tb_add", disabled=_sel_inv is None, use_container_width=True): _act = "add"
+            if _t2.button("แก้ไข", key="tb_edit", disabled=_sel_inv is None, use_container_width=True): _act = "edit"
+            if _t3.button("ขาย", key="sellbtn_tb", disabled=_sel_inv is None, use_container_width=True): _act = "sell"
+            if _t4.button("ลบ", key="tb_del", disabled=_sel_inv is None, use_container_width=True): _act = "del"
+        if _act and _sel_inv is not None:
+            for _f in ("add", "edit", "sell", "del"):
+                st.session_state.pop(f"{_f}_inv_{_sel_inv['id']}", None)
+            st.session_state[f"{_act}_inv_{_sel_inv['id']}"] = True
             _inv_dialog(_sel_inv)
 
     # -- Closed --
@@ -2319,109 +2436,6 @@ def page_investment(investments: list, trades: list, cash: list, disp: str, rate
             "ซื้อ": i.get("entry_date","—"), "ขาย": i.get("exit_date","—"),
         } for i in closed_inv], use_container_width=True, hide_index=True)
 
-    # -- Add Investment (collapsed) --
-    st.markdown("<div style='height:1rem'></div>", unsafe_allow_html=True)
-    with st.expander("เพิ่ม / ซื้อเพิ่ม Investment"):
-        existing_tickers = sorted({inv["ticker"] for inv in open_inv})
-        ticker_options   = existing_tickers + ["+ Ticker ใหม่"]
-        selected_ticker  = st.selectbox("เลือก Ticker", ticker_options, key="new_inv_select")
-
-        if selected_ticker != "+ Ticker ใหม่":
-            # -- ซื้อเพิ่มใน position ที่มีอยู่ --
-            existing = next((inv for inv in investments
-                             if inv["ticker"] == selected_ticker and inv["status"] == "open"), None)
-            if existing:
-                cur = get_currency(existing)
-                st.caption(f"ถืออยู่: {get_shares(existing)} หุ้น  ·  AVG {existing.get('entry_price','—')}  ·  {cur}")
-                with st.form("add_to_pos"):
-                    b1, b2, b3 = st.columns(3)
-                    add_shares = b1.text_input("จำนวนที่ซื้อเพิ่ม *", placeholder="เช่น 5")
-                    add_price  = b2.text_input(f"ราคาที่ซื้อ ({cur}) *", placeholder="เช่น 420")
-                    add_date   = b3.date_input("วันที่ซื้อ", value=date.today())
-                    st.markdown("---")
-                    src_id, other_name, other_curr = source_selector(cash, "add_pos")
-                    is_import = st.checkbox("ไม่หักเงินจาก Cash (Import เก่า)", key="import_add_pos")
-                    if st.form_submit_button("ยืนยันซื้อเพิ่ม"):
-                        s_add = parse(add_shares)
-                        p_add = parse(add_price)
-                        if not s_add or not p_add:
-                            st.error("กรุณากรอกจำนวนและราคา")
-                        else:
-                            s_old = parse(get_shares(existing)) or 0
-                            p_old = parse(existing.get("entry_price", "0")) or 0
-                            s_new = s_old + s_add
-                            p_avg = (s_old * p_old + s_add * p_add) / s_new
-                            add_thb = s_add * p_add * (rate if cur == "USD" else 1)
-                            resolved = resolve_source(cash, src_id, other_name, other_curr)
-                            if not is_import:
-                                cash_deduct(cash, resolved, add_thb, rate)
-                                save_cash(cash)
-                            # append buy log
-                            history = existing.get("buy_history", [])
-                            history.append({
-                                "date": str(add_date), "shares": add_shares,
-                                "price": add_price, "thb": round(add_thb, 2),
-                                "note": "ซื้อเพิ่ม"
-                            })
-                            existing.update({
-                                "shares":       str(round(s_new, 8)),
-                                "entry_price":  str(round(p_avg, 4)),
-                                "position_thb": round((existing.get("position_thb") or 0) + add_thb, 2),
-                                "buy_history":  history,
-                            })
-                            save_investments(investments)
-                            st.success(
-                                f"ซื้อเพิ่ม {add_shares} หุ้น @ {add_price}  ·  "
-                                f"AVG ใหม่ = {round(p_avg, 4)} {cur}  ·  "
-                                f"รวม {round(s_new, 4)} หุ้น"
-                            )
-                            st.rerun()
-        else:
-            # -- Ticker ใหม่ --
-            with st.form("new_inv"):
-                c1, c2, c3 = st.columns(3)
-                ticker     = c1.text_input("Ticker *", placeholder="เช่น AOT.BK, AAPL")
-                shares     = c2.text_input("จำนวนหุ้น *", placeholder="เช่น 1000")
-                currency   = c3.selectbox("ราคาเป็น", ["THB", "USD"])
-                c4, c5     = st.columns(2)
-                entry      = c4.text_input("Entry Price *", placeholder="ราคาที่ซื้อ")
-                entry_date = c5.date_input("วันที่ซื้อ", value=date.today())
-                ni1, ni2 = st.columns(2)
-                thesis     = ni1.text_input("เหตุผลที่ลงทุน",
-                                             placeholder="เช่น พื้นฐานดี dividend สม่ำเสมอ...")
-                target_pct_inp = ni2.text_input("Target % (optional)",
-                                                 placeholder="เช่น 20  — สัดส่วนเป้าหมายในพอร์ต")
-                st.markdown("---")
-                src_id, other_name, other_curr = source_selector(cash, "inv")
-                is_import = st.checkbox("Import position เก่า (ไม่หักเงินจาก Cash)", key="import_inv")
-                if st.form_submit_button("บันทึก"):
-                    e, s = parse(entry), parse(shares)
-                    if not ticker or e is None or s is None:
-                        st.error("กรุณากรอก Ticker, จำนวนหุ้น และ Entry Price")
-                    else:
-                        pos_thb  = s * e * (rate if currency == "USD" else 1)
-                        t_pct_v  = parse(target_pct_inp)
-                        resolved = resolve_source(cash, src_id, other_name, other_curr)
-                        if not is_import:
-                            cash_deduct(cash, resolved, pos_thb, rate)
-                            save_cash(cash)
-                        new_inv = {
-                            "id": next_id(investments), "type": "investment", "status": "open",
-                            "ticker": ticker.upper().strip(), "shares": shares,
-                            "currency": currency, "entry_price": entry,
-                            "entry_date": str(entry_date), "thesis": thesis,
-                            "position_thb": round(pos_thb, 2),
-                            "source_account_id": resolved,
-                            "source_account_name": next((a["name"] for a in cash if a["id"] == resolved), ""),
-                            "buy_history": [{"date": str(entry_date), "shares": shares,
-                                             "price": entry, "thb": round(pos_thb, 2), "note": "เปิด position"}],
-                        }
-                        if t_pct_v is not None:
-                            new_inv["target_pct"] = t_pct_v
-                        investments.append(new_inv)
-                        save_investments(investments)
-                        st.success(f"บันทึก {ticker.upper()}")
-                        st.rerun()
 
 
 # -- Page 3: Trade --
@@ -2454,8 +2468,80 @@ def page_trade(trades: list, cash: list, disp: str, rate: float):
     total_loss_thb = abs(sum(x["pnl"] for x in losses))
     profit_factor  = round(total_win_thb / total_loss_thb, 2) if total_loss_thb > 0 else None
 
-    # -- Performance KPIs --
-    section("Performance")
+    # -- New trade: a dialog opened from the button at the top of the page --
+    @st.dialog("เปิด Trade ใหม่", width="large")
+    def _new_trade_dialog():
+        strategy = strategy_input("nt")
+        with st.form("new_trade"):
+            c1, c2, c3, c4 = st.columns(4)
+            ticker    = c1.text_input("Ticker *", placeholder="เช่น AAPL, BTC-USD")
+            direction = c2.selectbox("Direction", ["Long", "Short"])
+            currency  = c3.selectbox("ราคาเป็น", ["THB", "USD"])
+            shares    = c4.text_input("จำนวนหุ้น *", placeholder="เช่น 100")
+            c5, c6, c7, c8 = st.columns(4)
+            entry     = c5.text_input("Entry Price *")
+            sl        = c6.text_input("Stop Loss")
+            tp        = c7.text_input("Take Profit")
+            lev_in    = c8.text_input("Leverage (x)", value="1",
+                                      help="หุ้นปกติ = 1 · Futures ใส่ตามที่เปิดใน Binance เช่น 10 · "
+                                           "ใส่จำนวนตามขนาด position จริง (notional) "
+                                           "ระบบจะหักเงินแค่ margin = ขนาด ÷ leverage")
+            thesis    = st.text_area("Thesis *", height=80,
+                                     placeholder="เหตุผลสั้นๆ ที่ชัดเจน")
+            open_date = st.date_input("วันที่เปิด", value=date.today())
+            st.markdown("---")
+            src_id, other_name, other_curr = source_selector(cash, "trade")
+            is_import = st.checkbox("Import position เก่า (ไม่หักเงินจาก Cash)", key="import_trade")
+            if st.form_submit_button("บันทึก Trade"):
+                e, s = parse(entry), parse(shares)
+                # accept "10x" — the field is labelled (x), and treating it as unparseable
+                # used to fall back to 1x and deduct the full notional, the very bug this
+                # field exists to prevent. Reject anything non-finite: NaN slips past a
+                # plain range check because every comparison with it is False.
+                _lev_s = (lev_in or "").strip().lower().rstrip("x").strip()
+                lev    = parse(_lev_s) if _lev_s else 1.0
+                if not ticker or e is None:
+                    st.error("กรุณากรอก Ticker และ Entry Price")
+                elif not strategy:
+                    st.error("กรุณาเลือก Strategy")
+                elif lev is None or not math.isfinite(lev) or lev < 1 or lev > 125:
+                    st.error("Leverage ต้องเป็นตัวเลข 1 ถึง 125 (เช่น 10 หรือ 10x)")
+                else:
+                    rr       = auto_rr(entry, sl, tp)
+                    pos_thb  = (s or 0) * e * (rate if currency == "USD" else 1)
+                    # notional stays in position_thb (exposure, used for sizing and P&L);
+                    # only the margin actually leaves the account
+                    margin_thb = pos_thb / lev
+                    resolved = resolve_source(cash, src_id, other_name, other_curr)
+                    if not is_import:
+                        cash_deduct(cash, resolved, margin_thb, rate)
+                        save_cash(cash)
+                    trades.append({
+                        "id": next_id(trades), "type": "trade", "status": "open",
+                        "ticker": ticker.upper().strip(), "direction": direction,
+                        "strategy": strategy, "currency": currency,
+                        "entry_price": entry, "shares": shares,
+                        "stop_loss": sl, "take_profit": tp, "rr": rr,
+                        "thesis": thesis, "open_date": str(open_date),
+                        "position_thb": round(pos_thb, 2),
+                        "leverage": lev,
+                        # remembered so a later close can tell the cost never left an account
+                        "is_import": bool(is_import),
+                        "source_account_id": resolved,
+                        "source_account_name": next((a["name"] for a in cash if a["id"] == resolved), ""),
+                    })
+                    save_trades(trades)
+                    _lev_txt = (f" · {lev:g}x · Margin {fmt_money(margin_thb, disp, rate, sign=False)}"
+                                if lev > 1 else "")
+                    st.success(f"บันทึกแล้ว · R:R = {rr} · Position: "
+                               f"{fmt_money(pos_thb, disp, rate, sign=False)}{_lev_txt}")
+                    st.rerun()
+
+    _ph1, _ph2 = st.columns([5, 1], vertical_alignment="center")
+    with _ph1:
+        section("Performance")
+    if _ph2.button("+ เปิด Trade ใหม่", key="btn_new_trade", use_container_width=True):
+        _new_trade_dialog()
     k1, k2, k3, k4, k5 = st.columns(5)
     k1.metric("Open Trades",   len(open_trades))
     k2.metric("Win Rate",      f"{win_rate:.1f}%" if win_rate is not None else "—",
@@ -3181,74 +3267,6 @@ def page_trade(trades: list, cash: list, disp: str, rate: float):
                     save_trades(trades)
                     st.rerun()
 
-    # -- New Trade Form (collapsed) --
-    st.markdown("<div style='height:1rem'></div>", unsafe_allow_html=True)
-    with st.expander("เปิด Trade ใหม่"):
-        strategy = strategy_input("nt")
-        with st.form("new_trade"):
-            c1, c2, c3, c4 = st.columns(4)
-            ticker    = c1.text_input("Ticker *", placeholder="เช่น AAPL, BTC-USD")
-            direction = c2.selectbox("Direction", ["Long", "Short"])
-            currency  = c3.selectbox("ราคาเป็น", ["THB", "USD"])
-            shares    = c4.text_input("จำนวนหุ้น *", placeholder="เช่น 100")
-            c5, c6, c7, c8 = st.columns(4)
-            entry     = c5.text_input("Entry Price *")
-            sl        = c6.text_input("Stop Loss")
-            tp        = c7.text_input("Take Profit")
-            lev_in    = c8.text_input("Leverage (x)", value="1",
-                                      help="หุ้นปกติ = 1 · Futures ใส่ตามที่เปิดใน Binance เช่น 10 · "
-                                           "ใส่จำนวนตามขนาด position จริง (notional) "
-                                           "ระบบจะหักเงินแค่ margin = ขนาด ÷ leverage")
-            thesis    = st.text_area("Thesis *", height=80,
-                                     placeholder="เหตุผลสั้นๆ ที่ชัดเจน")
-            open_date = st.date_input("วันที่เปิด", value=date.today())
-            st.markdown("---")
-            src_id, other_name, other_curr = source_selector(cash, "trade")
-            is_import = st.checkbox("Import position เก่า (ไม่หักเงินจาก Cash)", key="import_trade")
-            if st.form_submit_button("บันทึก Trade"):
-                e, s = parse(entry), parse(shares)
-                # accept "10x" — the field is labelled (x), and treating it as unparseable
-                # used to fall back to 1x and deduct the full notional, the very bug this
-                # field exists to prevent. Reject anything non-finite: NaN slips past a
-                # plain range check because every comparison with it is False.
-                _lev_s = (lev_in or "").strip().lower().rstrip("x").strip()
-                lev    = parse(_lev_s) if _lev_s else 1.0
-                if not ticker or e is None:
-                    st.error("กรุณากรอก Ticker และ Entry Price")
-                elif not strategy:
-                    st.error("กรุณาเลือก Strategy")
-                elif lev is None or not math.isfinite(lev) or lev < 1 or lev > 125:
-                    st.error("Leverage ต้องเป็นตัวเลข 1 ถึง 125 (เช่น 10 หรือ 10x)")
-                else:
-                    rr       = auto_rr(entry, sl, tp)
-                    pos_thb  = (s or 0) * e * (rate if currency == "USD" else 1)
-                    # notional stays in position_thb (exposure, used for sizing and P&L);
-                    # only the margin actually leaves the account
-                    margin_thb = pos_thb / lev
-                    resolved = resolve_source(cash, src_id, other_name, other_curr)
-                    if not is_import:
-                        cash_deduct(cash, resolved, margin_thb, rate)
-                        save_cash(cash)
-                    trades.append({
-                        "id": next_id(trades), "type": "trade", "status": "open",
-                        "ticker": ticker.upper().strip(), "direction": direction,
-                        "strategy": strategy, "currency": currency,
-                        "entry_price": entry, "shares": shares,
-                        "stop_loss": sl, "take_profit": tp, "rr": rr,
-                        "thesis": thesis, "open_date": str(open_date),
-                        "position_thb": round(pos_thb, 2),
-                        "leverage": lev,
-                        # remembered so a later close can tell the cost never left an account
-                        "is_import": bool(is_import),
-                        "source_account_id": resolved,
-                        "source_account_name": next((a["name"] for a in cash if a["id"] == resolved), ""),
-                    })
-                    save_trades(trades)
-                    _lev_txt = (f" · {lev:g}x · Margin {fmt_money(margin_thb, disp, rate, sign=False)}"
-                                if lev > 1 else "")
-                    st.success(f"บันทึกแล้ว · R:R = {rr} · Position: "
-                               f"{fmt_money(pos_thb, disp, rate, sign=False)}{_lev_txt}")
-                    st.rerun()
 
 
 # -- Page 4: Cash --
