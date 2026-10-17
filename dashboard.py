@@ -235,6 +235,9 @@ hr { border-color: var(--it-border) !important; }
 [data-testid="stMain"] .st-key-btn_new_inv button:hover, [data-testid="stMain"] .st-key-btn_new_trade button:hover { filter: brightness(1.07); }
 .tb-sel { font-size: 14px; color: var(--it-muted); } .tb-sel b { color: var(--it-text); }
 .st-key-inv_toolbar { margin-bottom: -6px; }
+.st-key-inv_toolbar .tb-sel { padding-left: 14px; border-left: 1px solid var(--it-border); display: inline-block; line-height: 2.1; }
+.st-key-inv_toolbar [data-testid="stButton"] button { min-height: 34px !important; padding: 2px 10px !important; }
+.st-key-inv_toolbar [data-testid="stButton"] button p { font-size: 13.5px !important; }
 /* position popup */
 [role="dialog"] { background: var(--it-card) !important; border: 1px solid var(--it-border) !important; }
 [role="dialog"] .pd-facts > div { background: var(--it-raise); }
@@ -1920,18 +1923,15 @@ def page_investment(investments: list, trades: list, cash: list, disp: str, rate
                         st.success(f"บันทึก {ticker.upper()}")
                         st.rerun()
 
-    # -- Account Filter + buy button --
+    # -- Account Filter --
     _UNASSIGNED     = "— ไม่ระบุ"
     inv_acct_names  = sorted({i.get("source_account_name","") for i in open_inv if i.get("source_account_name")})
     cash_acct_names = sorted({a["name"] for a in cash})
     _named_inv_opts = sorted(set(inv_acct_names) | set(cash_acct_names))
     _has_unassigned_inv = any(not i.get("source_account_name") for i in open_inv)
     acct_opts   = ([_UNASSIGNED] if _has_unassigned_inv else []) + _named_inv_opts
-    _fh1, _fh2 = st.columns([5, 1], vertical_alignment="bottom")
-    acct_filter = _fh1.multiselect("พอร์ต (เลือกได้หลายอัน)", acct_opts,
-                                    placeholder="Overall — แสดงทั้งหมด", key="inv_acct_filter")
-    if _fh2.button("+ ซื้อหุ้นใหม่", key="btn_new_inv", use_container_width=True):
-        _new_inv_dialog()
+    acct_filter = st.multiselect("พอร์ต (เลือกได้หลายอัน)", acct_opts,
+                                  placeholder="Overall — แสดงทั้งหมด", key="inv_acct_filter")
 
     if acct_filter:
         _show_unassigned_inv = _UNASSIGNED in acct_filter
@@ -2007,7 +2007,9 @@ def page_investment(investments: list, trades: list, cash: list, disp: str, rate
 
     # -- Holdings Table --
     if not open_inv:
-        st.info("ยังไม่มี Investment — เพิ่มได้ด้านล่าง")
+        _e1, _ = st.columns([1, 4])
+        if _e1.button("+ ซื้อหุ้นใหม่", key="btn_new_inv", use_container_width=True):
+            _new_inv_dialog()
     else:
         # Build raw data first (for sorting)
         raw = []
@@ -2411,7 +2413,10 @@ def page_investment(investments: list, trades: list, cash: list, disp: str, rate
             _sel_rows = []
         _sel_inv = raw[_sel_rows[0]]["inv"] if _sel_rows and _sel_rows[0] < len(raw) else None
         with _toolbar:
-            _t0, _t1, _t2, _t3, _t4 = st.columns([4, 1, 1, 1, 1], vertical_alignment="center")
+            # buy-new on the left (needs no selection), row actions on the right
+            _tn, _t0, _t1, _t2, _t3, _t4 = st.columns([1.35, 3.4, .9, .9, .9, .9], vertical_alignment="center")
+            if _tn.button("+ ซื้อหุ้นใหม่", key="btn_new_inv", use_container_width=True):
+                _new_inv_dialog()
             _t0.markdown(
                 f"<span class='tb-sel'>เลือก <b>{html.escape(_sel_inv['ticker'])}</b></span>" if _sel_inv
                 else "<span class='tb-sel'>ติ๊กหุ้นในตารางเพื่อจัดการ</span>", unsafe_allow_html=True)
