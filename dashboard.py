@@ -798,8 +798,15 @@ def get_usd_thb() -> float:
 
 # -- Math Helpers --
 def parse(val) -> float | None:
-    try: return float(str(val).replace(",", "").strip())
-    except Exception: return None
+    # "nan", "inf" and "1e999" all parse as floats and slip past every `> 0` /
+    # `<= balance` check (comparisons with NaN are always False). Saving one to
+    # Supabase fails after the old rows are deleted, wiping the table — so a value
+    # that isn't a finite number is treated as no value at all.
+    try:
+        v = float(str(val).replace(",", "").strip())
+    except Exception:
+        return None
+    return v if math.isfinite(v) else None
 
 def get_shares(item: dict) -> str:
     return item.get("shares") or item.get("size") or "1"
@@ -1299,6 +1306,53 @@ def build_deposits(cash: list) -> list:
     return out
 
 
+def transfer_thb(src_ccy: str, dst_ccy: str, amount: float, amount_in: float, rate: float) -> tuple:
+    """(THB value, rate) of moving `amount` out of a src_ccy account and `amount_in`
+    into a dst_ccy account. Across currencies the THB side is what actually changed
+    hands, so the rate is implied by the two amounts rather than taken from the
+    market — that is the number a statement will show."""
+    if src_ccy != dst_ccy:
+        thb, usd = (amount_in, amount) if dst_ccy == "THB" else (amount, amount_in)
+        return round(thb, 2), round(thb / usd, 4) if usd else None
+    if src_ccy == "THB":
+        return round(amount, 2), None
+    return round(amount * rate, 2), round(rate, 4)
+
+
+def build_transfers(cash: list) -> list:
+    """Money moved between two of the user's own accounts, newest first.
+
+    Not a deposit and not a cashout: it never enters or leaves the portfolio, so
+    it is kept out of both totals. Stored on the source account under "transfers"
+    (the same jsonb blob as deposits/cashouts, no schema change).
+
+    It can still be the moment money is brought into Thailand — e.g. USDT moved
+    from Binance to Bitkub and sold for baht — so it carries the same to_thai flag
+    as a cashout, and the same rule: only money leaving a foreign-currency account
+    can be a remittance.
+    """
+    out = []
+    for acc in cash:
+        for t in acc.get("transfers", []):
+            out.append({
+                "date":       t.get("date", ""),
+                "account":    acc.get("name", "—"),
+                "to":         next((a.get("name") for a in cash if a.get("id") == t.get("to_id")),
+                                   t.get("to_name", "—")),
+                "currency":   acc.get("currency", "THB"),
+                "to_currency": t.get("to_currency", acc.get("currency", "THB")),
+                "amount":     t.get("amount"),          # out, in the source currency
+                "amount_in":  t.get("amount_in"),       # in, in the destination currency
+                "amount_thb": t.get("amount_thb"),
+                "fx_rate":    t.get("fx_rate"),
+                "to_thai":    bool(t.get("to_thai")),
+                "note":       t.get("note", ""),
+                "remitted":   bool(t.get("to_thai")) and acc.get("currency") != "THB",
+            })
+    out.sort(key=lambda t: t["date"], reverse=True)
+    return out
+
+
 def build_activity_log(investments: list, trades: list, cash: list | None = None) -> list:
     events = []
     for inv in investments:
@@ -1356,6 +1410,15 @@ def build_activity_log(investments: list, trades: list, cash: list | None = None
                           + (f" (≈{money(c['amount_thb'])})" if c["currency"] != "THB" else "")
                           + (" · โอนเข้าไทย" if c["remitted"] else "")
                           + (f" · {c['note']}" if c["note"] else "")})
+    for t in build_transfers(cash or []):
+        s_out = "$" if t["currency"] == "USD" else "฿"
+        s_in  = "$" if t["to_currency"] == "USD" else "฿"
+        events.append({"วันที่": t["date"], "ประเภท": "Cash",
+            "Action": "ย้ายเงิน", "Ticker": f"{t['account']} → {t['to']}",
+            "รายละเอียด": f"{money(t['amount'], s_out, 2)} → {money(t['amount_in'], s_in, 2)}"
+                          + (f" · เรต {t['fx_rate']:.4f}" if t["currency"] != t["to_currency"] and t["fx_rate"] else "")
+                          + (" · นำเข้าไทย" if t["remitted"] else "")
+                          + (f" · {t['note']}" if t["note"] else "")})
     events.sort(key=lambda e: e.get("วันที่",""), reverse=True)
     return events
 
@@ -3311,9 +3374,11 @@ def page_cash(trades: list, investments: list, cash: list, disp: str, rate: floa
         m4.caption(f"{len(deposits)} ครั้ง · ล่าสุด {deposits[0]['date']}")
     m5.metric("Cash Out",
               fmt_money(cashout_thb, disp, rate, sign=False) if cashouts else "—")
-    if cashouts:
-        _rem = sum(c["amount_thb"] or 0 for c in cashouts if c["remitted"])
-        m5.caption(f"{len(cashouts)} ครั้ง · เข้าไทย {fmt_money(_rem, disp, rate, sign=False)}")
+    _rem = (sum(c["amount_thb"] or 0 for c in cashouts if c["remitted"])
+            + sum(t["amount_thb"] or 0 for t in build_transfers(cash) if t["remitted"]))
+    if cashouts or _rem:
+        m5.caption((f"{len(cashouts)} ครั้ง · " if cashouts else "")
+                   + f"เข้าไทย {fmt_money(_rem, disp, rate, sign=False)}")
 
     st.markdown("<div style='height:1rem'></div>", unsafe_allow_html=True)
 
@@ -3358,6 +3423,11 @@ def page_cash(trades: list, investments: list, cash: list, disp: str, rate: floa
                 )
                 with st.expander("จัดการ", expanded=False):
                     other_accs = [a for a in cash if a["id"] != acc["id"]]
+                    # deposits, cash-outs and transfers live on this account; removing it
+                    # would quietly drop them and the remittance figure built from them
+                    _hist_n = (sum(len(acc.get(k, [])) for k in ("deposits", "cashouts", "transfers"))
+                               + sum(1 for a2 in cash for t2 in a2.get("transfers", [])
+                                     if t2.get("to_id") == acc["id"]))
                     _ec1, _ec2, _ec3 = st.columns([3, 3, 2])
 
                     with _ec1:
@@ -3383,28 +3453,35 @@ def page_cash(trades: list, investments: list, cash: list, disp: str, rate: floa
                                                       format_func=lambda i: acc_label(other_accs[i]),
                                                       label_visibility="collapsed")
                                 if st.form_submit_button("ยืนยัน", use_container_width=True):
-                                    target  = other_accs[t_idx]
-                                    amt_thb = acc["amount"] * rate if acc["currency"] == "USD" else acc["amount"]
-                                    target["amount"] = round(target["amount"] + (amt_thb / rate if target["currency"] == "USD" else amt_thb), 2)
-                                    for item in trades + investments:
-                                        if item.get("source_account_id") == acc["id"]:
-                                            item["source_account_id"]   = target["id"]
-                                            item["source_account_name"] = target["name"]
-                                    cash[:] = [a for a in cash if a["id"] != acc["id"]]
-                                    save_cash(cash)
-                                    save_trades(trades)
-                                    save_investments(investments)
-                                    st.success(f"ย้ายเข้า '{target['name']}' แล้ว")
-                                    st.rerun()
+                                    if _hist_n:
+                                        st.error(f"บัญชีนี้มีประวัติเงินเข้า-ออก {_hist_n} รายการ — "
+                                                 "ย้ายรวมไม่ได้ เพราะประวัติจะหาย ใช้ 'ย้ายเงิน' ย้ายยอดออกแทน")
+                                    else:
+                                        target  = other_accs[t_idx]
+                                        amt_thb = acc["amount"] * rate if acc["currency"] == "USD" else acc["amount"]
+                                        target["amount"] = round(target["amount"] + (amt_thb / rate if target["currency"] == "USD" else amt_thb), 2)
+                                        for item in trades + investments:
+                                            if item.get("source_account_id") == acc["id"]:
+                                                item["source_account_id"]   = target["id"]
+                                                item["source_account_name"] = target["name"]
+                                        cash[:] = [a for a in cash if a["id"] != acc["id"]]
+                                        save_cash(cash)
+                                        save_trades(trades)
+                                        save_investments(investments)
+                                        st.success(f"ย้ายเข้า '{target['name']}' แล้ว")
+                                        st.rerun()
 
                     with _ec3:
                         st.caption("ลบ")
                         st.markdown("<div style='height:1.55rem'></div>", unsafe_allow_html=True)
                         if st.button("ลบ", key=f"del_acc_{acc['id']}",
                                      use_container_width=True):
-                            cash[:] = [a for a in cash if a["id"] != acc["id"]]
-                            save_cash(cash)
-                            st.rerun()
+                            if _hist_n:
+                                st.error(f"มีประวัติ {_hist_n} รายการ — ลบไม่ได้ ตั้งยอดเป็น 0 แทน")
+                            else:
+                                cash[:] = [a for a in cash if a["id"] != acc["id"]]
+                                save_cash(cash)
+                                st.rerun()
                 st.markdown("<div style='height:4px'></div>", unsafe_allow_html=True)
 
     st.markdown("<div style='height:0.5rem'></div>", unsafe_allow_html=True)
@@ -3439,6 +3516,100 @@ def page_cash(trades: list, investments: list, cash: list, disp: str, rate: floa
                         save_cash(cash)
                         _s = "$" if _dacc["currency"] == "USD" else "฿"
                         st.success(f"เติม {money(amt, _s, 2)} เข้า {_dacc['name']} แล้ว")
+                        st.rerun()
+
+    # -- Transfer between two of the user's own accounts --
+    if len(cash) >= 2:
+        with st.expander("ย้ายเงิน — โอนระหว่างบัญชี"):
+            # pickers outside the form: the second amount field and the remittance
+            # default depend on the pair chosen, and a form only updates on submit
+            # options are account ids, not list positions: the Supabase row order is
+            # not guaranteed, and a position remembered across a reload could point
+            # at a different account
+            _tids = [a["id"] for a in cash]
+            _tlbl = {a["id"]: acc_label(a) for a in cash}
+            tc1, tc2 = st.columns(2)
+            tf_id = tc1.selectbox("ย้ายจาก", _tids, format_func=lambda i: _tlbl[i], key="tr_from_id")
+            tt_id = tc2.selectbox("ย้ายไป", _tids, format_func=lambda i: _tlbl[i], key="tr_to_id",
+                                  index=1 if len(_tids) > 1 else 0)
+            _src = next(a for a in cash if a["id"] == tf_id)
+            _dst = next(a for a in cash if a["id"] == tt_id)
+            _cross = _src["currency"] != _dst["currency"]
+            if st.session_state.get("tr_rate_warn"):
+                st.error(st.session_state["tr_rate_warn"])
+            # not clear_on_submit: that wipes the amounts on a refused submit too, so
+            # the "confirm this rate" retry would arrive empty. Cleared on success below.
+            # a fresh form (new key) after each successful move is what empties it;
+            # dropping the widget keys alone doesn't reset a form's fields
+            _tn = st.session_state.get("tr_n", 0)
+            with st.form(f"transfer_form_{_tn}", clear_on_submit=False):
+                fc1, fc2, fc3 = st.columns(3)
+                t_amt = fc1.text_input(f"เงินออก ({_src['currency']})", "", key=f"tr_amt_{_tn}")
+                # always shown: even in one currency a withdrawal or network fee can
+                # make what arrives smaller than what left
+                t_in  = fc2.text_input(f"เงินเข้า ({_dst['currency']})", "", key=f"tr_in_{_tn}",
+                                       placeholder="" if _cross else "ว่าง = เท่ากับเงินออก",
+                                       help="ยอดที่เข้าบัญชีปลายทางจริง หลังแลกเงิน/หักค่าธรรมเนียม")
+                t_dt  = fc3.date_input("วันที่", value=date.today())
+                fc4, fc5 = st.columns([3, 7])
+                # Foreign → THB always brings money into Thailand: once it sits in a
+                # THB account it is onshore, so this is not left to a checkbox that
+                # could be unticked and lose the figure for good. Foreign → foreign
+                # may or may not (a Thai FCD account vs another exchange abroad).
+                if _src["currency"] != "THB" and _dst["currency"] == "THB":
+                    t_thai = True
+                    fc4.markdown("<span class='tb-sel'>นับเป็น <b>นำเงินเข้าไทย</b></span>",
+                                 unsafe_allow_html=True)
+                elif _src["currency"] != "THB":
+                    t_thai = fc4.checkbox("นำเงินเข้าไทย", value=False,
+                                          key=f"tr_thai_{_src['id']}_{_dst['id']}",
+                                          help="ติ๊กเฉพาะเมื่อปลายทางเป็นบัญชีในไทย (เช่น บัญชีเงินฝากสกุลต่างประเทศ) "
+                                               "ถ้าก้อนนี้จะย้ายต่อเข้าบัญชีบาทภายหลัง อย่าติ๊ก ไม่งั้นนับซ้ำ")
+                else:
+                    t_thai = False
+                t_note = fc5.text_input("บันทึก (ไม่บังคับ)", "", key=f"tr_note_{_tn}",
+                                        placeholder="เช่น ขาย USDT ผ่าน Bitkub / แลกเงิน")
+                # shown only after a submit was refused for its rate, so it can't be
+                # ticked in advance and quietly switch the check off
+                t_ok_rate = (st.checkbox("ยืนยันเรตนี้ (ต่างจากเรตตลาดเกิน 10%)", value=False,
+                                         key=f"tr_okrate_{_src['id']}_{_dst['id']}")
+                             if _cross and st.session_state.get("tr_rate_warn") else not _cross)
+                if st.form_submit_button("ย้ายเงิน", use_container_width=True):
+                    amt = parse(t_amt)
+                    amt_in = parse(t_in) if (t_in or "").strip() else (None if _cross else amt)
+                    _s = "$" if _src["currency"] == "USD" else "฿"
+                    thb, fx = (transfer_thb(_src["currency"], _dst["currency"], amt, amt_in, rate)
+                               if amt and amt_in and amt > 0 and amt_in > 0 else (None, None))
+                    if _src["id"] == _dst["id"]:
+                        st.error("เลือกบัญชีต้นทางกับปลายทางคนละบัญชี")
+                    elif not amt or amt <= 0:
+                        st.error("ใส่ยอดเงินออกให้ถูกต้อง")
+                    elif not amt_in or amt_in <= 0:
+                        st.error("ใส่ยอดเงินเข้าให้ถูกต้อง")
+                    elif amt > _src["amount"]:
+                        st.error("ยอดในบัญชีต้นทางมีแค่ " + money(_src["amount"], _s, 2))
+                    elif _cross and fx and abs(fx / rate - 1) > 0.10 and not t_ok_rate:
+                        # a slipped digit (64751.7 for 6475.17) would otherwise land in
+                        # both balances and the tax figure with no way to edit it later
+                        # rerun so the confirm box appears; the message is kept in
+                        # session state because a rerun would otherwise drop it
+                        st.session_state["tr_rate_warn"] = (
+                            f"เรตที่ได้ {fx:.4f} ต่างจากเรตตลาด {rate:.2f} เกิน 10% — "
+                            "ตรวจยอดอีกครั้ง ถ้าถูกต้องให้ติ๊ก 'ยืนยันเรตนี้' แล้วกดใหม่")
+                        st.rerun()
+                    else:
+                        _src.setdefault("transfers", []).append({
+                            "date": str(t_dt), "to_id": _dst["id"], "to_name": _dst["name"],
+                            "to_currency": _dst["currency"],
+                            "amount": round(amt, 2), "amount_in": round(amt_in, 2),
+                            "amount_thb": thb, "fx_rate": fx,
+                            "to_thai": bool(t_thai), "note": t_note.strip(),
+                        })
+                        _src["amount"] = round(_src["amount"] - amt, 2)
+                        _dst["amount"] = round(_dst["amount"] + amt_in, 2)
+                        save_cash(cash)
+                        st.session_state.pop("tr_rate_warn", None)
+                        st.session_state["tr_n"] = _tn + 1
                         st.rerun()
 
     # -- Cash out (money leaving the portfolio to be spent) --
@@ -3493,18 +3664,21 @@ def page_cash(trades: list, investments: list, cash: list, disp: str, rate: floa
         flows_io = (
             [{**d, "_kind": "in"} for d in deposits]
             + [{**c, "_kind": "out"} for c in cashouts]
+            + [{**t, "_kind": "move"} for t in build_transfers(cash)]
         )
         flows_io.sort(key=lambda f: f["date"], reverse=True)
         if flows_io:
             st.markdown("<div style='height:0.5rem'></div>", unsafe_allow_html=True)
             section(f"ประวัติเงินเข้า-ออก ({len(flows_io)})")
+            def _amt(v, ccy, sign=""):
+                return "—" if v is None else sign + money(v, "$" if ccy == "USD" else "฿", 2)
             st.dataframe([{
                 "วันที่":     f["date"],
-                "ประเภท":     "เติม" if f["_kind"] == "in" else "ถอน",
-                "บัญชี":      f["account"],
-                "ยอด":        (("+" if f["_kind"] == "in" else "−")
-                               + money(f["amount"], "$" if f["currency"] == "USD" else "฿", 2)
-                               if f["amount"] is not None else "—"),
+                "ประเภท":     {"in": "เติม", "out": "ถอน", "move": "ย้าย"}[f["_kind"]],
+                "บัญชี":      (f"{f['account']} → {f['to']}" if f["_kind"] == "move" else f["account"]),
+                "ยอด":        (f"{_amt(f['amount'], f['currency'])} → {_amt(f['amount_in'], f['to_currency'])}"
+                               if f["_kind"] == "move"
+                               else _amt(f["amount"], f["currency"], "+" if f["_kind"] == "in" else "−")),
                 "เป็นบาท":    money(f["amount_thb"], dp=2),
                 "เรต":        f"{f['fx_rate']:.4f}" if f["fx_rate"] else "—",
                 "นำเข้าไทย":  ("—" if f["_kind"] == "in" or f["currency"] == "THB"
@@ -3643,11 +3817,16 @@ def page_log(trades: list, investments: list, cash: list, disp: str, rate: float
     section("สรุปภาษี")
 
     realized = build_realized_events(investments, trades)
-    if not realized:
+    # money brought into Thailand is taxed when it arrives, which can be a year with
+    # no sales at all — so those years must be selectable too
+    _remits = ([c for c in build_cashouts(cash) if c["remitted"]]
+               + [t for t in build_transfers(cash) if t["remitted"]])
+    if not realized and not _remits:
         st.info("ยังไม่มีการขาย")
         return
 
-    tax_years = sorted({e["sell_date"][:4] for e in realized if len(e["sell_date"]) >= 4},
+    tax_years = sorted({e["sell_date"][:4] for e in realized if len(e["sell_date"]) >= 4}
+                       | {r["date"][:4] for r in _remits if len(r["date"]) >= 4},
                        reverse=True)
     pick = st.selectbox("ปี", tax_years, key="tax_year")
     yr_rows = [e for e in realized if e["sell_date"].startswith(pick)]
@@ -3655,16 +3834,19 @@ def page_log(trades: list, investments: list, cash: list, disp: str, rate: float
     gain = sum(e["pnl_thb"] or 0 for e in yr_rows if (e["pnl_thb"] or 0) > 0)
     loss = sum(e["pnl_thb"] or 0 for e in yr_rows if (e["pnl_thb"] or 0) < 0)
     yr_out  = [c for c in build_cashouts(cash) if c["date"].startswith(pick)]
-    remit   = sum(c["amount_thb"] or 0 for c in yr_out if c["remitted"])
+    yr_mv   = [t for t in build_transfers(cash) if t["date"].startswith(pick)]
+    # brought in either by cashing out to Thailand or by moving it into a Thai account
+    remit   = (sum(c["amount_thb"] or 0 for c in yr_out if c["remitted"])
+               + sum(t["amount_thb"] or 0 for t in yr_mv if t["remitted"]))
 
     t1, t2, t3, t4 = st.columns(4)
     t1.metric("กำไรที่ realize", fmt_money(gain, disp, rate))
     t2.metric("ขาดทุนที่ realize", fmt_money(loss, disp, rate))
     t3.metric("สุทธิ", fmt_money(gain + loss, disp, rate))
     t4.metric("นำเงินเข้าไทย",
-              fmt_money(remit, disp, rate, sign=False) if yr_out else "—",
-              help="เฉพาะที่ถอนจากบัญชีต่างสกุลแล้วโอนเข้าไทย — "
-                   "ถอนจากบัญชี THB ไม่นับ เพราะเงินอยู่ในไทยแล้ว")
+              fmt_money(remit, disp, rate, sign=False) if (yr_out or yr_mv) else "—",
+              help="ยอดรวมเงินต้น + กำไรที่ถอนหรือย้ายออกจากบัญชีต่างสกุลเข้าไทย "
+                   "ไม่ใช่ยอดเงินได้ที่ต้องเสียภาษี — เงินจากบัญชี THB ไม่นับ เพราะอยู่ในไทยแล้ว")
     if yr_out:
         t4.caption(f"Cash Out ทั้งปี "
                    f"{fmt_money(sum(c['amount_thb'] or 0 for c in yr_out), disp, rate, sign=False)}")
@@ -3684,6 +3866,32 @@ def page_log(trades: list, investments: list, cash: list, disp: str, rate: float
         "บัญชี":         e["account"],
     } for e in yr_rows]
 
+    _yr_remits = sorted([r for r in _remits if r["date"].startswith(pick)], key=lambda r: r["date"])
+    if _yr_remits:
+        st.markdown(f"<div class='section-label' style='margin-top:1rem'>นำเงินเข้าไทย {pick} ({len(_yr_remits)})</div>",
+                    unsafe_allow_html=True)
+        st.dataframe([{
+            "วันที่":   r["date"],
+            "จาก":     r["account"],
+            "ไป":      r.get("to", "ถอนออก"),
+            "ยอด":     money(r["amount"], "$" if r["currency"] == "USD" else "฿", 2),
+            "เป็นบาท": money(r["amount_thb"], dp=2),
+            "เรต":     f"{r['fx_rate']:.4f}" if r["fx_rate"] else "—",
+            "บันทึก":  r["note"] or "—",
+        } for r in _yr_remits], use_container_width=True, hide_index=True)
+        st.download_button(
+            "Export CSV นำเงินเข้าไทย", key="dl_remit",
+            data=pd.DataFrame([{
+                "date": r["date"], "from": r["account"], "to": r.get("to", "cash out"),
+                "amount": r["amount"], "currency": r["currency"],
+                "amount_thb": r["amount_thb"], "fx_rate": r["fx_rate"], "note": r["note"],
+            } for r in _yr_remits]).to_csv(index=False).encode("utf-8-sig"),
+            file_name=f"timfin_remittance_{pick}.csv", mime="text/csv",
+        )
+
+    if not yr_rows:
+        st.caption("บันทึกรายการ ไม่ใช่การคำนวณภาษี — ยืนยันกับนักบัญชีก่อนยื่น")
+        return
     st.dataframe(tax_tbl, use_container_width=True, hide_index=True)
     st.download_button(
         "Export CSV สำหรับยื่นภาษี", key="dl_tax",
