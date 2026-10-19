@@ -91,60 +91,57 @@ POST   /table                          # insert ใหม่พร้อม user
 
 ---
 
-## Features ปัจจุบัน (verified ทำงานได้)
+## Features ปัจจุบัน (verified ทำงานได้ — อัปเดต 2026-10-19)
 
-### Navigation: Overview | Investment | Trade | Cash | Log
+### Look & feel (redesign 15–17 ต.ค.)
+- ฟอนต์ **IBM Plex Sans Thai + IBM Plex Mono** อยู่ใน `static/fonts/` ตั้งผ่าน `.streamlit/config.toml` (`[[theme.fontFaces]]`, `enableStaticServing`)
+- สี graphite + ทองหม่น (`--it-*` tokens ใน CSS ต้นไฟล์ ต้องตรงกับ config.toml) · ไม่มีอีโมจิใน label · radio = segmented control
+- Navbar (inject เข้า parent document) — แท็บ text, ไอคอน SVG ตา/บัญชี, THB/USD · มือถือ ≤960px แท็บไปอยู่แถบล่าง
+- Login 2 คอลัมน์ สลับ Dark/Light · แท็บ เข้าสู่ระบบ/สมัครสมาชิก มองเห็นแล้ว (เดิมโดน CSS ซ่อน)
+- ปิดการจางของ Streamlit ระหว่าง rerun (`[data-stale]`) — ไม่กระพริบ
 
 ### Overview
-- KPI: Portfolio Value, Unrealized P&L, Realized P&L, Win Rate
-- **Allocation Pie chart** — แต่ละ position + Cash
-- **Portfolio Line chart** — 1D / 1W / 1M / 1Y filter
-- P&L bar charts (unrealized + realized)
-- Recent Activity, Winners & Losers
+- KPI: Total Wealth, Deployed, Unrealized, Realized (Trade/Invest), Cash Out
+- กราฟ Return % (Overall/Investment/Trade × 1D–1Y, เทียบ S&P/NASDAQ) เต็มความกว้าง
+- **"ถืออะไรอยู่"** = `allocation_panel()` — Pie (default) / Treemap
+  - Pie เป็น component ใน browser (`alloc_component.html` ผ่าน `components.html`): คลิกชิ้นหรือรายการ → ที่เหลือจาง ตรงกลางโชว์ชื่อ/%/มูลค่า/P&L · รายการ 2 คอลัมน์เลื่อนหาเอง · คลิกที่อื่นในหน้า = reset · ปุ่มขยายเปิดวงใหญ่ (ชื่ออยู่ในชิ้น) ใน parent document
+- Portfolio Snapshot, Recent Activity
 
 ### Investment
-- **Summary metrics**: Total Value (incl. Cash), Total P&L + % delta, Holdings count, Best Performer
-- **Holdings Pie chart** — สัดส่วน holdings
-- **Sortable table**: Size (default) / Gain / Loss / Ticker / P&L THB
-- **Colored P&L**: สีเขียว (+) สีแดง (-) ใน P&L % และ P&L ฿
-- **Row numbering**: เริ่มจาก 1
-- **TOTAL row**: ท้ายสุด แสดง market value รวม + P&L รวม
-- Edit / Close / Delete position
-- Cash summary (link ไปหน้า Cash)
+- KPI + แถบ Cash/Account Total · Pie/Treemap · Return chart · Target Allocation (bar + ตาราง rebalance)
+- **Current Holdings** = ตารางเดียว ติ๊กเลือกแถว (`on_select`, key `inv_hold_tbl`) + **แถบปุ่มเหนือตาราง**:
+  `+ ซื้อหุ้นใหม่` (ทอง) │ เลือก X │ ซื้อเพิ่ม · แก้ไข · ขาย (แดง) · ลบ (ต้องยืนยัน)
+  - แต่ละปุ่มเปิด `st.dialog` ตรงเข้าฟอร์มนั้น · ทุก action ล้าง selection ก่อน rerun (ตารางเรียงตาม P&L แถวสลับได้)
+  - ทั้ง section เป็น `@st.fragment` — ติ๊ก/กดปุ่ม rerun แค่ส่วนนี้ (ไม่โหลด Supabase/ไม่คำนวณ 5 หน้า) · บันทึกจริงค่อย rerun ทั้งแอป
+- ขาย: ช่อง **Max** (ติ๊ก = ขายหมด) · Closed อยู่ล่างสุด
 
 ### Trade
-- Open trades: card แสดง TP/SL/R:R/P&L live
-- Edit (ticker, shares, entry, SL, TP, thesis) / Close / Delete
-- Analytics: Win/Loss pie, P&L by Strategy
-- Closed trades table
+- ปุ่ม `+ เปิด Trade ใหม่` บนสุด (dialog) · Open trades (ยังเป็น expander — **ยังไม่ได้ทำแบบตาราง+แถบปุ่ม**)
+- ขายบางส่วนใส่ Lesson ได้ + แก้ย้อนหลังได้ · Max · Leverage/ROE
+- Analytics: สรุปผลงาน (ชนะ/แพ้/สุทธิ นับทุกครั้งที่ขาย) · Realized สะสม + Drawdown · P&L รายเทรด · แยกตาม Strategy
+- **Past Performance** (1 แถว = 1 trade รวมทุกการขาย, หน้าละ 15) · Closed Trades (ทุกครั้งที่ขาย) พับไว้
 
-### Cash (💵)
-- Summary: ยอดรวม THB / USD / Net
-- Account list: แต่ละอันมี ชื่อ, currency, ยอด, สีแดง=ติดลบ
-- Actions: แก้ชื่อ+ยอด / Reassign รวมกับบัญชีอื่น (ย้ายยอด + update trades/investments) / ลบ
-- เพิ่มบัญชีใหม่: preset (Dime/Webull/Binance/Bitkub/SCB/KBank) หรือพิมพ์เอง
-- **Cash Flow History**: ดูเงินเข้า/ออกแต่ละบัญชีผ่าน trade/investment
+### Cash
+- Summary: THB/USD/Net, Deposit, Cash Out (+ "เข้าไทย")
+- บัญชี: แก้ชื่อ/ยอด · Reassign · ลบ — **บัญชีที่มีประวัติ (deposit/cashout/transfer เข้าหรือออก) ลบ/Reassign ไม่ได้**
+- **3 action:** เติมเงิน (Deposit) · **ย้ายเงิน (Transfer — ใหม่ 19 ต.ค.)** · ถอนเงิน (Cash Out)
+- ประวัติเงินเข้า-ออก (เติม/ย้าย/ถอน) + Cash Flow History ของ trade/investment
 
 ### Cash Flow Logic
 ```
-เปิด trade/investment:
-  → เลือก "จ่ายจากบัญชีไหน" (existing หรือ Other Cash = สร้างใหม่)
-  → cash.amount -= position_value (แปลงตาม currency ของ account)
-  → บันทึก source_account_id ใน trade/investment
-
-ปิด trade/investment:
-  → cash_credit(source_account_id, exit_value)
-  → เงิน + กำไรกลับบัญชีเดิม
-
-Import mode (📥 checkbox):
-  → บันทึก source_account แต่ไม่หักเงิน
-  → ใช้สำหรับ position ที่มีอยู่แล้วก่อนเริ่มใช้ระบบ
+เปิด trade/investment → หักจาก source account (Import = ไม่หัก)
+ปิด → คืน settle_thb (margin + P&L) เข้าบัญชีที่เลือก
+Deposit  → +ยอด, ไม่ใช่กำไร
+Cash Out → −ยอด, remitted = to_thai AND บัญชีต้นทาง != THB
+Transfer → ต้นทาง −เงินออก, ปลายทาง +เงินเข้า · ไม่ใช่ deposit/cashout
+           เรต = ยอดเข้า/ยอดออกจริง · ต่างประเทศ→THB = นำเข้าไทยเสมอ
+           ต่างประเทศ→ต่างประเทศ = เลือกได้ (default ไม่ติ๊ก กันนับซ้ำ) · ต้นทาง THB = ไม่นับ
 ```
 
 ### Log
-- ประวัติ trades + investments รวม
-- Filter: ประเภท / status / W/L
-- Export CSV
+- Activity Log (ปี/เดือน/ประเภท + CSV) — รวมเติม/ย้าย/ถอน
+- สรุปภาษีรายปี: กำไร/ขาดทุน realize · **นำเงินเข้าไทย** (cashout + transfer) พร้อมรายการ/เรต/CSV · ปีที่มีแต่การนำเข้า (ไม่มีขาย) เลือกได้
+- เป็นบันทึกรายการ ไม่ใช่การคำนวณภาษี
 
 ---
 
@@ -180,8 +177,14 @@ Import mode (📥 checkbox):
 
 ### Cash Account
 ```json
-{"id": 1, "name": "Webull", "currency": "USD", "amount": 1500.0}
+{"id": 1, "name": "Webull", "currency": "USD", "amount": 1500.0,
+ "deposits":  [{"date","amount","amount_thb","fx_rate","note"}],
+ "cashouts":  [{"date","amount","amount_thb","fx_rate","to_thai","note"}],
+ "transfers": [{"date","to_id","to_name","to_currency","amount","amount_in",
+                "amount_thb","fx_rate","to_thai","note"}]}
 ```
+- ทุกอย่างเก็บใน jsonb ของบัญชี (ไม่ต้องแก้ schema) · transfer เก็บที่บัญชี **ต้นทาง**
+- บัญชีที่ถือ 2 สกุล (Webull/Dime/Bitkub) → แยกเป็น 2 บัญชี แล้วใช้ Transfer ตอนแลกเงิน
 
 ---
 
@@ -220,6 +223,12 @@ streamlit run dashboard.py
 | Cash page แยก | cash เชื่อมทั้ง trade+investment ไม่ควรอยู่ใน Investment เท่านั้น | 2026-06-02 |
 | Email confirmation ปิด | trusted users, ง่ายกว่า | 2026-06-02 |
 | ไม่ทำ Auth ด้วย service_role | anon key + RLS เพียงพอ | 2026-06-02 |
+| Redesign: Plex fonts ใน static/, theme ผ่าน config.toml | ฟอนต์เดิมไม่มีไทย ทำให้ไทย/อังกฤษคนละตระกูล | 2026-10-15 |
+| **ไม่ pin streamlit** ใน requirements | pin 1.45.1 แล้ว Cloud บูตไม่ขึ้น (ค้าง spinner) ต้อง revert + Reboot | 2026-10-15 |
+| Holdings = ตาราง + แถบปุ่ม + dialog | ติ๊ก→popup→ปุ่ม→ฟอร์ม 3 ขั้น งง · แถบปุ่มเห็นตลอด | 2026-10-17 |
+| Holdings section เป็น st.fragment | rerun ทั้งแอปทุกคลิกช้า/กระพริบ | 2026-10-18 |
+| Transfer แยกจาก Deposit/Cash Out | เงินย้ายในพอร์ตไม่ใช่เงินเข้า/ออก · เป็นจุดนำเข้าไทยได้ | 2026-10-19 |
+| `parse()` ปฏิเสธ NaN/inf ทั้งแอป | "nan" ผ่านทุกเงื่อนไข → save ล้มหลัง Supabase ลบแถวเก่า = ข้อมูลหาย | 2026-10-19 |
 
 ---
 
@@ -229,13 +238,18 @@ streamlit run dashboard.py
 - **อย่า push `secrets.toml`** — มี API key อยู่ใน .gitignore แล้ว
 - **อย่าใช้ number_input กับ currency selector ใน form เดียวกัน** — step/format ไม่ dynamic ในขณะที่ form ยังไม่ submit → ใช้ text_input แทน
 - **อย่าใช้ `Styler.applymap()`** ใน pandas 2.x → ใช้ `.map()` แทน (พร้อม try/except fallback)
+- **อย่า pin `streamlit==` ใน requirements.txt** — Cloud ใช้เวอร์ชันล่าสุด เทสด้วย venv เวอร์ชันล่าสุดแทน
+- **อย่าเขียน CSS อิง `data-baseweb`** — Streamlit ใหม่เปลี่ยนเป็น react-aria แล้ว ใช้ `data-testid` (เช่น `stTextInputRootElement`, `stRadioOption`)
+- **อย่าใส่ `font-family` ให้ `.stApp *`** — ไปทับฟอนต์ไอคอน ลูกศร expander กลายเป็นคำว่า keyboard_arrow_down
 - **อย่า DELETE Supabase table ทั้งหมดโดยไม่ filter** — ต้องใช้ `?user_id=eq.{uid}` มิฉะนั้น delete ไม่ทำงาน (PostgREST requirement)
 
 ---
 
 ## Known Issues / ต้องแก้ทีหลัง
 
-- **UI polish**: Pie chart label ซ้อนกันเมื่อมีหลาย holdings, ตัวหนังสือ label ตกขอบ
+- **Transfer ต่างประเทศ→ต่างประเทศย้อนหลัง** ใช้เรตวันที่กดบันทึก ไม่ใช่เรตวันนั้น (เหมือน Cash Out)
+- **Open Trades** ยังเป็น expander แบบเก่า ยังไม่ fragment (คลิกยังช้ากว่า Investment)
+- **Theme Light ในแอป** (นอกหน้า Login) ยังไม่มี
 - **Portfolio line chart**: ใช้ current positions ย้อนหลัง ไม่ได้ track ว่าซื้อ/ขายระหว่างทาง (approximation)
 - **Performance**: yfinance + Supabase calls ทุก page load ทำให้ช้า — ควรทำ session_state caching
 - **Password reset**: redirect ไป localhost แทน Streamlit URL — ยังไม่ได้แก้ Site URL ใน Supabase
@@ -247,4 +261,9 @@ streamlit run dashboard.py
 3. Performance caching ถ้า laggy เกินไป
 4. Auth: Password reset flow (แก้ Site URL ใน Supabase → ชี้ไป Streamlit Cloud URL)
 5. Multi-user: RLS ทำงานแล้ว → share URL ให้แฟน/เพื่อนสมัครได้เลย
+6. **Watchlist page (tab ใหม่ 👁)** — ติดตามหุ้นที่สนใจก่อนซื้อจริง แยกออกจาก Investment
+   - Pre-req: รัน SQL สร้าง table `watchlist` ใน Supabase (4 บรรทัด)
+   - งาน: เพิ่ม navbar tnt5 + st.tabs entry + page_watchlist() ~250 บรรทัด
+   - UI spec เก็บไว้ที่: `investing/ideas/watchlist-spec.md`
+   - ไม่แก้โค้ดเก่า ยกเว้น navbar string + tabs list 2 จุด (navbar fragile zone — test 4-state ก่อน push)
 
