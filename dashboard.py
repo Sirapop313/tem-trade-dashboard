@@ -8,7 +8,8 @@ import json
 import math
 import os
 import re
-from datetime import date
+from datetime import date, datetime
+from zoneinfo import ZoneInfo
 
 import pandas as pd
 import requests as _req
@@ -1048,6 +1049,18 @@ def show_df(title: str, file: str, data, *args, **kwargs):
     return st.dataframe(data, *args, **kwargs)
 
 
+def _ai_copy(data, title: str, filt: str = "") -> None:
+    """Table as CSV text for pasting into an AI chat — st.code's own copy button, no JS.
+    Takes the same display rows as the table, so the hide-amounts mask carries over."""
+    df = data if isinstance(data, pd.DataFrame) else pd.DataFrame(data)
+    if df.empty:
+        return
+    now = datetime.now(ZoneInfo("Asia/Bangkok")).strftime("%Y-%m-%d %H:%M")
+    head = f"# {title} · ข้อมูล ณ {now}" + (f"\n# ตัวกรอง: {filt}" if filt else "")
+    with st.expander("Copy ให้ AI"):
+        st.code(head + "\n" + df.to_csv(index=False), language=None)
+
+
 def allocation_panel(labels, vals_thb, pcts, disp, rate, key: str) -> None:
     """Pie (default) or treemap of holdings. The pie is a small in-browser component
     (alloc_component.html): clicking a slice or a legend row highlights it in both
@@ -1834,7 +1847,7 @@ def page_overview(trades: list, investments: list, cash: list, disp: str, rate: 
             st.markdown("<small>Cash · " + "  ·  ".join(cash_parts) + "</small>", unsafe_allow_html=True)
 
     # -- Portfolio Snapshot --
-    if open_inv or open_trades:
+    if open_inv or open_trades or cash:
         st.markdown("<div style='height:0.5rem'></div>", unsafe_allow_html=True)
 
         sym_ov  = "฿" if disp == "THB" else "$"
@@ -1887,6 +1900,17 @@ def page_overview(trades: list, investments: list, cash: list, disp: str, rate: 
                 "P&L %":          fmt_pct(pnl_pct) if price else "—",
             })
         pos_rows.sort(key=lambda r: -r["_pnl_raw"])
+        # cash as rows of the same table so the one CSV export carries the whole port
+        for a in cash:
+            _cash_thb = a["amount"] * rate if a["currency"] == "USD" else a["amount"]
+            pos_rows.append({
+                "_pnl_raw": None, "Type": "Cash",
+                "Ticker":   f"💵 Cash — {a['name']}" + (f" ({money(a['amount'], '$', 2)})" if a["currency"] == "USD" else ""),
+                "Account":  a["name"],
+                "Market Price": None, "Avg Price": None, "Shares": None, "Cost": None,
+                "Mkt Value": fmt_money(_cash_thb, disp, rate, sign=False),
+                _pc_col: None, "P&L %": None,
+            })
 
         def _col_pnl_ov(val):
             if isinstance(val, str) and val.startswith("+"): return "color:#3DBE7F;font-weight:600"
@@ -1901,7 +1925,9 @@ def page_overview(trades: list, investments: list, cash: list, disp: str, rate: 
                 styled_ov = df_ov.style.map(_col_pnl_ov, subset=_pnl_sub).hide(axis="index") if _pnl_sub else df_ov.style.hide(axis="index")
             except AttributeError:
                 styled_ov = df_ov.style.applymap(_col_pnl_ov, subset=_pnl_sub).hide(axis="index") if _pnl_sub else df_ov.style.hide(axis="index")
+            styled_ov = styled_ov.format(na_rep="")  # cash rows: blank, not the text "None"
             show_df('Portfolio Snapshot', 'portfolio_snapshot', styled_ov, use_container_width=True, hide_index=True)
+        _ai_copy(df_ov, "Portfolio Snapshot", ", ".join(ov_filter))
 
     # -- Recent Activity --
     recent_events = build_activity_log(investments, trades, cash)
@@ -2236,6 +2262,7 @@ def page_investment(investments: list, trades: list, cash: list, disp: str, rate
                     "Action":   action,
                 })
             show_df('Rebalance — Current vs Target', 'rebalance', rebal_rows, use_container_width=True, hide_index=True)
+            _ai_copy(rebal_rows, "Rebalance — Current vs Target", ", ".join(acct_filter))
 
             no_target = [r["inv"]["ticker"] for r in raw if r["inv"].get("target_pct") is None]
 
@@ -2279,7 +2306,7 @@ def page_investment(investments: list, trades: list, cash: list, disp: str, rate
             total_pnl_pct_row = total_pnl_disp / (total_mv - total_pnl_disp) * 100 if (total_mv - total_pnl_disp) else 0
             rows.append({
                 "#":             "—",
-                "Ticker":        "TOTAL",
+                "Ticker":        "รวมหุ้น" if filtered_cash else "TOTAL",
                 "Shares":        "—",
                 "Avg Cost":      "—",
                 "Total Cost":    money(total_cost_disp, sym_p),
@@ -2290,6 +2317,18 @@ def page_investment(investments: list, trades: list, cash: list, disp: str, rate
                 f"P&L ({sym})":  fmt_money(sum(r["pnl_thb"] for r in raw if r.get("price")), disp, rate),
                 "Thesis":        "—",
             })
+            # cash of the filtered accounts, below the stock total, so the one CSV
+            # export carries holdings + cash; the stock TOTAL above keeps its meaning
+            _blank = {c: None for c in rows[0]}
+            for a in filtered_cash:
+                _cash_thb = a["amount"] * rate if a["currency"] == "USD" else a["amount"]
+                rows.append({**_blank,
+                    "Ticker":       f"💵 Cash — {a['name']}" + (f" ({money(a['amount'], '$', 2)})" if a["currency"] == "USD" else ""),
+                    "Market Value": fmt_money(_cash_thb, disp, rate, sign=False)})
+            if filtered_cash:
+                rows.append({**_blank,
+                    "Ticker":       "รวมทั้งหมด (รวม Cash)",
+                    "Market Value": money(total_mv + to_display(cash_total_thb, disp, rate), sym_p)})
 
             pnl_cols = ["P&L %", f"P&L ({sym})"]
 
@@ -2301,7 +2340,7 @@ def page_investment(investments: list, trades: list, cash: list, disp: str, rate
                 return ""
 
             def _style_total(row):
-                if row["Ticker"] == "TOTAL":
+                if row["Ticker"] in ("TOTAL", "รวมหุ้น", "รวมทั้งหมด (รวม Cash)"):
                     return ["background-color: rgba(217,164,65,0.12); font-weight: 700"] * len(row)
                 return [""] * len(row)
 
@@ -2316,6 +2355,7 @@ def page_investment(investments: list, trades: list, cash: list, disp: str, rate
                           .applymap(_color_pnl, subset=pnl_cols)
                           .apply(_style_total, axis=1)
                           .hide(axis="index"))
+            styled = styled.format(na_rep="")  # cash rows: blank, not the text "None"
             # Tick a row, then act on it from the toolbar above the table: the actions are
             # always in view (greyed out until something is ticked), and each one opens
             # its form directly instead of row → popup → button → form.
@@ -2323,6 +2363,7 @@ def page_investment(investments: list, trades: list, cash: list, disp: str, rate
             _ev = show_df('Current Holdings', 'holdings', styled, use_container_width=True, hide_index=True,
                                on_select="rerun", selection_mode="single-row", key="inv_hold_tbl",
                                height=(len(rows) + 1) * 35 + 3)
+            _ai_copy(df_inv, "Current Holdings", ", ".join(acct_filter))
 
             # The selected row opens as a popup over the page, where the eye already is,
             # rather than a panel below a long table. It opens once per new selection:
@@ -2740,6 +2781,7 @@ def page_trade(trades: list, cash: list, disp: str, rate: float):
                           .apply(_style_total_t, axis=1)
                           .hide(axis="index"))
         show_df('Open Trades', 'open_trades', _styled_tr, use_container_width=True, hide_index=True)
+        _ai_copy(_df_tr, "Open Trades")
 
         st.markdown("<div style='height:0.5rem'></div>", unsafe_allow_html=True)
 
@@ -3316,7 +3358,7 @@ def page_trade(trades: list, cash: list, disp: str, rate: float):
                 f"<td style='{td};text-align:right;color:{c};font-weight:700'>{_h(fmt_money(r['pnl'], disp, rate))}</td>"
                 "</tr>")
         out.append("</tbody></table></div>")
-        table_tools(pd.DataFrame([{
+        _pp_df = pd.DataFrame([{
             "วันที่ขาย": r["date"], "Ticker": r["t"].get("ticker", "—"),
             "Strategy": r["t"].get("strategy") or "—",
             "ถือ (วัน)": "" if r["days"] is None else r["days"],
@@ -3324,8 +3366,10 @@ def page_trade(trades: list, cash: list, disp: str, rate: float):
             "Return": ((fmt_pct(r["pct"]) + (" ROE" if r["lev"] > 1 else "")) if r["pct"] is not None else "—"),
             "P&L": fmt_money(r["pnl"], disp, rate),
             "สถานะ": "ยังถืออยู่" if r["open"] else "ปิดแล้ว",
-        } for r in _perf]), "Past Performance", "past_performance")
+        } for r in _perf])
+        table_tools(_pp_df, "Past Performance", "past_performance")
         st.markdown("".join(out), unsafe_allow_html=True)
+        _ai_copy(_pp_df, "Past Performance")
         if n_pages > 1:
             p1, p2, p3 = st.columns([1, 2, 1])
             if p1.button("← ก่อนหน้า", key="pp_prev", disabled=pg <= 1, use_container_width=True):
@@ -3342,6 +3386,7 @@ def page_trade(trades: list, cash: list, disp: str, rate: float):
         with st.expander(f"Closed Trades — ทุกครั้งที่ขาย ({len(_sale_rows)})"
                          + (f" · ขายบางส่วน {_n_trim}" if _n_trim else "")):
             show_df('Closed Trades — ทุกครั้งที่ขาย', 'closed_trades', pd.DataFrame(_sale_rows), use_container_width=True, hide_index=True)
+        _ai_copy(_sale_rows, "Closed Trades — ทุกครั้งที่ขาย")
 
     _journal = [t for t in trades if t.get("status") == "closed" or t.get("sell_history")]
     if _journal:
@@ -3718,7 +3763,7 @@ def page_cash(trades: list, investments: list, cash: list, disp: str, rate: floa
             section(f"ประวัติเงินเข้า-ออก ({len(flows_io)})")
             def _amt(v, ccy, sign=""):
                 return "—" if v is None else sign + money(v, "$" if ccy == "USD" else "฿", 2)
-            show_df('ประวัติเงินเข้า-ออก', 'cash_in_out', [{
+            _io_rows = [{
                 "วันที่":     f["date"],
                 "ประเภท":     {"in": "เติม", "out": "ถอน", "move": "ย้าย"}[f["_kind"]],
                 "บัญชี":      (f"{f['account']} → {f['to']}" if f["_kind"] == "move" else f["account"]),
@@ -3730,7 +3775,9 @@ def page_cash(trades: list, investments: list, cash: list, disp: str, rate: floa
                 "นำเข้าไทย":  ("—" if f["_kind"] == "in" or f["currency"] == "THB"
                                else ("ใช่" if f["remitted"] else "ไม่")),
                 "บันทึก":     f["note"] or "—",
-            } for f in flows_io], use_container_width=True, hide_index=True)
+            } for f in flows_io]
+            show_df('ประวัติเงินเข้า-ออก', 'cash_in_out', _io_rows, use_container_width=True, hide_index=True)
+            _ai_copy(_io_rows, "ประวัติเงินเข้า-ออก")
 
     st.markdown("<div style='height:0.5rem'></div>", unsafe_allow_html=True)
 
@@ -3814,6 +3861,7 @@ def page_cash(trades: list, investments: list, cash: list, disp: str, rate: floa
     if flows:
         flows.sort(key=lambda x: x["วันที่"], reverse=True)
         show_df('Cash Flow History', 'cash_flow', flows, use_container_width=True, hide_index=True)
+        _ai_copy(flows, "Cash Flow History")
     else:
         st.caption("ยังไม่มีรายการ")
 
@@ -3850,6 +3898,7 @@ def page_log(trades: list, investments: list, cash: list, disp: str, rate: float
         st.caption(f"{len(shown)} รายการ")
         if shown:
             show_df('Activity Log', 'activity_log', shown, use_container_width=True, hide_index=True)
+            _ai_copy(shown, "Activity Log", f"ปี {yr_pick} · เดือน {mo_pick} · ประเภท {ty_pick}")
         else:
             st.info("ไม่มีรายการในช่วงที่เลือก")
 
@@ -3925,6 +3974,7 @@ def page_log(trades: list, investments: list, cash: list, disp: str, rate: float
         st.caption("บันทึกรายการ ไม่ใช่การคำนวณภาษี — ยืนยันกับนักบัญชีก่อนยื่น")
         return
     show_df(f'สรุปภาษี {pick} — รายการขาย', f'tax_{pick}', tax_tbl, use_container_width=True, hide_index=True)
+    _ai_copy(tax_tbl, f"สรุปภาษี {pick} — รายการขาย")
     if any(e["fx_rate"] is None for e in yr_rows):
         st.caption("⚠️ เรต “—” = ใช้เรตปัจจุบัน ไม่ใช่เรตวันขาย")
     st.caption("บันทึกรายการ ไม่ใช่การคำนวณภาษี — ยืนยันกับนักบัญชีก่อนยื่น")
