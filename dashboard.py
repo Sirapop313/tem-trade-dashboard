@@ -186,7 +186,7 @@ st.markdown("""<style>
 [data-testid="stMain"] [data-testid="stButton"] button:disabled { opacity: .45; }
 
 /* Dataframes, alerts, captions, dividers */
-[data-testid="stDataFrame"] { border: 1px solid var(--it-border) !important; border-radius: 8px !important; overflow: hidden; }
+[data-testid="stDataFrame"] { border: 1px solid var(--it-border) !important; border-radius: 8px !important; }
 [data-testid="stAlert"] { border-radius: 8px !important; }
 [data-testid="stCaptionContainer"], [data-testid="stCaptionContainer"] p { color: var(--it-muted) !important; }
 [data-baseweb="tag"] {
@@ -1009,6 +1009,43 @@ try:
         _ALLOC_HTML = _f.read()
 except OSError:
     _ALLOC_HTML = "<p style='color:#8B9196'>alloc_component.html missing</p>"
+
+
+try:
+    with open(os.path.join(DIR, "table_tools.html"), encoding="utf-8") as _f:
+        _TABLE_TOOLS_HTML = _f.read()
+except OSError:
+    _TABLE_TOOLS_HTML = ""
+
+
+def _cell(v) -> str:
+    if v is None or (isinstance(v, float) and not math.isfinite(v)):
+        return ""
+    return str(v)
+
+
+def table_tools(df, title: str, file: str) -> None:
+    """Expand / save-as-image / CSV for one table. Runs in the browser (no rerun);
+    the image and expanded view include every row, not just what is on screen."""
+    if not _TABLE_TOOLS_HTML or df is None or len(df) == 0:
+        return
+    data = {"title": title, "file": f"timfin_{file}_{date.today()}",
+            "cols": [str(c) for c in df.columns],
+            "rows": [[_cell(v) for v in r] for r in df.itertuples(index=False, name=None)]}
+    payload = json.dumps(data, ensure_ascii=False).replace("</", "<\\/")
+    _components.html(_TABLE_TOOLS_HTML.replace("__DATA__", payload), height=36)
+
+
+def show_df(title: str, file: str, data, *args, **kwargs):
+    """st.dataframe with the table tools bar above it — every table in the app."""
+    if hasattr(data, "data") and hasattr(data, "to_html"):        # pandas Styler
+        df = data.data
+    elif isinstance(data, pd.DataFrame):
+        df = data
+    else:
+        df = pd.DataFrame(data)
+    table_tools(df, title, file)
+    return st.dataframe(data, *args, **kwargs)
 
 
 def allocation_panel(labels, vals_thb, pcts, disp, rate, key: str) -> None:
@@ -1864,7 +1901,7 @@ def page_overview(trades: list, investments: list, cash: list, disp: str, rate: 
                 styled_ov = df_ov.style.map(_col_pnl_ov, subset=_pnl_sub).hide(axis="index") if _pnl_sub else df_ov.style.hide(axis="index")
             except AttributeError:
                 styled_ov = df_ov.style.applymap(_col_pnl_ov, subset=_pnl_sub).hide(axis="index") if _pnl_sub else df_ov.style.hide(axis="index")
-            st.dataframe(styled_ov, use_container_width=True, hide_index=True)
+            show_df('Portfolio Snapshot', 'portfolio_snapshot', styled_ov, use_container_width=True, hide_index=True)
 
     # -- Recent Activity --
     recent_events = build_activity_log(investments, trades, cash)
@@ -2198,7 +2235,7 @@ def page_investment(investments: list, trades: list, cash: list, disp: str, rate
                     "Δ":        f"{'+' if delta >= 0 else ''}{delta:.1f}%",
                     "Action":   action,
                 })
-            st.dataframe(rebal_rows, use_container_width=True, hide_index=True)
+            show_df('Rebalance — Current vs Target', 'rebalance', rebal_rows, use_container_width=True, hide_index=True)
 
             no_target = [r["inv"]["ticker"] for r in raw if r["inv"].get("target_pct") is None]
 
@@ -2283,7 +2320,7 @@ def page_investment(investments: list, trades: list, cash: list, disp: str, rate
             # always in view (greyed out until something is ticked), and each one opens
             # its form directly instead of row → popup → button → form.
             _toolbar = st.container(key="inv_toolbar")
-            _ev = st.dataframe(styled, use_container_width=True, hide_index=True,
+            _ev = show_df('Current Holdings', 'holdings', styled, use_container_width=True, hide_index=True,
                                on_select="rerun", selection_mode="single-row", key="inv_hold_tbl",
                                height=(len(rows) + 1) * 35 + 3)
 
@@ -2509,7 +2546,7 @@ def page_investment(investments: list, trades: list, cash: list, disp: str, rate
     # -- Closed --
     if closed_inv:
         section(f"Closed ({len(closed_inv)})")
-        st.dataframe([{
+        show_df('Investment ที่ปิดแล้ว', 'investments_closed', [{
             "Ticker": i.get("ticker","—"), "Entry": i.get("entry_price","—"),
             "Exit":   i.get("exit_price","—"), "P&L %": fmt_pct(i.get("pnl_pct")),
             f"P&L ({sym})": fmt_money(i.get("pnl_thb"), disp, rate),
@@ -2702,7 +2739,7 @@ def page_trade(trades: list, cash: list, disp: str, rate: float):
                           .applymap(_color_pnl_t, subset=_pnl_cols_t)
                           .apply(_style_total_t, axis=1)
                           .hide(axis="index"))
-        st.dataframe(_styled_tr, use_container_width=True, hide_index=True)
+        show_df('Open Trades', 'open_trades', _styled_tr, use_container_width=True, hide_index=True)
 
         st.markdown("<div style='height:0.5rem'></div>", unsafe_allow_html=True)
 
@@ -2795,7 +2832,7 @@ def page_trade(trades: list, cash: list, disp: str, rate: float):
                     _rpnl = sum(x.get("pnl_thb") or 0 for x in _trims)
                     st.markdown(f"**ขายไปแล้วบางส่วน** · {_sold:,.10g} shares · "
                                 f"กำไรที่ realize แล้ว {fmt_money(_rpnl, disp, rate)}")
-                    st.dataframe([{
+                    show_df(f"ขายบางส่วน — {t.get('ticker','')}", f"trims_{t.get('ticker','')}", [{
                         "วันที่":       x.get("date", "—"),
                         "จำนวน":       f"{parse(x.get('shares')) or 0:,.10g}",
                         "ราคาขาย":     x.get("price", "—"),
@@ -3279,6 +3316,15 @@ def page_trade(trades: list, cash: list, disp: str, rate: float):
                 f"<td style='{td};text-align:right;color:{c};font-weight:700'>{_h(fmt_money(r['pnl'], disp, rate))}</td>"
                 "</tr>")
         out.append("</tbody></table></div>")
+        table_tools(pd.DataFrame([{
+            "วันที่ขาย": r["date"], "Ticker": r["t"].get("ticker", "—"),
+            "Strategy": r["t"].get("strategy") or "—",
+            "ถือ (วัน)": "" if r["days"] is None else r["days"],
+            "Size": fmt_money(r["cost"], disp, rate, sign=False) if r["cost"] else "—",
+            "Return": ((fmt_pct(r["pct"]) + (" ROE" if r["lev"] > 1 else "")) if r["pct"] is not None else "—"),
+            "P&L": fmt_money(r["pnl"], disp, rate),
+            "สถานะ": "ยังถืออยู่" if r["open"] else "ปิดแล้ว",
+        } for r in _perf]), "Past Performance", "past_performance")
         st.markdown("".join(out), unsafe_allow_html=True)
         if n_pages > 1:
             p1, p2, p3 = st.columns([1, 2, 1])
@@ -3295,7 +3341,7 @@ def page_trade(trades: list, cash: list, disp: str, rate: float):
         st.markdown("<div style='height:0.5rem'></div>", unsafe_allow_html=True)
         with st.expander(f"Closed Trades — ทุกครั้งที่ขาย ({len(_sale_rows)})"
                          + (f" · ขายบางส่วน {_n_trim}" if _n_trim else "")):
-            st.dataframe(pd.DataFrame(_sale_rows), use_container_width=True, hide_index=True)
+            show_df('Closed Trades — ทุกครั้งที่ขาย', 'closed_trades', pd.DataFrame(_sale_rows), use_container_width=True, hide_index=True)
 
     _journal = [t for t in trades if t.get("status") == "closed" or t.get("sell_history")]
     if _journal:
@@ -3672,7 +3718,7 @@ def page_cash(trades: list, investments: list, cash: list, disp: str, rate: floa
             section(f"ประวัติเงินเข้า-ออก ({len(flows_io)})")
             def _amt(v, ccy, sign=""):
                 return "—" if v is None else sign + money(v, "$" if ccy == "USD" else "฿", 2)
-            st.dataframe([{
+            show_df('ประวัติเงินเข้า-ออก', 'cash_in_out', [{
                 "วันที่":     f["date"],
                 "ประเภท":     {"in": "เติม", "out": "ถอน", "move": "ย้าย"}[f["_kind"]],
                 "บัญชี":      (f"{f['account']} → {f['to']}" if f["_kind"] == "move" else f["account"]),
@@ -3767,7 +3813,7 @@ def page_cash(trades: list, investments: list, cash: list, disp: str, rate: floa
 
     if flows:
         flows.sort(key=lambda x: x["วันที่"], reverse=True)
-        st.dataframe(flows, use_container_width=True, hide_index=True)
+        show_df('Cash Flow History', 'cash_flow', flows, use_container_width=True, hide_index=True)
     else:
         st.caption("ยังไม่มีรายการ")
 
@@ -3803,12 +3849,7 @@ def page_log(trades: list, investments: list, cash: list, disp: str, rate: float
 
         st.caption(f"{len(shown)} รายการ")
         if shown:
-            st.dataframe(shown, use_container_width=True, hide_index=True)
-            st.download_button(
-                "Export CSV", key="dl_activity",
-                data=pd.DataFrame(shown).to_csv(index=False).encode("utf-8-sig"),
-                file_name=f"timfin_activity_{date.today()}.csv", mime="text/csv",
-            )
+            show_df('Activity Log', 'activity_log', shown, use_container_width=True, hide_index=True)
         else:
             st.info("ไม่มีรายการในช่วงที่เลือก")
 
@@ -3870,7 +3911,7 @@ def page_log(trades: list, investments: list, cash: list, disp: str, rate: float
     if _yr_remits:
         st.markdown(f"<div class='section-label' style='margin-top:1rem'>นำเงินเข้าไทย {pick} ({len(_yr_remits)})</div>",
                     unsafe_allow_html=True)
-        st.dataframe([{
+        show_df(f'นำเงินเข้าไทย {pick}', f'remittance_{pick}', [{
             "วันที่":   r["date"],
             "จาก":     r["account"],
             "ไป":      r.get("to", "ถอนออก"),
@@ -3879,25 +3920,11 @@ def page_log(trades: list, investments: list, cash: list, disp: str, rate: float
             "เรต":     f"{r['fx_rate']:.4f}" if r["fx_rate"] else "—",
             "บันทึก":  r["note"] or "—",
         } for r in _yr_remits], use_container_width=True, hide_index=True)
-        st.download_button(
-            "Export CSV นำเงินเข้าไทย", key="dl_remit",
-            data=pd.DataFrame([{
-                "date": r["date"], "from": r["account"], "to": r.get("to", "cash out"),
-                "amount": r["amount"], "currency": r["currency"],
-                "amount_thb": r["amount_thb"], "fx_rate": r["fx_rate"], "note": r["note"],
-            } for r in _yr_remits]).to_csv(index=False).encode("utf-8-sig"),
-            file_name=f"timfin_remittance_{pick}.csv", mime="text/csv",
-        )
 
     if not yr_rows:
         st.caption("บันทึกรายการ ไม่ใช่การคำนวณภาษี — ยืนยันกับนักบัญชีก่อนยื่น")
         return
-    st.dataframe(tax_tbl, use_container_width=True, hide_index=True)
-    st.download_button(
-        "Export CSV สำหรับยื่นภาษี", key="dl_tax",
-        data=pd.DataFrame(tax_tbl).to_csv(index=False).encode("utf-8-sig"),
-        file_name=f"timfin_tax_{pick}.csv", mime="text/csv",
-    )
+    show_df(f'สรุปภาษี {pick} — รายการขาย', f'tax_{pick}', tax_tbl, use_container_width=True, hide_index=True)
     if any(e["fx_rate"] is None for e in yr_rows):
         st.caption("⚠️ เรต “—” = ใช้เรตปัจจุบัน ไม่ใช่เรตวันขาย")
     st.caption("บันทึกรายการ ไม่ใช่การคำนวณภาษี — ยืนยันกับนักบัญชีก่อนยื่น")
