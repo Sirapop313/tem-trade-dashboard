@@ -1990,7 +1990,10 @@ def page_overview(trades: list, investments: list, cash: list, disp: str, rate: 
                 if a["currency"] == "USD":
                     part += f" (≈{money(val_c)})"
                 cash_parts.append(part)
-            st.markdown("<small>Cash · " + "  ·  ".join(cash_parts) + "</small>", unsafe_allow_html=True)
+            # escape "$": two of them in one line are read as a LaTeX formula, which
+            # turned everything between them into green monospace with raw ** marks
+            st.markdown(("<small>Cash · " + "  ·  ".join(cash_parts) + "</small>").replace("$", "\\$"),
+                        unsafe_allow_html=True)
 
     # -- Portfolio Snapshot --
     if open_inv or open_trades or cash:
@@ -2051,11 +2054,11 @@ def page_overview(trades: list, investments: list, cash: list, disp: str, rate: 
             _cash_thb = a["amount"] * rate if a["currency"] == "USD" else a["amount"]
             pos_rows.append({
                 "_pnl_raw": None, "Type": "Cash",
-                "Ticker":   f"💵 Cash — {a['name']}" + (f" ({money(a['amount'], '$', 2)})" if a["currency"] == "USD" else ""),
+                "Ticker":   f"Cash — {a['name']}" + (f" ({money(a['amount'], '$', 2)})" if a["currency"] == "USD" else ""),
                 "Account":  a["name"],
-                "Market Price": None, "Avg Price": None, "Shares": None, "Cost": None,
+                "Market Price": "—", "Avg Price": "—", "Shares": "—", "Cost": "—",
                 "Mkt Value": fmt_money(_cash_thb, disp, rate, sign=False),
-                _pc_col: None, "P&L %": None,
+                _pc_col: "—", "P&L %": "—",
             })
 
         def _col_pnl_ov(val):
@@ -2465,11 +2468,11 @@ def page_investment(investments: list, trades: list, cash: list, disp: str, rate
             })
             # cash of the filtered accounts, below the stock total, so the one CSV
             # export carries holdings + cash; the stock TOTAL above keeps its meaning
-            _blank = {c: None for c in rows[0]}
+            _blank = {c: "—" for c in rows[0]}
             for a in filtered_cash:
                 _cash_thb = a["amount"] * rate if a["currency"] == "USD" else a["amount"]
                 rows.append({**_blank,
-                    "Ticker":       f"💵 Cash — {a['name']}" + (f" ({money(a['amount'], '$', 2)})" if a["currency"] == "USD" else ""),
+                    "Ticker":       f"Cash — {a['name']}" + (f" ({money(a['amount'], '$', 2)})" if a["currency"] == "USD" else ""),
                     "Market Value": fmt_money(_cash_thb, disp, rate, sign=False)})
             if filtered_cash:
                 rows.append({**_blank,
