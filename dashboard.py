@@ -1061,6 +1061,147 @@ def _ai_copy(data, title: str, filt: str = "") -> None:
         st.code(head + "\n" + df.to_csv(index=False), language=None)
 
 
+def build_portfolio_snapshot(trades: list, investments: list, cash: list, rate: float) -> str:
+    """The whole portfolio as one Markdown document for an AI chat: summary, cash,
+    holdings, open trades, every realized sale, and money in/out.
+
+    Always the full portfolio (no account filter) and always in THB with the rate
+    stated, so the numbers stand on their own outside the app. Uses the same
+    helpers as the pages, so totals match what is on screen."""
+    def b(v):                       # THB, plain, never masked
+        return "—" if v is None else f"{v:,.0f}"
+    def pc(v):
+        return "—" if v is None else f"{v:+.2f}%"
+    def cell(v):
+        return str("—" if v in (None, "") else v).replace("|", "/").replace("\n", " ")
+    def table(cols, rows):
+        if not rows:
+            return "_ไม่มี_\n"
+        out = ["| " + " | ".join(cols) + " |", "|" + "---|" * len(cols)]
+        out += ["| " + " | ".join(cell(x) for x in r) + " |" for r in rows]
+        return "\n".join(out) + "\n"
+
+    now = datetime.now(ZoneInfo("Asia/Bangkok")).strftime("%Y-%m-%d %H:%M")
+    open_inv = [i for i in investments if i.get("status") == "open"]
+    open_tr  = [t for t in trades if t.get("status") == "open"]
+
+    cash_rows, cash_thb = [], 0.0
+    for a in cash:
+        thb = a["amount"] * rate if a["currency"] == "USD" else a["amount"]
+        cash_thb += thb
+        cash_rows.append([a["name"], a["currency"], f"{a['amount']:,.2f}", b(thb)])
+
+    inv_rows, inv_val, inv_cost = [], 0.0, 0.0
+    for i in open_inv:
+        px = get_inv_price(i)
+        cost = calc_position_thb(i.get("entry_price"), get_shares(i), get_currency(i), rate) or 0
+        val  = calc_position_thb(str(px) if px else i.get("entry_price"), get_shares(i), get_currency(i), rate) or 0
+        inv_val += val; inv_cost += cost
+        inv_rows.append([i.get("ticker"), get_shares(i), i.get("entry_price"),
+                         f"{px:,.2f}" if px else "—", get_currency(i), b(cost), b(val),
+                         b(val - cost) if px else "—", pc(calc_pnl_pct(i.get("entry_price"), px)) if px else "—",
+                         None, f"{i['target_pct']:g}%" if i.get("target_pct") is not None else None,
+                         i.get("source_account_name"),
+                         i.get("entry_date"), i.get("thesis")])
+    for r in inv_rows:
+        v = parse(str(r[6]).replace(",", ""))
+        r[9] = f"{v / inv_val * 100:.1f}%" if inv_val and v is not None else "—"
+
+    tr_rows, tr_val, tr_pnl = [], 0.0, 0.0
+    for t in open_tr:
+        px = get_price(t.get("ticker", ""))
+        lev = trade_leverage(t)
+        val = position_value_thb(t, px, rate)
+        pnl = calc_pnl_thb(t.get("entry_price"), px, get_shares(t), get_currency(t), rate,
+                           t.get("direction", "Long")) if px else None
+        pct = calc_pnl_pct(t.get("entry_price"), px, t.get("direction", "Long")) if px else None
+        tr_val += val; tr_pnl += pnl or 0
+        tr_rows.append([t.get("ticker"), t.get("direction", "Long"), f"{lev:g}x", get_shares(t),
+                        t.get("entry_price"), f"{px:,.2f}" if px else "—", t.get("stop_loss"),
+                        t.get("take_profit"), b(val), b(pnl), pc(pct * lev if pct is not None else None),
+                        t.get("strategy"), t.get("open_date"), t.get("thesis")])
+
+    real = sorted(build_realized_events(investments, trades), key=lambda e: e["sell_date"])
+    real_rows = [[e["sell_date"], e["kind"] + (" (บางส่วน)" if e["partial"] else ""), e["ticker"],
+                  e["entry_date"], e["entry_price"], e["sell_price"], e["shares"], e["currency"],
+                  b(e["pnl_thb"])] for e in real]
+    by_year: dict = {}
+    for e in real:
+        y = by_year.setdefault(e["sell_date"][:4], {"Trade": 0.0, "Invest": 0.0, "n": 0})
+        y[e["kind"]] += e["pnl_thb"] or 0
+        y["n"] += 1
+    year_rows = [[y, v["n"], b(v["Trade"]), b(v["Invest"]), b(v["Trade"] + v["Invest"])]
+                 for y, v in sorted(by_year.items())]
+    real_trade = sum(e["pnl_thb"] or 0 for e in real if e["kind"] == "Trade")
+    real_inv   = sum(e["pnl_thb"] or 0 for e in real if e["kind"] == "Invest")
+
+    deps, outs, moves = build_deposits(cash), build_cashouts(cash), build_transfers(cash)
+    flow_rows = sorted(
+        [[d["date"], "เติมเงิน", d["account"], f"{d['amount']:,.2f} {d['currency']}", b(d["amount_thb"]), "", d["note"]] for d in deps]
+        + [[c["date"], "ถอนเงิน", c["account"], f"{c['amount']:,.2f} {c['currency']}", b(c["amount_thb"]),
+            "ใช่" if c["remitted"] else "", c["note"]] for c in outs]
+        + [[t["date"], "ย้ายเงิน", f"{t['account']} → {t['to']}",
+            f"{t['amount']:,.2f} {t['currency']} → {t['amount_in']:,.2f} {t['to_currency']}",
+            b(t["amount_thb"]), "ใช่" if t["remitted"] else "", t["note"]] for t in moves],
+        key=lambda r: r[0])
+    remit = (sum(c["amount_thb"] or 0 for c in outs if c["remitted"])
+             + sum(t["amount_thb"] or 0 for t in moves if t["remitted"]))
+
+    total = cash_thb + inv_val + tr_val
+    md = [f"# พอร์ตของฉัน — Tim.fin OS",
+          f"ข้อมูล ณ {now} (เวลาไทย) · ตัวเลขเป็นบาท (THB) · เรต 1 USD = {rate:.2f} บาท · "
+          "ราคาหุ้นจาก yfinance ณ ตอนส่งออก · เป็นบันทึกรายการ ไม่ใช่การคำนวณภาษี",
+          "",
+          "## 1. สรุป",
+          table(["รายการ", "บาท"], [
+              ["มูลค่าพอร์ตทั้งหมด (หุ้น + เทรด + เงินสด)", b(total)],
+              ["เงินสดรวม", b(cash_thb)],
+              ["หุ้นลงทุน — มูลค่าตลาด", b(inv_val)],
+              ["หุ้นลงทุน — ต้นทุน", b(inv_cost)],
+              ["หุ้นลงทุน — กำไร/ขาดทุนที่ยังไม่ขาย", b(inv_val - inv_cost)],
+              ["เทรดที่เปิดอยู่ — มูลค่า (margin + P&L)", b(tr_val)],
+              ["เทรดที่เปิดอยู่ — กำไร/ขาดทุนที่ยังไม่ขาย", b(tr_pnl)],
+              ["กำไร/ขาดทุนที่ขายแล้ว (Realized) รวม", b(real_trade + real_inv)],
+              ["— จากการเทรด", b(real_trade)],
+              ["— จากการลงทุน", b(real_inv)],
+              ["เงินที่เติมเข้าพอร์ต (Deposit) รวม", b(sum(d["amount_thb"] or 0 for d in deps))],
+              ["เงินที่ถอนออกไปใช้ (Cash Out) รวม", b(sum(c["amount_thb"] or 0 for c in outs))],
+              ["นำเงินเข้าไทย (ถอน/ย้ายจากบัญชีต่างสกุล) รวม", b(remit)],
+          ]),
+          "## 2. เงินสดแต่ละบัญชี",
+          table(["บัญชี", "สกุล", "ยอด", "เป็นบาท"], cash_rows),
+          "## 3. หุ้นลงทุนที่ถืออยู่",
+          table(["Ticker", "จำนวน", "ราคาเฉลี่ย", "ราคาปัจจุบัน", "สกุล", "ต้นทุน (฿)", "มูลค่า (฿)",
+                 "กำไร/ขาดทุน (฿)", "%", "สัดส่วนในหุ้น", "เป้า %", "บัญชี", "ซื้อตั้งแต่", "เหตุผลที่ถือ"], inv_rows),
+          "## 4. เทรดที่เปิดอยู่",
+          table(["Ticker", "ทิศ", "Leverage", "จำนวน", "ราคาเข้า", "ราคาปัจจุบัน", "SL", "TP",
+                 "มูลค่า (฿)", "กำไร/ขาดทุน (฿)", "% (ROE ถ้ามี leverage)", "Strategy", "เปิดเมื่อ", "Thesis"], tr_rows),
+          "## 5. กำไร/ขาดทุนที่ขายแล้ว (Realized)",
+          "### รวมรายปี",
+          table(["ปี", "จำนวนครั้งที่ขาย", "เทรด (฿)", "ลงทุน (฿)", "รวม (฿)"], year_rows),
+          "### ทุกรายการ",
+          table(["ขายเมื่อ", "ประเภท", "Ticker", "ซื้อเมื่อ", "ราคาซื้อ", "ราคาขาย", "จำนวน", "สกุล",
+                 "กำไร/ขาดทุน (฿)"], real_rows),
+          "## 6. เงินเข้า-ออกพอร์ต",
+          table(["วันที่", "ประเภท", "บัญชี", "ยอด", "เป็นบาท", "นำเข้าไทย", "บันทึก"], flow_rows),
+          ]
+    return "\n".join(md)
+
+
+@st.dialog("สรุปพอร์ตให้ AI", width="large")
+def _portfolio_snapshot_dialog(trades, investments, cash, rate):
+    if hidden_amounts():
+        # the whole point is real numbers; don't hand out a masked copy by surprise
+        st.info("ตอนนี้ซ่อนยอดเงินอยู่ — กดปุ่มรูปตาบนแถบด้านบนเพื่อแสดงยอดก่อน แล้วเปิดใหม่")
+        return
+    md = build_portfolio_snapshot(trades, investments, cash, rate)
+    st.caption("ทั้งพอร์ต (ไม่ใช้ตัวกรองบัญชี) · เงินสด · หุ้น · เทรด · กำไร/ขาดทุนที่ขายแล้ว · เงินเข้า-ออก")
+    st.download_button("ดาวน์โหลดไฟล์ .md", md.encode("utf-8"), key="dl_snapshot",
+                       file_name=f"timfin_portfolio_{date.today()}.md", mime="text/markdown",
+                       use_container_width=True)
+    st.code(md, language="markdown")
+
+
 def allocation_panel(labels, vals_thb, pcts, disp, rate, key: str) -> None:
     """Pie (default) or treemap of holdings. The pie is a small in-browser component
     (alloc_component.html): clicking a slice or a legend row highlights it in both
@@ -1692,8 +1833,13 @@ def page_overview(trades: list, investments: list, cash: list, disp: str, rate: 
     _all_items   = list(investments) + list(trades)
     _has_unassigned = any(not x.get("source_account_name") for x in _all_items)
     all_acct_names = ([_UNASSIGNED] if _has_unassigned else []) + _named_accts
-    ov_filter = st.multiselect("แสดงพอร์ต", all_acct_names,
-                               placeholder="Overall — แสดงทั้งหมด", key="ov_acct_filter")
+    _of1, _of2 = st.columns([5, 1.3], vertical_alignment="bottom")
+    ov_filter = _of1.multiselect("แสดงพอร์ต", all_acct_names,
+                                 placeholder="Overall — แสดงทั้งหมด", key="ov_acct_filter")
+    # one file with everything (summary, cash, holdings, trades, realized, flows)
+    # for an AI chat — the per-table copies only ever show one slice
+    if _of2.button("สรุปพอร์ตให้ AI", key="btn_snapshot", use_container_width=True):
+        _portfolio_snapshot_dialog(trades, investments, cash, rate)
 
     open_trades   = [t for t in trades      if t.get("status") == "open"]
     closed_trades = [t for t in trades      if t.get("status") == "closed"]
