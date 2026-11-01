@@ -146,7 +146,7 @@ Transfer → ต้นทาง −เงินออก, ปลายทาง 
 
 ---
 
-### Weekly Insight (สร้าง 23–24 ต.ค. — ฟรี 100% · ยังไม่ push / ยังไม่ตั้ง scheduled task)
+### Weekly Insight (สร้าง 23–24 ต.ค. — ฟรี 100% · push แล้ว 1 พ.ย. 2026 · GitHub Action เริ่มรันเสาร์ · ⚠️ Claude scheduled task ยังไม่ตั้ง)
 - **บนสุดของ Overview** (`insight_panel`, `@st.fragment`) — ไม่เพิ่มแท็บ navbar โดยตั้งใจ (fragile zone)
 - การ์ด: หัวข้อ + TL;DR + เลือกสัปดาห์ (8 ฉบับล่าสุด) · "อ่านบทวิเคราะห์เต็ม" · "แล้วพอร์ตเราล่ะ?" (ตาราง 1D / vs MA50/200 / RSI / ห่าง SL-TP คำนวณเอง ไม่ใช้ AI)
 - **Pipeline (ไม่มีค่าใช้จ่าย):**
@@ -258,7 +258,7 @@ streamlit run dashboard.py
 - **อย่า pin `streamlit==` ใน requirements.txt** — Cloud ใช้เวอร์ชันล่าสุด เทสด้วย venv เวอร์ชันล่าสุดแทน
 - **อย่าเขียน CSS อิง `data-baseweb`** — Streamlit ใหม่เปลี่ยนเป็น react-aria แล้ว ใช้ `data-testid` (เช่น `stTextInputRootElement`, `stRadioOption`)
 - **อย่าใส่ `font-family` ให้ `.stApp *`** — ไปทับฟอนต์ไอคอน ลูกศร expander กลายเป็นคำว่า keyboard_arrow_down
-- **อย่าใส่ตัวเลขเป็นข้อความ ("฿86,086") ในตารางที่กดเรียงได้** — st.dataframe เรียงแบบตัวอักษร ฿86k ขึ้นก่อน ฿223k → เก็บตัวเลขดิบใน df แล้ว format ด้วย `Styler.format` (ทำแล้วที่ Current Holdings 1 พ.ย. 2026 · ส่ง `export=rows` ให้ show_df เพื่อ CSV/รูปยังเป็นข้อความที่ซ่อนยอดได้)
+- **อย่าใส่ตัวเลขเป็นข้อความ ("฿86,086") ในตารางที่กดเรียงได้** — st.dataframe เรียงแบบตัวอักษร ฿86k ขึ้นก่อน ฿223k → เก็บตัวเลขดิบใน df แล้ว format ด้วย `Styler.format` (1 พ.ย. 2026: `show_df` แปลงให้อัตโนมัติทุกตาราง ผ่าน `_sortable` — ส่งแถวเป็นข้อความที่แสดงผลเข้าไปได้เลย · แถว TOTAL/Cash ใช้ `pin=n` ให้ไปอยู่ตารางสรุปด้านล่าง ไม่ปนตอนเรียง · pandas 3 ข้อความเป็น dtype `str` ไม่ใช่ `object` อย่าเช็คด้วย `== object`)
 - **อย่า DELETE Supabase table ทั้งหมดโดยไม่ filter** — ต้องใช้ `?user_id=eq.{uid}` มิฉะนั้น delete ไม่ทำงาน (PostgREST requirement)
 
 ---
