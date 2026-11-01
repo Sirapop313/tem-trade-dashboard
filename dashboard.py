@@ -307,10 +307,11 @@ def _inject_navbar(logo_src: str, email: str, curr: str, rate: float,
         f'<div class="tfin-brand">{logo_tag}<span class="tfin-brand-name">Tim.fin OS</span></div>'
         f'<div class="tfin-nav-tabs">'
         f'<button class="tfin-nt on" id="tnt0">Overview</button>'
-        f'<button class="tfin-nt" id="tnt1">Investment</button>'
-        f'<button class="tfin-nt" id="tnt2">Trade</button>'
-        f'<button class="tfin-nt" id="tnt3">Cash</button>'
-        f'<button class="tfin-nt" id="tnt4">Log</button>'
+        f'<button class="tfin-nt" id="tnt1">Insight</button>'
+        f'<button class="tfin-nt" id="tnt2">Investment</button>'
+        f'<button class="tfin-nt" id="tnt3">Trade</button>'
+        f'<button class="tfin-nt" id="tnt4">Cash</button>'
+        f'<button class="tfin-nt" id="tnt5">Log</button>'
         f'</div>'
         f'<div class="tfin-nav-right">'
         f'<span class="tfin-rate">฿{rate_str}/USD</span>'
@@ -377,7 +378,7 @@ def _inject_navbar(logo_src: str, email: str, curr: str, rate: float,
         # currency toggle, privacy toggle and account button end up past the right edge
         # and cannot be tapped. That minimum grows every time a control is added to the
         # bar, so this sits well clear of the measured edge rather than on it. ANY new
-        # control in tfin-nav-right means re-measuring this number. Up to here the 5 tabs
+        # control in tfin-nav-right means re-measuring this number. Up to here the 6 tabs
         # move to a bottom bar and the top row keeps identity + currency + privacy +
         # account. Pure CSS, DOM order untouched, so the navbar's click delegation
         # behaves as it does on desktop.
@@ -1548,8 +1549,9 @@ def build_cashouts(cash: list) -> list:
     """
     out = []
     for acc in cash:
-        for c in acc.get("cashouts", []):
+        for i, c in enumerate(acc.get("cashouts", [])):
             out.append({
+                "_ref":       ("cashouts", acc.get("id"), i),
                 "date":       c.get("date", ""),
                 "account":    acc.get("name", "—"),
                 "currency":   acc.get("currency", "THB"),
@@ -1578,8 +1580,9 @@ def build_deposits(cash: list) -> list:
     """
     out = []
     for acc in cash:
-        for d in acc.get("deposits", []):
+        for i, d in enumerate(acc.get("deposits", [])):
             out.append({
+                "_ref":       ("deposits", acc.get("id"), i),
                 "date":       d.get("date", ""),
                 "account":    acc.get("name", "—"),
                 "currency":   acc.get("currency", "THB"),
@@ -1619,8 +1622,9 @@ def build_transfers(cash: list) -> list:
     """
     out = []
     for acc in cash:
-        for t in acc.get("transfers", []):
+        for i, t in enumerate(acc.get("transfers", [])):
             out.append({
+                "_ref":       ("transfers", acc.get("id"), i),
                 "date":       t.get("date", ""),
                 "account":    acc.get("name", "—"),
                 "to":         next((a.get("name") for a in cash if a.get("id") == t.get("to_id")),
@@ -1639,58 +1643,62 @@ def build_transfers(cash: list) -> list:
     return out
 
 
+OPENING_BUY = "เปิด position"   # buy_history note on the first lot of a new investment
+
 def build_activity_log(investments: list, trades: list, cash: list | None = None) -> list:
     events = []
     for inv in investments:
         ticker = inv.get("ticker","—")
         if inv.get("entry_date"):
-            events.append({"วันที่": inv.get("entry_date",""), "ประเภท": "Invest",
+            events.append({"_ref": ("open", "inv", inv.get("id")), "วันที่": inv.get("entry_date",""), "ประเภท": "Invest",
                 "Action": "ซื้อ", "Ticker": ticker,
                 "รายละเอียด": f"เปิด · {get_shares(inv)} shares @ {inv.get('entry_price','—')}"})
-        for bh in inv.get("buy_history", []):
-            events.append({"วันที่": bh.get("date",""), "ประเภท": "Invest",
+        for i, bh in enumerate(inv.get("buy_history", [])):
+            if bh.get("note") == OPENING_BUY:   # the "ซื้อ" row above already shows it
+                continue
+            events.append({"_ref": ("buy", "inv", inv.get("id"), i), "วันที่": bh.get("date",""), "ประเภท": "Invest",
                 "Action": "ซื้อเพิ่ม", "Ticker": ticker,
                 "รายละเอียด": f"+{bh.get('shares','?')} shares @ {bh.get('price','—')}"})
-        for sh in inv.get("sell_history", []):
+        for i, sh in enumerate(inv.get("sell_history", [])):
             pnl_s = money(sh.get('pnl_thb'))
-            events.append({"วันที่": sh.get("date",""), "ประเภท": "Invest",
+            events.append({"_ref": ("sell", "inv", inv.get("id"), i), "วันที่": sh.get("date",""), "ประเภท": "Invest",
                 "Action": "ขายบางส่วน", "Ticker": ticker,
                 "รายละเอียด": f"-{sh.get('shares','?')} shares @ {sh.get('price','—')} · P&L {pnl_s}"})
         if inv.get("status") == "closed" and inv.get("exit_date"):
-            events.append({"วันที่": inv.get("exit_date",""), "ประเภท": "Invest",
+            events.append({"_ref": ("close", "inv", inv.get("id")), "วันที่": inv.get("exit_date",""), "ประเภท": "Invest",
                 "Action": "ปิด", "Ticker": ticker,
                 "รายละเอียด": f"ปิด @ {inv.get('exit_price','—')} · P&L {fmt_pct(inv.get('pnl_pct'))}"})
     for t in trades:
         ticker = t.get("ticker","—")
         arr = "↑" if t.get("direction") == "Long" else "↓"
         if t.get("open_date"):
-            events.append({"วันที่": t.get("open_date",""), "ประเภท": "Trade",
+            events.append({"_ref": ("open", "trade", t.get("id")), "วันที่": t.get("open_date",""), "ประเภท": "Trade",
                 "Action": "เปิด", "Ticker": f"{ticker} {arr}",
                 "รายละเอียด": f"{get_shares(t)} shares @ {t.get('entry_price','—')} · SL {t.get('stop_loss','—')} · TP {t.get('take_profit','—')}"})
-        for bh in t.get("buy_history", []):
-            events.append({"วันที่": bh.get("date",""), "ประเภท": "Trade",
+        for i, bh in enumerate(t.get("buy_history", [])):
+            events.append({"_ref": ("buy", "trade", t.get("id"), i), "วันที่": bh.get("date",""), "ประเภท": "Trade",
                 "Action": "ซื้อเพิ่ม", "Ticker": f"{ticker} {arr}",
                 "รายละเอียด": f"+{bh.get('shares','?')} shares @ {bh.get('price','—')}"})
-        for sh in t.get("sell_history", []):
+        for i, sh in enumerate(t.get("sell_history", [])):
             pnl_s = money(sh.get('pnl_thb'))
-            events.append({"วันที่": sh.get("date",""), "ประเภท": "Trade",
+            events.append({"_ref": ("sell", "trade", t.get("id"), i), "วันที่": sh.get("date",""), "ประเภท": "Trade",
                 "Action": "ขายบางส่วน", "Ticker": f"{ticker} {arr}",
                 "รายละเอียด": f"-{sh.get('shares','?')} shares @ {sh.get('price','—')} · P&L {pnl_s}"})
         if t.get("status") == "closed" and t.get("close_date"):
-            events.append({"วันที่": t.get("close_date",""), "ประเภท": "Trade",
+            events.append({"_ref": ("close", "trade", t.get("id")), "วันที่": t.get("close_date",""), "ประเภท": "Trade",
                 "Action": "ปิด", "Ticker": f"{ticker} {arr}",
                 "รายละเอียด": f"ปิด @ {t.get('exit_price','—')} · P&L {fmt_pct(t.get('pnl_pct'))} · {t.get('win_loss','')}"})
     # money moving in and out of the portfolio, so the log shows the whole story
     for d in build_deposits(cash or []):
         sym = "$" if d["currency"] == "USD" else "฿"
-        events.append({"วันที่": d["date"], "ประเภท": "Cash",
+        events.append({"_ref": ("cash", *d["_ref"]), "วันที่": d["date"], "ประเภท": "Cash",
             "Action": "เติมเงิน", "Ticker": d["account"],
             "รายละเอียด": f"+{money(d['amount'], sym, 2)}"
                           + (f" (≈{money(d['amount_thb'])})" if d["currency"] != "THB" else "")
                           + (f" · {d['note']}" if d["note"] else "")})
     for c in build_cashouts(cash or []):
         sym = "$" if c["currency"] == "USD" else "฿"
-        events.append({"วันที่": c["date"], "ประเภท": "Cash",
+        events.append({"_ref": ("cash", *c["_ref"]), "วันที่": c["date"], "ประเภท": "Cash",
             "Action": "ถอนเงิน", "Ticker": c["account"],
             "รายละเอียด": f"−{money(c['amount'], sym, 2)}"
                           + (f" (≈{money(c['amount_thb'])})" if c["currency"] != "THB" else "")
@@ -1699,7 +1707,7 @@ def build_activity_log(investments: list, trades: list, cash: list | None = None
     for t in build_transfers(cash or []):
         s_out = "$" if t["currency"] == "USD" else "฿"
         s_in  = "$" if t["to_currency"] == "USD" else "฿"
-        events.append({"วันที่": t["date"], "ประเภท": "Cash",
+        events.append({"_ref": ("cash", *t["_ref"]), "วันที่": t["date"], "ประเภท": "Cash",
             "Action": "ย้ายเงิน", "Ticker": f"{t['account']} → {t['to']}",
             "รายละเอียด": f"{money(t['amount'], s_out, 2)} → {money(t['amount_in'], s_in, 2)}"
                           + (f" · เรต {t['fx_rate']:.4f}" if t["currency"] != t["to_currency"] and t["fx_rate"] else "")
@@ -1766,7 +1774,7 @@ def date_fields(item: dict, open_key: str, key: str) -> tuple:
     """Date boxes for the open date and every ซื้อเพิ่ม row, for edit forms. The Log
     only reads these dates, so a buy entered with the wrong day could never be fixed.
     Changing a date moves no cash — buys deduct an amount, not a dated record."""
-    rows = item.get("buy_history", [])
+    rows = [r for r in item.get("buy_history", []) if r.get("note") != OPENING_BUY]
     cols = st.columns(3)
     opened = cols[0].date_input("วันที่เปิด", value=_as_date(item.get(open_key)), key=f"{key}_open")
     buys = [cols[(i + 1) % 3].date_input(
@@ -1776,9 +1784,13 @@ def date_fields(item: dict, open_key: str, key: str) -> tuple:
     return opened, buys
 
 def apply_date_fields(item: dict, open_key: str, opened, buys: list) -> None:
+    rows = item.get("buy_history", [])
     if opened:
         item[open_key] = str(opened)
-    for r, d in zip(item.get("buy_history", []), buys):
+        for r in rows:
+            if r.get("note") == OPENING_BUY:
+                r["date"] = str(opened)
+    for r, d in zip([r for r in rows if r.get("note") != OPENING_BUY], buys):
         if d:
             r["date"] = str(d)
 
@@ -2010,7 +2022,8 @@ def _position_signals(trades: list, investments: list) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 @st.fragment
-def insight_panel(trades: list, investments: list) -> None:
+def page_insight(trades: list, investments: list) -> None:
+    """Its own tab: on top of the Overview it pushed the portfolio below the fold."""
     section("Weekly Insight")
     insights = load_insights()
     if not insights:
@@ -2027,7 +2040,8 @@ def insight_panel(trades: list, investments: list) -> None:
             st.markdown(_md_safe(tldr))
         st.caption(f"ข้อมูลถึงวันที่ {pick} · เขียนโดย Claude · ไม่ใช่คำแนะนำการลงทุน")
 
-        with st.expander("อ่านบทวิเคราะห์เต็ม"):
+        if rest:
+            st.divider()
             st.markdown(_md_safe(rest))
 
         with st.expander("แล้วพอร์ตเราล่ะ?"):
@@ -2036,14 +2050,11 @@ def insight_panel(trades: list, investments: list) -> None:
                 st.caption("ยังไม่มี position ที่เปิดอยู่")
                 return
             st.dataframe(sig, hide_index=True, use_container_width=True)
-            st.caption("อยากให้ Claude อ่านพอร์ตเทียบกับ insight: กด \"สรุปพอร์ตให้ AI\" ด้านล่าง "
+            st.caption("อยากให้ Claude อ่านพอร์ตเทียบกับ insight: กด \"สรุปพอร์ตให้ AI\" ที่หน้า Overview "
                        "แล้ววางในแชทพร้อม insight สัปดาห์นี้")
 
 
 def page_overview(trades: list, investments: list, cash: list, disp: str, rate: float):
-    # -- Weekly Insight: read the market first, then the portfolio --
-    insight_panel(trades, investments)
-
     # -- Account Filter --
     _UNASSIGNED = "— ไม่ระบุ"
     _named_accts = sorted(set(
@@ -2349,7 +2360,8 @@ def page_investment(investments: list, trades: list, cash: list, disp: str, rate
                             history.append({
                                 "date": str(add_date), "shares": add_shares,
                                 "price": add_price, "thb": round(add_thb, 2),
-                                "note": "ซื้อเพิ่ม"
+                                "note": "ซื้อเพิ่ม",
+                                "account_id": None if is_import else resolved,
                             })
                             existing.update({
                                 "shares":       str(round(s_new, 8)),
@@ -2402,7 +2414,7 @@ def page_investment(investments: list, trades: list, cash: list, disp: str, rate
                             "source_account_id": resolved,
                             "source_account_name": next((a["name"] for a in cash if a["id"] == resolved), ""),
                             "buy_history": [{"date": str(entry_date), "shares": shares,
-                                             "price": entry, "thb": round(pos_thb, 2), "note": "เปิด position"}],
+                                             "price": entry, "thb": round(pos_thb, 2), "note": OPENING_BUY}],
                         }
                         if t_pct_v is not None:
                             new_inv["target_pct"] = t_pct_v
@@ -2758,7 +2770,8 @@ def page_investment(investments: list, trades: list, cash: list, disp: str, rate
                                 cash_deduct(cash, resolved, add_thb, rate)
                                 save_cash(cash)
                                 _bh = inv.get("buy_history", [])
-                                _bh.append({"date": str(add_date), "shares": add_shares, "price": add_price, "note": "ซื้อเพิ่ม"})
+                                _bh.append({"date": str(add_date), "shares": add_shares, "price": add_price,
+                                            "thb": round(add_thb, 2), "note": "ซื้อเพิ่ม", "account_id": resolved})
                                 inv.update({
                                     "shares":       str(round(s_new, 8)),
                                     "entry_price":  str(round(p_avg, 4)),
@@ -3243,7 +3256,8 @@ def page_trade(trades: list, cash: list, disp: str, rate: float):
                                 cash_deduct(cash, resolved, add_margin, rate)
                                 save_cash(cash)
                                 _tbh = t.get("buy_history", [])
-                                _tbh.append({"date": str(add_date), "shares": add_shares, "price": add_price, "note": "ซื้อเพิ่ม"})
+                                _tbh.append({"date": str(add_date), "shares": add_shares, "price": add_price,
+                                             "thb": round(add_thb, 2), "note": "ซื้อเพิ่ม", "account_id": resolved})
                                 t.update({
                                     "shares":      str(round(s_new, 8)),
                                     "entry_price": str(round(p_avg, 4)),
@@ -4183,6 +4197,177 @@ def page_cash(trades: list, investments: list, cash: list, disp: str, rate: floa
         st.caption("ยังไม่มีรายการ")
 
 
+# -- Log: delete one entry, undoing what it did --
+def _to_ccy(amount: float, frm: str, to: str, rate: float) -> float:
+    if frm == to:
+        return amount
+    return amount * rate if frm == "USD" else amount / rate
+
+def _cash_pick(cash: list, default_id, label: str, key: str):
+    """Account selectbox with a "no cash move" option; returns the account or None."""
+    ids = [a["id"] for a in cash] + [None]
+    idx = ids.index(default_id) if default_id in ids else len(ids) - 1
+    pick = st.selectbox(label, ids, index=idx, key=key,
+                        format_func=lambda i: "— ไม่ขยับเงินใน Cash" if i is None
+                        else acc_label(next(a for a in cash if a["id"] == i)))
+    return next((a for a in cash if a["id"] == pick), None)
+
+def _amount_box(acc, default: float, label: str, key: str) -> float | None:
+    if acc is None:
+        return 0.0
+    sym = "$" if acc["currency"] == "USD" else "฿"
+    return parse(st.text_input(f"{label} ({sym})", value=f"{default:.2f}", key=key))
+
+def _done_delete(msg: str):
+    st.session_state.pop("log_tbl", None)
+    st.session_state["log_flash"] = msg
+    st.rerun()
+
+def log_delete_panel(ref: tuple, trades: list, investments: list, cash: list, rate: float):
+    """Undo one Log row. Each kind reverses exactly what its form did: a ซื้อเพิ่ม
+    takes the shares back out of the average and refunds the cash, a partial sale
+    puts the shares back and takes the proceeds out again, a cash row restores
+    the balances. The amount is shown and editable — older rows never recorded
+    which account paid, and a USD account moves at the rate of that day."""
+    key = "logdel_" + "_".join(map(str, ref))
+    with st.container(border=True):
+        if ref[0] == "cash":
+            _, lst, acc_id, i = ref
+            acc = next((a for a in cash if a["id"] == acc_id), None)
+            if acc is None or i >= len(acc.get(lst, [])):
+                st.caption("หารายการนี้ไม่เจอ — อาจถูกลบไปแล้ว")
+                return
+            rec, sym = acc[lst][i], ("$" if acc["currency"] == "USD" else "฿")
+            amt = rec.get("amount") or 0
+            if lst == "deposits":
+                st.markdown(f"ลบ **การเติมเงิน** {money(amt, sym, 2)} ({rec.get('date')}) — ยอด **{acc['name']}** จะลดลง {money(amt, sym, 2)}")
+            elif lst == "cashouts":
+                st.markdown(f"ลบ **การถอนเงิน** {money(amt, sym, 2)} ({rec.get('date')}) — ยอด **{acc['name']}** จะเพิ่มกลับ {money(amt, sym, 2)}")
+            else:
+                dst = next((a for a in cash if a["id"] == rec.get("to_id")), None)
+                s_in = "$" if rec.get("to_currency") == "USD" else "฿"
+                st.markdown(f"ลบ **การย้ายเงิน** ({rec.get('date')}) — **{acc['name']}** ได้คืน {money(amt, sym, 2)}"
+                            + (f" · **{dst['name']}** ลดลง {money(rec.get('amount_in') or 0, s_in, 2)}" if dst
+                               else " · ไม่เจอบัญชีปลายทาง (ไม่หักฝั่งนั้น)"))
+            if st.button("ยืนยันลบ", key=f"sellbtn_{key}"):
+                if lst == "deposits":
+                    acc["amount"] = round(acc["amount"] - amt, 2)
+                elif lst == "cashouts":
+                    acc["amount"] = round(acc["amount"] + amt, 2)
+                else:
+                    acc["amount"] = round(acc["amount"] + amt, 2)
+                    if dst:
+                        dst["amount"] = round(dst["amount"] - (rec.get("amount_in") or 0), 2)
+                acc[lst].pop(i)
+                save_cash(cash)
+                _done_delete("ลบรายการแล้ว · ยอดเงินในบัญชีปรับกลับแล้ว")
+            return
+
+        kind, side, pid = ref[:3]
+        items = investments if side == "inv" else trades
+        pos = next((x for x in items if x.get("id") == pid), None)
+        if pos is None:
+            st.caption("หารายการนี้ไม่เจอ — อาจถูกลบไปแล้ว")
+            return
+        tk = pos.get("ticker", "—")
+
+        def _delete_whole(why: str):
+            st.markdown(why)
+            st.caption("ลบทั้ง position = เหมือนปุ่มลบในหน้า Investment/Trade — ไม่คืนเงินเข้า Cash "
+                       "ถ้าต้องการให้เงินกลับ ให้ปรับยอดที่หน้า Cash เอง")
+            if st.button(f"ลบ {tk} ทั้ง position", key=f"sellbtn_{key}_all"):
+                items[:] = [x for x in items if x.get("id") != pid]
+                (save_investments if side == "inv" else save_trades)(items)
+                _done_delete(f"ลบ {tk} ทั้ง position แล้ว")
+
+        if kind in ("open", "close"):
+            _delete_whole(f"รายการนี้คือการ{'เปิด' if kind == 'open' else 'ปิด'} **{tk}** — ลบได้เฉพาะทั้ง position")
+            return
+        if pos.get("status") == "closed":
+            _delete_whole(f"**{tk}** ปิดไปแล้ว — ลบรายการย่อยไม่ได้ เพราะกำไร/ขาดทุนตอนปิดคิดจากราคาเฉลี่ยชุดนี้ไปแล้ว")
+            return
+
+        i = ref[3]
+        hist = pos.get("buy_history" if kind == "buy" else "sell_history", [])
+        if i >= len(hist):
+            st.caption("หารายการนี้ไม่เจอ — อาจถูกลบไปแล้ว")
+            return
+        rec = hist[i]
+        ccy = get_currency(pos)
+        s_cur, p_cur = parse(get_shares(pos)) or 0, parse(pos.get("entry_price")) or 0
+        s_rec, p_rec = parse(rec.get("shares")) or 0, parse(rec.get("price")) or 0
+        is_trade = side == "trade"
+
+        if kind == "buy":
+            # A sale after this buy was priced off the average that included it, so
+            # taking the lot out now would leave that sale's P&L wrong.
+            if any(str(sh.get("date", "")) >= str(rec.get("date", "")) for sh in pos.get("sell_history", [])):
+                st.markdown(f"ลบ **ซื้อเพิ่ม {tk}** นี้ไม่ได้ — มีการขายหลังจากซื้อครั้งนี้ ซึ่งคิดกำไร/ขาดทุนจากราคาเฉลี่ยที่รวมครั้งนี้ไปแล้ว")
+                st.caption("ลบรายการขายที่อยู่หลังจากนี้ก่อน แล้วค่อยลบรายการนี้")
+                return
+            s_new = s_cur - s_rec
+            if s_new <= 1e-9:
+                _delete_whole(f"ลบครั้งนี้แล้ว **{tk}** จะเหลือ 0 หุ้น — ลบทั้ง position แทน")
+                return
+            p_old = (s_cur * p_cur - s_rec * p_rec) / s_new
+            if p_old <= 0:
+                st.error("คำนวณราคาเฉลี่ยเดิมไม่ได้ (ข้อมูลหุ้น/ราคาไม่ตรงกัน) — แก้ที่ฟอร์ม \"แก้ไข\" แทน")
+                return
+            st.markdown(f"ลบ **ซื้อเพิ่ม {tk}** +{rec.get('shares')} @ {rec.get('price')} ({rec.get('date')})  \n"
+                        f"จำนวน {s_cur:,.10g} → **{s_new:,.10g}** · AVG {p_cur:,.4f} → **{p_old:,.4f}**")
+            cost = s_rec * p_rec / (trade_leverage(pos) if is_trade else 1)   # in the position's currency
+            default_acc = rec["account_id"] if "account_id" in rec else (
+                None if pos.get("is_import") else pos.get("source_account_id"))
+            acc = _cash_pick(cash, default_acc, "คืนเงินเข้าบัญชี", f"{key}_acc")
+            amt = _amount_box(acc, _to_ccy(cost, ccy, acc["currency"], rate) if acc else 0,
+                              "ยอดคืน", f"{key}_amt")
+            if st.button("ยืนยันลบ", key=f"sellbtn_{key}"):
+                if amt is None or amt < 0:
+                    st.error("ใส่ยอดคืนให้ถูกต้อง")
+                    return
+                add_thb = rec.get("thb") or s_rec * p_rec * (rate if ccy == "USD" else 1)
+                pos.update({"shares": str(round(s_new, 8)), "entry_price": str(round(p_old, 4)),
+                            "position_thb": round(max((pos.get("position_thb") or 0) - add_thb, 0), 2)})
+                if is_trade:
+                    pos["rr"] = auto_rr(pos["entry_price"], pos.get("stop_loss", ""), pos.get("take_profit", ""))
+                hist.pop(i)
+                if acc and amt:
+                    acc["amount"] = round(acc["amount"] + amt, 2)
+                    save_cash(cash)
+                (save_investments if side == "inv" else save_trades)(items)
+                _done_delete(f"ลบซื้อเพิ่ม {tk} แล้ว · AVG กลับเป็น {p_old:,.4f}")
+            return
+
+        # partial sale: the shares come back, the average never moved on a sale
+        s_new = s_cur + s_rec
+        st.markdown(f"ลบ **ขายบางส่วน {tk}** −{rec.get('shares')} @ {rec.get('price')} ({rec.get('date')})  \n"
+                    f"จำนวน {s_cur:,.10g} → **{s_new:,.10g}** · AVG คงเดิม {p_cur:,.4f} · "
+                    f"กำไร/ขาดทุนที่ realize {money(rec.get('pnl_thb'))} หายจากสรุปภาษี")
+        got_thb = rec.get("settled_thb", rec.get("thb")) or 0
+        if is_trade:
+            default_acc = next((a["id"] for a in cash if rec.get("settled_to") and a["name"] == rec["settled_to"]), None)
+        else:
+            default_acc = pos.get("source_account_id")
+        acc = _cash_pick(cash, default_acc, "หักเงินที่ได้จากการขายออกจากบัญชี", f"{key}_acc")
+        fx = rec.get("fx_rate") or rate
+        amt = _amount_box(acc, (got_thb / fx if acc and acc["currency"] == "USD" else got_thb),
+                          "ยอดหัก", f"{key}_amt")
+        if st.button("ยืนยันลบ", key=f"sellbtn_{key}"):
+            if amt is None or amt < 0:
+                st.error("ใส่ยอดหักให้ถูกต้อง")
+                return
+            pos.update({"shares": str(round(s_new, 8)),
+                        "position_thb": round((pos.get("position_thb") or 0) * (s_new / s_cur), 2) if s_cur else pos.get("position_thb")})
+            if is_trade:
+                pos["rr"] = auto_rr(pos["entry_price"], pos.get("stop_loss", ""), pos.get("take_profit", ""))
+            hist.pop(i)
+            if acc and amt:
+                acc["amount"] = round(acc["amount"] - amt, 2)
+                save_cash(cash)
+            (save_investments if side == "inv" else save_trades)(items)
+            _done_delete(f"ลบขายบางส่วน {tk} แล้ว · กลับมาถือ {s_new:,.10g}")
+
+
 # -- Page 5: Log --
 def page_log(trades: list, investments: list, cash: list, disp: str, rate: float):
     sym = "฿" if disp == "THB" else "$"
@@ -4212,10 +4397,20 @@ def page_log(trades: list, investments: list, cash: list, disp: str, rate: float
         if ty_pick != "ทั้งหมด":
             shown = [e for e in shown if e.get("ประเภท") == ty_pick]
 
-        st.caption(f"{len(shown)} รายการ")
+        st.caption(f"{len(shown)} รายการ · ติ๊กแถวที่ลงผิดเพื่อลบ")
+        if _flash := st.session_state.pop("log_flash", None):
+            st.success(_flash)
         if shown:
-            show_df('Activity Log', 'activity_log', shown, use_container_width=True, hide_index=True)
-            _ai_copy(shown, "Activity Log", f"ปี {yr_pick} · เดือน {mo_pick} · ประเภท {ty_pick}")
+            _vis = [{k: v for k, v in e.items() if not k.startswith("_")} for e in shown]
+            _lev = show_df('Activity Log', 'activity_log', _vis, use_container_width=True, hide_index=True,
+                           on_select="rerun", selection_mode="single-row", key="log_tbl")
+            _ai_copy(_vis, "Activity Log", f"ปี {yr_pick} · เดือน {mo_pick} · ประเภท {ty_pick}")
+            try:
+                _lsel = list(_lev.selection.rows)
+            except Exception:
+                _lsel = []
+            if _lsel and _lsel[0] < len(shown):
+                log_delete_panel(shown[_lsel[0]]["_ref"], trades, investments, cash, rate)
         else:
             st.info("ไม่มีรายการในช่วงที่เลือก")
 
@@ -4376,12 +4571,14 @@ def main():
     )
 
     # -- Tabs --
-    _tabs = st.tabs(["Overview", "Investment", "Trade", "Cash", "Log"])
+    # order must match the navbar buttons tnt0..tnt5 — they click tabs by position
+    _tabs = st.tabs(["Overview", "Insight", "Investment", "Trade", "Cash", "Log"])
     with _tabs[0]: page_overview(trades, investments, cash, disp, rate)
-    with _tabs[1]: page_investment(investments, trades, cash, disp, rate)
-    with _tabs[2]: page_trade(trades, cash, disp, rate)
-    with _tabs[3]: page_cash(trades, investments, cash, disp, rate)
-    with _tabs[4]: page_log(trades, investments, cash, disp, rate)
+    with _tabs[1]: page_insight(trades, investments)
+    with _tabs[2]: page_investment(investments, trades, cash, disp, rate)
+    with _tabs[3]: page_trade(trades, cash, disp, rate)
+    with _tabs[4]: page_cash(trades, investments, cash, disp, rate)
+    with _tabs[5]: page_log(trades, investments, cash, disp, rate)
 
 
 main()
