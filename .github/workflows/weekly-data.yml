@@ -1,0 +1,30 @@
+name: Weekly market data
+
+on:
+  schedule:
+    # 22:00 UTC Friday = 05:00 Bangkok Saturday, after the US close in both EDT and EST.
+    # The Claude scheduled task runs later Saturday morning and reads what this writes.
+    - cron: "0 22 * * 5"
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  data:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install yfinance pandas requests
+      - run: python insight/market.py
+      - name: Commit snapshot
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add insight/data/
+          git diff --cached --quiet || git commit -m "weekly market data $(ls -t insight/data | head -1)"
+          git push

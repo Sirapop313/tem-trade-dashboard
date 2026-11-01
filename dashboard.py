@@ -937,16 +937,24 @@ def get_inv_price(inv: dict) -> float | None:
     mp = parse(inv.get("manual_price"))
     return mp if mp is not None else get_price(inv.get("ticker", ""))
 
-def days_held_str(entry_date_str: str) -> str:
+def days_held(entry_date_str: str) -> int | None:
     try:
-        d    = date.fromisoformat(str(entry_date_str))
-        days = (date.today() - d).days
-        if days < 0:   return "—"
+        days = (date.today() - date.fromisoformat(str(entry_date_str))).days
+    except Exception:
+        return None
+    return days if days >= 0 else None
+
+def days_held_str(entry_date_str: str) -> str:
+    return fmt_days(days_held(entry_date_str))
+
+def fmt_days(days) -> str:
+    try:
+        days = int(days)
         if days < 30:  return f"{days}d"
         months = days // 30
         if months < 12: return f"{months}m {days % 30}d"
         return f"{months // 12}y {months % 12}m"
-    except Exception:
+    except (TypeError, ValueError):
         return "—"
 
 
@@ -1037,16 +1045,103 @@ def table_tools(df, title: str, file: str) -> None:
     _components.html(_TABLE_TOOLS_HTML.replace("__DATA__", payload), height=36)
 
 
-def show_df(title: str, file: str, data, *args, **kwargs):
-    """st.dataframe with the table tools bar above it — every table in the app."""
-    if hasattr(data, "data") and hasattr(data, "to_html"):        # pandas Styler
-        df = data.data
-    elif isinstance(data, pd.DataFrame):
-        df = data
+_EMPTY = {"", "—", "-"}
+_DURATION = re.compile(r"(?:(\d+)y)?\s*(?:(\d+)m)?\s*(?:(\d+)d)?")
+_GOLD_ROW = "background-color: rgba(217,164,65,0.12); font-weight: 700"
+
+def _sort_key(v) -> float | None:
+    """The number a shown cell stands for — "-฿1,234" → -1234, "+3.37%" → 3.37,
+    "5m 3d" → 153 days — or None when it is not a number."""
+    if isinstance(v, bool):
+        return None
+    if isinstance(v, (int, float)):
+        return float(v) if math.isfinite(v) else None
+    if not isinstance(v, str):
+        return None
+    t = v.strip().replace("−", "-")
+    m = _DURATION.fullmatch(t)
+    if t and m:
+        y, mo, d = (int(g or 0) for g in m.groups())
+        return float(y * 360 + mo * 30 + d)
+    t = re.sub(r"[฿$,+\s]|\(manual\)", "", t).removesuffix("%")
+    try:
+        x = float(t)
+    except ValueError:
+        return None
+    return x if math.isfinite(x) else None
+
+def _pnl_css(v) -> str:
+    if isinstance(v, (int, float)) and math.isfinite(v):
+        up = v >= 0
+    elif isinstance(v, str) and v[:1] in "+-":
+        up = v[0] == "+"
     else:
-        df = pd.DataFrame(data)
+        return ""
+    return "color: #3DBE7F; font-weight: 600" if up else "color: #EF5F55; font-weight: 600"
+
+def _sortable(df: pd.DataFrame, pnl_cols=(), gold: bool = False):
+    """Styler that shows the cells exactly as given but holds the numbers underneath.
+    st.dataframe sorts on the underlying value, so a column of text like "฿86,086"
+    sorted as words — ฿86k above ฿223k. A column becomes numeric only when every
+    cell reads as a number (or one placeholder like "—") and each number has one
+    spelling; anything else (masked amounts, dates, R:R) stays text."""
+    num, shown_by_col = df.copy(), {}
+    for c in df.columns:
+        if pd.api.types.is_numeric_dtype(df[c]):   # text is "object" or, pandas 3, "str"
+            continue
+        shown, keys, blanks = {}, [], set()
+        for v in df[c]:
+            if v is None or (isinstance(v, float) and not math.isfinite(v)) \
+                    or (isinstance(v, str) and v.strip() in _EMPTY):
+                blanks.add(v.strip() if isinstance(v, str) else "")
+                keys.append(None)
+                continue
+            k = _sort_key(v)
+            if k is None or shown.setdefault(k, str(v)) != str(v):
+                break
+            keys.append(k)
+        else:
+            if shown and len(blanks) <= 1:
+                num[c] = pd.Series(keys, index=df.index, dtype="float64")
+                shown_by_col[c] = (shown, blanks.pop() if blanks else "")
+    sty = num.style.hide(axis="index").format(na_rep="")
+    for c in num.columns:
+        if c in shown_by_col:
+            m, na = shown_by_col[c]
+            sty = sty.format(lambda v, m=m: m.get(v, v), subset=[c], na_rep=na)
+        elif pd.api.types.is_float_dtype(num[c]):
+            sty = sty.format("{:.10g}", subset=[c], na_rep="")
+    cols = [c for c in pnl_cols if c in num.columns]
+    if cols:
+        sty = sty.map(_pnl_css, subset=cols)
+    if gold:
+        sty = sty.apply(lambda r: [_GOLD_ROW] * len(r), axis=1)
+    return sty
+
+
+def show_df(title: str, file: str, data, *args, pnl_cols=(), pin: int = 0, **kwargs):
+    """st.dataframe with the table tools bar above it — every table in the app.
+
+    Number columns sort by value (see _sortable). pin: how many rows at the end are
+    totals / cash — they go in a small summary table underneath instead, so sorting
+    the main table never shuffles a TOTAL in among the positions. The tools bar and
+    its CSV / image still carry every row."""
+    if hasattr(data, "data") and hasattr(data, "to_html"):        # pandas Styler
+        table_tools(data.data, title, file)
+        return st.dataframe(data, *args, **kwargs)
+    df = data if isinstance(data, pd.DataFrame) else pd.DataFrame(data)
     table_tools(df, title, file)
-    return st.dataframe(data, *args, **kwargs)
+    if df.empty:
+        return st.dataframe(df, *args, **kwargs)
+    body = df.iloc[:len(df) - pin] if pin else df
+    ev = st.dataframe(_sortable(body, pnl_cols), *args, **kwargs)
+    if pin:
+        tail = df.iloc[len(df) - pin:].reset_index(drop=True)
+        keep = [c for c in tail.columns
+                if not tail[c].map(lambda v: v is None or (isinstance(v, str) and v.strip() in _EMPTY)).all()]
+        st.dataframe(_sortable(tail[keep], pnl_cols, gold=True),
+                     use_container_width=True, hide_index=True)
+    return ev
 
 
 def _ai_copy(data, title: str, filt: str = "") -> None:
@@ -1661,6 +1756,32 @@ def next_id(items: list) -> int:
     # through a save (cash may already have been deducted by then)
     return max((i["id"] for i in items if isinstance(i.get("id"), int)), default=0) + 1
 
+def _as_date(s) -> date | None:
+    try:
+        return date.fromisoformat(str(s or "")[:10])
+    except ValueError:
+        return None
+
+def date_fields(item: dict, open_key: str, key: str) -> tuple:
+    """Date boxes for the open date and every ซื้อเพิ่ม row, for edit forms. The Log
+    only reads these dates, so a buy entered with the wrong day could never be fixed.
+    Changing a date moves no cash — buys deduct an amount, not a dated record."""
+    rows = item.get("buy_history", [])
+    cols = st.columns(3)
+    opened = cols[0].date_input("วันที่เปิด", value=_as_date(item.get(open_key)), key=f"{key}_open")
+    buys = [cols[(i + 1) % 3].date_input(
+                f"ซื้อเพิ่ม +{r.get('shares', '?')} @ {r.get('price', '—')}",
+                value=_as_date(r.get("date")), key=f"{key}_bh{i}")
+            for i, r in enumerate(rows)]
+    return opened, buys
+
+def apply_date_fields(item: dict, open_key: str, opened, buys: list) -> None:
+    if opened:
+        item[open_key] = str(opened)
+    for r, d in zip(item.get("buy_history", []), buys):
+        if d:
+            r["date"] = str(d)
+
 def page_header(title: str, subtitle: str = "") -> tuple[str, float]:
     """Page title (left) + currency toggle (right). Returns (disp, rate)."""
     rate = get_usd_thb()
@@ -1824,7 +1945,105 @@ def render_logout_target(logged_in: bool) -> None:
 
 
 # -- Page 1: Overview --
+# -- Market Insight (weekly .md files written by a Claude scheduled task, read-only here) --
+INSIGHT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "insight", "weekly")
+
+def load_insights(n: int = 8) -> list:
+    """Newest first: [{date, headline, markdown}]. The files ship with the repo, so a
+    new week appears after the scheduled task pushes and Streamlit Cloud redeploys."""
+    try:
+        names = sorted((f for f in os.listdir(INSIGHT_DIR) if f.endswith(".md")), reverse=True)[:n]
+    except OSError:
+        return []
+    out = []
+    for name in names:
+        with open(os.path.join(INSIGHT_DIR, name), encoding="utf-8") as f:
+            md = f.read().strip()
+        first = md.splitlines()[0] if md else ""
+        out.append({"date": name[:-3], "markdown": md,
+                    "headline": first.lstrip("# ").strip() if first.startswith("#") else ""})
+    return out
+
+def _md_safe(text: str) -> str:
+    # st.markdown reads $...$ as LaTeX — "$110 to $120" would render as math
+    return text.replace("$", r"\$")
+
+def _split_insight(md: str) -> tuple[str, str]:
+    """(TL;DR block, everything after it) — the card shows the first, the expander the rest."""
+    body = md.split("\n", 1)[1] if md.startswith("#") else md
+    m = re.search(r"\*\*TL;DR\*\*\s*\n(.*?)(?=\n## |\Z)", body, re.S)
+    if not m:
+        return "", body.strip()
+    return m.group(1).strip(), body[m.end():].strip()
+
+def _position_signals(trades: list, investments: list) -> pd.DataFrame:
+    """Per open position: today's move and where price sits against its averages and,
+    for trades, its stop and target. Plain arithmetic — no model involved."""
+    rows, seen = [], set()
+    for it in [t for t in trades if t.get("status") == "open"] + \
+              [i for i in investments if i.get("status") == "open"]:
+        tk = it.get("ticker", "")
+        key = (tk, it.get("type"), it.get("id"))
+        if not tk or key in seen:
+            continue
+        seen.add(key)
+        close = get_history(tk, "1y", "1d")
+        if close is None or len(close) < 30:
+            continue
+        last = float(close.iloc[-1])
+        d = close.diff()
+        up = d.clip(lower=0).ewm(alpha=1/14, adjust=False).mean().iloc[-1]
+        dn = (-d.clip(upper=0)).ewm(alpha=1/14, adjust=False).mean().iloc[-1]
+        ma = {n: close.rolling(n).mean().iloc[-1] if len(close) >= n else None for n in (50, 200)}
+        sl, tp = parse(it.get("stop_loss", "")), parse(it.get("take_profit", ""))
+        rows.append({
+            "Ticker": tk,
+            "ประเภท": "Trade" if it.get("type") == "trade" else "Hold",
+            "ราคา": round(last, 2),
+            "1D %": round((last / float(close.iloc[-2]) - 1) * 100, 2),
+            "vs MA50 %": round((last / ma[50] - 1) * 100, 1) if ma[50] else None,
+            "vs MA200 %": round((last / ma[200] - 1) * 100, 1) if ma[200] else None,
+            "RSI14": round(100 - 100 / (1 + up / dn), 1) if dn else None,
+            "ห่าง SL %": round((sl / last - 1) * 100, 1) if sl else None,
+            "ห่าง TP %": round((tp / last - 1) * 100, 1) if tp else None,
+        })
+    return pd.DataFrame(rows)
+
+@st.fragment
+def insight_panel(trades: list, investments: list) -> None:
+    section("Weekly Insight")
+    insights = load_insights()
+    if not insights:
+        st.caption("ยังไม่มี insight — Claude จะเขียนให้ทุกเช้าวันเสาร์หลังตลาดสหรัฐปิด")
+        return
+    dates = [i["date"] for i in insights]
+    with st.container(border=True):
+        c1, c2 = st.columns([5, 1.3], vertical_alignment="bottom")
+        pick = c2.selectbox("สัปดาห์", dates, key="insight_date", label_visibility="collapsed")
+        ins = insights[dates.index(pick)]
+        c1.markdown(f"**{_md_safe(ins['headline'] or 'Weekly Insight')}**")
+        tldr, rest = _split_insight(ins["markdown"])
+        if tldr:
+            st.markdown(_md_safe(tldr))
+        st.caption(f"ข้อมูลถึงวันที่ {pick} · เขียนโดย Claude · ไม่ใช่คำแนะนำการลงทุน")
+
+        with st.expander("อ่านบทวิเคราะห์เต็ม"):
+            st.markdown(_md_safe(rest))
+
+        with st.expander("แล้วพอร์ตเราล่ะ?"):
+            sig = _position_signals(trades, investments)
+            if sig.empty:
+                st.caption("ยังไม่มี position ที่เปิดอยู่")
+                return
+            st.dataframe(sig, hide_index=True, use_container_width=True)
+            st.caption("อยากให้ Claude อ่านพอร์ตเทียบกับ insight: กด \"สรุปพอร์ตให้ AI\" ด้านล่าง "
+                       "แล้ววางในแชทพร้อม insight สัปดาห์นี้")
+
+
 def page_overview(trades: list, investments: list, cash: list, disp: str, rate: float):
+    # -- Weekly Insight: read the market first, then the portfolio --
+    insight_panel(trades, investments)
+
     # -- Account Filter --
     _UNASSIGNED = "— ไม่ระบุ"
     _named_accts = sorted(set(
@@ -2061,21 +2280,11 @@ def page_overview(trades: list, investments: list, cash: list, disp: str, rate: 
                 _pc_col: "—", "P&L %": "—",
             })
 
-        def _col_pnl_ov(val):
-            if isinstance(val, str) and val.startswith("+"): return "color:#3DBE7F;font-weight:600"
-            if isinstance(val, str) and val.startswith("-"): return "color:#EF5F55;font-weight:600"
-            return ""
         df_ov = pd.DataFrame(pos_rows).drop(columns=["_pnl_raw"])
-        _all_cols_ov = list(df_ov.columns)
 
         with st.expander("Portfolio Snapshot", expanded=True):
-            _pnl_sub = [c for c in ["P&L %", _pc_col] if c in _all_cols_ov]
-            try:
-                styled_ov = df_ov.style.map(_col_pnl_ov, subset=_pnl_sub).hide(axis="index") if _pnl_sub else df_ov.style.hide(axis="index")
-            except AttributeError:
-                styled_ov = df_ov.style.applymap(_col_pnl_ov, subset=_pnl_sub).hide(axis="index") if _pnl_sub else df_ov.style.hide(axis="index")
-            styled_ov = styled_ov.format(na_rep="")  # cash rows: blank, not the text "None"
-            show_df('Portfolio Snapshot', 'portfolio_snapshot', styled_ov, use_container_width=True, hide_index=True)
+            show_df('Portfolio Snapshot', 'portfolio_snapshot', df_ov, use_container_width=True, hide_index=True,
+                    pnl_cols=["P&L %", _pc_col], pin=sum(r["Type"] == "Cash" for r in pos_rows))
         _ai_copy(df_ov, "Portfolio Snapshot", ", ".join(ov_filter))
 
     # -- Recent Activity --
@@ -2479,40 +2688,15 @@ def page_investment(investments: list, trades: list, cash: list, disp: str, rate
                     "Ticker":       "รวมทั้งหมด (รวม Cash)",
                     "Market Value": money(total_mv + to_display(cash_total_thb, disp, rate), sym_p)})
 
-            pnl_cols = ["P&L %", f"P&L ({sym})"]
-
-            def _color_pnl(val):
-                if isinstance(val, str) and val.startswith("+"):
-                    return "color: #3DBE7F; font-weight: 600"
-                if isinstance(val, str) and val.startswith("-"):
-                    return "color: #EF5F55; font-weight: 600"
-                return ""
-
-            def _style_total(row):
-                if row["Ticker"] in ("TOTAL", "รวมหุ้น", "รวมทั้งหมด (รวม Cash)"):
-                    return ["background-color: rgba(217,164,65,0.12); font-weight: 700"] * len(row)
-                return [""] * len(row)
-
-            df_inv = pd.DataFrame(rows)
-            try:
-                styled = (df_inv.style
-                          .map(_color_pnl, subset=pnl_cols)
-                          .apply(_style_total, axis=1)
-                          .hide(axis="index"))
-            except AttributeError:
-                styled = (df_inv.style
-                          .applymap(_color_pnl, subset=pnl_cols)
-                          .apply(_style_total, axis=1)
-                          .hide(axis="index"))
-            styled = styled.format(na_rep="")  # cash rows: blank, not the text "None"
             # Tick a row, then act on it from the toolbar above the table: the actions are
             # always in view (greyed out until something is ticked), and each one opens
             # its form directly instead of row → popup → button → form.
             _toolbar = st.container(key="inv_toolbar")
-            _ev = show_df('Current Holdings', 'holdings', styled, use_container_width=True, hide_index=True,
-                               on_select="rerun", selection_mode="single-row", key="inv_hold_tbl",
-                               height=(len(rows) + 1) * 35 + 3)
-            _ai_copy(df_inv, "Current Holdings", ", ".join(acct_filter))
+            _ev = show_df('Current Holdings', 'holdings', rows, use_container_width=True, hide_index=True,
+                          pnl_cols=["P&L %", f"P&L ({sym})"], pin=len(rows) - len(raw),
+                          on_select="rerun", selection_mode="single-row", key="inv_hold_tbl",
+                          height=(len(raw) + 1) * 35 + 3)
+            _ai_copy(rows, "Current Holdings", ", ".join(acct_filter))
 
             # The selected row opens as a popup over the page, where the eye already is,
             # rather than a panel below a long table. It opens once per new selection:
@@ -2608,7 +2792,9 @@ def page_investment(investments: list, trades: list, cash: list, disp: str, rate
                             value=str(inv["manual_price"]) if inv.get("manual_price") is not None else "",
                             placeholder="ใส่ราคาปัจจุบัน เช่น 85.50  (ว่าง = ดึงจาก yfinance)",
                         )
+                        opened, buys = date_fields(inv, "entry_date", f"edit_inv_dates_{inv['id']}")
                         if st.form_submit_button("บันทึก"):
+                            apply_date_fields(inv, "entry_date", opened, buys)
                             upd = {
                                 "ticker":      new_ticker.upper().strip(),
                                 "shares":      new_shares,
@@ -2907,29 +3093,9 @@ def page_trade(trades: list, cash: list, disp: str, rate: float):
             f"P&L ({sym})":  money(_tr_total_pnl, _sym_p),
             "TP": "—", "SL": "—",
         })
-        _pnl_cols_t = ["P&L %", f"P&L ({sym})"]
-        def _color_pnl_t(val):
-            if isinstance(val, str) and val.startswith("+"):
-                return "color: #3DBE7F; font-weight: 600"
-            if isinstance(val, str) and val.startswith("-"):
-                return "color: #EF5F55; font-weight: 600"
-            return ""
-        def _style_total_t(row):
-            if row["Ticker"] == "TOTAL":
-                return ["background-color: rgba(217,164,65,0.12); font-weight: 700"] * len(row)
-            return [""] * len(row)
         _df_tr = pd.DataFrame(_tr_rows)
-        try:
-            _styled_tr = (_df_tr.style
-                          .map(_color_pnl_t, subset=_pnl_cols_t)
-                          .apply(_style_total_t, axis=1)
-                          .hide(axis="index"))
-        except AttributeError:
-            _styled_tr = (_df_tr.style
-                          .applymap(_color_pnl_t, subset=_pnl_cols_t)
-                          .apply(_style_total_t, axis=1)
-                          .hide(axis="index"))
-        show_df('Open Trades', 'open_trades', _styled_tr, use_container_width=True, hide_index=True)
+        show_df('Open Trades', 'open_trades', _df_tr, use_container_width=True, hide_index=True,
+                pnl_cols=["P&L %", f"P&L ({sym})"], pin=1)
         _ai_copy(_df_tr, "Open Trades")
 
         st.markdown("<div style='height:0.5rem'></div>", unsafe_allow_html=True)
@@ -3119,7 +3285,9 @@ def page_trade(trades: list, cash: list, disp: str, rate: float):
                         new_strat  = st.selectbox(
                             "Strategy", _strat_opts,
                             index=_strat_opts.index(_cur_strat) if _cur_strat in _strat_opts else 0)
+                        opened, buys = date_fields(t, "open_date", f"edit_trade_dates_{t['id']}")
                         if st.form_submit_button("บันทึก"):
+                            apply_date_fields(t, "open_date", opened, buys)
                             _matched = next((a for a in cash if a["name"] == new_acct), None)
                             t.update({
                                 "ticker": new_ticker.upper().strip(),

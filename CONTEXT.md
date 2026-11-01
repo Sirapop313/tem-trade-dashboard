@@ -142,6 +142,20 @@ Transfer → ต้นทาง −เงินออก, ปลายทาง 
 - Activity Log (ปี/เดือน/ประเภท + CSV) — รวมเติม/ย้าย/ถอน
 - สรุปภาษีรายปี: กำไร/ขาดทุน realize · **นำเงินเข้าไทย** (cashout + transfer) พร้อมรายการ/เรต/CSV · ปีที่มีแต่การนำเข้า (ไม่มีขาย) เลือกได้
 - เป็นบันทึกรายการ ไม่ใช่การคำนวณภาษี
+- Log อ่านอย่างเดียว — **แก้วันที่ผิดที่ฟอร์ม "แก้ไข"** ของ Investment/Trade: มีช่องวันที่เปิด + วันที่ซื้อเพิ่มทุกครั้ง (เพิ่ม 1 พ.ย. 2026) · แก้วันที่ไม่ขยับเงิน cash
+
+---
+
+### Weekly Insight (สร้าง 23–24 ต.ค. — ฟรี 100% · ยังไม่ push / ยังไม่ตั้ง scheduled task)
+- **บนสุดของ Overview** (`insight_panel`, `@st.fragment`) — ไม่เพิ่มแท็บ navbar โดยตั้งใจ (fragile zone)
+- การ์ด: หัวข้อ + TL;DR + เลือกสัปดาห์ (8 ฉบับล่าสุด) · "อ่านบทวิเคราะห์เต็ม" · "แล้วพอร์ตเราล่ะ?" (ตาราง 1D / vs MA50/200 / RSI / ห่าง SL-TP คำนวณเอง ไม่ใช้ AI)
+- **Pipeline (ไม่มีค่าใช้จ่าย):**
+  1. GitHub Action `.github/workflows/weekly-data.yml` เสาร์ 05:00 → `insight/market.py` → commit `insight/data/<วันที่>.json` (yfinance ดัชนี+TA, 11 sector, ยีลด์, VIX/MOVE, น้ำมัน, ทอง, BTC, megacaps, weekly closes 13w · breadth คำนวณเองจาก 503 ตัว · FRED 11 series ไม่ต้องมี key · `flags` = ความขัดแย้งที่โค้ดจับเอง)
+  2. Claude scheduled task (Pro plan, ใช้โควต้าที่มี) เสาร์เช้า → ทำตาม `insight/WEEKLY_PROMPT.md` (ค้นข่าวเอง + อ่าน 2 ฉบับก่อนทำ Scorecard) → เขียน `insight/weekly/<วันที่>.md` → push main → Streamlit redeploy
+  3. แอปอ่านไฟล์ .md ใน repo ตรง (ไม่มี Supabase / API key)
+- แก้วิธีเขียนที่ `WEEKLY_PROMPT.md` ไม่ใช่ใน task
+- ⚠️ FRED มีรูข้อมูล (ไม่มี ต.ค. 2025 จาก shutdown) — YoY/diff ต้องจับคู่ตามวันที่ ห้ามใช้ shift (เคยคำนวณ CPI ผิดเป็น 4.02% แทน 3.72%)
+- ฉบับแรก `insight/weekly/2026-10-23.md` เขียนด้วยมือใน session (ทดลองคุณภาพ)
 
 ---
 
@@ -229,6 +243,9 @@ streamlit run dashboard.py
 | Holdings section เป็น st.fragment | rerun ทั้งแอปทุกคลิกช้า/กระพริบ | 2026-10-18 |
 | Transfer แยกจาก Deposit/Cash Out | เงินย้ายในพอร์ตไม่ใช่เงินเข้า/ออก · เป็นจุดนำเข้าไทยได้ | 2026-10-19 |
 | `parse()` ปฏิเสธ NaN/inf ทั้งแอป | "nan" ผ่านทุกเงื่อนไข → save ล้มหลัง Supabase ลบแถวเก่า = ข้อมูลหาย | 2026-10-19 |
+| Insight อยู่ใน Overview ไม่ใช่แท็บใหม่ | เพิ่มแท็บ = แตะ navbar (fragile) + ต้องวัดความกว้างใหม่ | 2026-10-23 |
+| Insight รายสัปดาห์ ฟรี: Action ดึงข้อมูล + Claude scheduled task (Pro) เขียน + เก็บเป็น .md ใน repo | เต็มไม่อยากจ่าย API (~฿250–450/ด.) · ไม่ต้องมี service key/ตาราง Supabase | 2026-10-24 |
+| ตัวเลขดึงก่อน แล้วให้ Claude ตีความ | LLM แต่งตัวเลขได้เนียน — ห้ามให้มันจำตัวเลขเอง | 2026-10-23 |
 
 ---
 
@@ -241,6 +258,7 @@ streamlit run dashboard.py
 - **อย่า pin `streamlit==` ใน requirements.txt** — Cloud ใช้เวอร์ชันล่าสุด เทสด้วย venv เวอร์ชันล่าสุดแทน
 - **อย่าเขียน CSS อิง `data-baseweb`** — Streamlit ใหม่เปลี่ยนเป็น react-aria แล้ว ใช้ `data-testid` (เช่น `stTextInputRootElement`, `stRadioOption`)
 - **อย่าใส่ `font-family` ให้ `.stApp *`** — ไปทับฟอนต์ไอคอน ลูกศร expander กลายเป็นคำว่า keyboard_arrow_down
+- **อย่าใส่ตัวเลขเป็นข้อความ ("฿86,086") ในตารางที่กดเรียงได้** — st.dataframe เรียงแบบตัวอักษร ฿86k ขึ้นก่อน ฿223k → เก็บตัวเลขดิบใน df แล้ว format ด้วย `Styler.format` (ทำแล้วที่ Current Holdings 1 พ.ย. 2026 · ส่ง `export=rows` ให้ show_df เพื่อ CSV/รูปยังเป็นข้อความที่ซ่อนยอดได้)
 - **อย่า DELETE Supabase table ทั้งหมดโดยไม่ filter** — ต้องใช้ `?user_id=eq.{uid}` มิฉะนั้น delete ไม่ทำงาน (PostgREST requirement)
 
 ---
