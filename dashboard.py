@@ -2,6 +2,7 @@
 Tim.fin Personal OS — Investment & Trade Dashboard
 """
 import base64 as _b64
+import hashlib
 import html
 import io
 import json
@@ -308,7 +309,7 @@ def _inject_navbar(logo_src: str, email: str, curr: str, rate: float,
         f'<div class="tfin-nav-tabs">'
         f'<button class="tfin-nt on" id="tnt0">Overview</button>'
         f'<button class="tfin-nt" id="tnt1">Insight</button>'
-        f'<button class="tfin-nt" id="tnt2">Investment</button>'
+        f'<button class="tfin-nt" id="tnt2"><span class="tl">Investment</span><span class="ts">Invest</span></button>'
         f'<button class="tfin-nt" id="tnt3">Trade</button>'
         f'<button class="tfin-nt" id="tnt4">Cash</button>'
         f'<button class="tfin-nt" id="tnt5">Log</button>'
@@ -342,6 +343,7 @@ def _inject_navbar(logo_src: str, email: str, curr: str, rate: float,
         ".tfin-brand-img{height:28px;width:28px;border-radius:6px;object-fit:cover;}"
         ".tfin-brand-name{font-size:15px;font-weight:700;color:#E9E6DF;}"
         ".tfin-nav-tabs{display:flex;align-items:center;gap:2px;flex:1;justify-content:flex-start;}"
+        ".tfin-nt .ts{display:none;}"
         ".tfin-nt{background:transparent;border:none;cursor:pointer;color:#8B9196;"
         "font-size:14px;font-weight:500;padding:7px 12px;border-radius:6px;"
         "transition:color .15s,background .15s;white-space:nowrap;font-family:inherit;line-height:1.2;}"
@@ -397,6 +399,8 @@ def _inject_navbar(logo_src: str, email: str, curr: str, rate: float,
         "background:#0D1012!important;border-top:1px solid #262C31!important;"
         "justify-content:space-around!important;gap:2px!important;"
         "padding:0 4px env(safe-area-inset-bottom,0px)!important;z-index:2147483647!important;}"
+        # six tabs share a phone's width — "Investment" would end in an ellipsis
+        ".tfin-nt .tl{display:none!important;}.tfin-nt .ts{display:inline!important;}"
         ".tfin-nt{flex:1 1 0!important;min-width:0!important;min-height:44px!important;"
         "font-size:12px!important;padding:4px 2px!important;"
         "display:flex!important;align-items:center!important;justify-content:center!important;"
@@ -4212,14 +4216,22 @@ def _cash_pick(cash: list, default_id, label: str, key: str):
                         else acc_label(next(a for a in cash if a["id"] == i)))
     return next((a for a in cash if a["id"] == pick), None)
 
-def _amount_box(acc, default: float, label: str, key: str) -> float | None:
+def _amount_box(acc, default: float, label: str, key: str, sign: int = 1) -> float | None:
+    """sign: +1 the amount goes into acc, -1 it comes out."""
     if acc is None:
         return 0.0
     sym = "$" if acc["currency"] == "USD" else "฿"
-    return parse(st.text_input(f"{label} ({sym})", value=f"{default:.2f}", key=key))
+    amt = parse(st.text_input(f"{label} ({sym})", value=f"{default:.2f}", key=key))
+    _neg_warn(acc, sign * (amt or 0))
+    return amt
+
+def _neg_warn(acc, delta: float):
+    after = (acc.get("amount") or 0) + delta
+    if after < 0:
+        sym = "$" if acc["currency"] == "USD" else "฿"
+        st.warning(f"ยอด {acc['name']} จะติดลบเป็น {money(after, sym, 2)} หลังลบ — ตรวจว่าถูกต้องก่อนยืนยัน")
 
 def _done_delete(msg: str):
-    st.session_state.pop("log_tbl", None)
     st.session_state["log_flash"] = msg
     st.rerun()
 
@@ -4249,6 +4261,10 @@ def log_delete_panel(ref: tuple, trades: list, investments: list, cash: list, ra
                 st.markdown(f"ลบ **การย้ายเงิน** ({rec.get('date')}) — **{acc['name']}** ได้คืน {money(amt, sym, 2)}"
                             + (f" · **{dst['name']}** ลดลง {money(rec.get('amount_in') or 0, s_in, 2)}" if dst
                                else " · ไม่เจอบัญชีปลายทาง (ไม่หักฝั่งนั้น)"))
+            if lst == "deposits":
+                _neg_warn(acc, -amt)
+            elif lst == "transfers" and dst:
+                _neg_warn(dst, -(rec.get("amount_in") or 0))
             if st.button("ยืนยันลบ", key=f"sellbtn_{key}"):
                 if lst == "deposits":
                     acc["amount"] = round(acc["amount"] - amt, 2)
@@ -4299,6 +4315,8 @@ def log_delete_panel(ref: tuple, trades: list, investments: list, cash: list, ra
         is_trade = side == "trade"
 
         if kind == "buy":
+            st.caption("ถ้าวันที่ของรายการนี้หรือรายการขายลงผิด ให้แก้วันที่ที่ฟอร์ม \"แก้ไข\" ก่อน "
+                       "— ระบบใช้วันที่ตัดสินว่ามีการขายหลังการซื้อครั้งนี้หรือไม่")
             # A sale after this buy was priced off the average that included it, so
             # taking the lot out now would leave that sale's P&L wrong.
             if any(str(sh.get("date", "")) >= str(rec.get("date", "")) for sh in pos.get("sell_history", [])):
@@ -4316,9 +4334,11 @@ def log_delete_panel(ref: tuple, trades: list, investments: list, cash: list, ra
             st.markdown(f"ลบ **ซื้อเพิ่ม {tk}** +{rec.get('shares')} @ {rec.get('price')} ({rec.get('date')})  \n"
                         f"จำนวน {s_cur:,.10g} → **{s_new:,.10g}** · AVG {p_cur:,.4f} → **{p_old:,.4f}**")
             cost = s_rec * p_rec / (trade_leverage(pos) if is_trade else 1)   # in the position's currency
-            default_acc = rec["account_id"] if "account_id" in rec else (
-                None if pos.get("is_import") else pos.get("source_account_id"))
-            acc = _cash_pick(cash, default_acc, "คืนเงินเข้าบัญชี", f"{key}_acc")
+            # a buy recorded before account_id existed may have been an import that
+            # never took cash — refunding it by guess would add money that never left
+            if "account_id" not in rec:
+                st.caption("รายการนี้ไม่ได้บันทึกว่าจ่ายจากบัญชีไหน — ถ้าตอนซื้อหักเงินจริง เลือกบัญชีที่จ่ายเพื่อคืนเงิน")
+            acc = _cash_pick(cash, rec.get("account_id"), "คืนเงินเข้าบัญชี", f"{key}_acc")
             amt = _amount_box(acc, _to_ccy(cost, ccy, acc["currency"], rate) if acc else 0,
                               "ยอดคืน", f"{key}_amt")
             if st.button("ยืนยันลบ", key=f"sellbtn_{key}"):
@@ -4351,7 +4371,7 @@ def log_delete_panel(ref: tuple, trades: list, investments: list, cash: list, ra
         acc = _cash_pick(cash, default_acc, "หักเงินที่ได้จากการขายออกจากบัญชี", f"{key}_acc")
         fx = rec.get("fx_rate") or rate
         amt = _amount_box(acc, (got_thb / fx if acc and acc["currency"] == "USD" else got_thb),
-                          "ยอดหัก", f"{key}_amt")
+                          "ยอดหัก", f"{key}_amt", sign=-1)
         if st.button("ยืนยันลบ", key=f"sellbtn_{key}"):
             if amt is None or amt < 0:
                 st.error("ใส่ยอดหักให้ถูกต้อง")
@@ -4402,8 +4422,12 @@ def page_log(trades: list, investments: list, cash: list, disp: str, rate: float
             st.success(_flash)
         if shown:
             _vis = [{k: v for k, v in e.items() if not k.startswith("_")} for e in shown]
+            # the selection is a row position, so it must not outlive the rows it points
+            # at: a new filter or any change to the data gives the table a new key and
+            # drops the tick, instead of leaving the delete panel on a different entry
+            _sig = hashlib.md5(repr([e["_ref"] for e in shown]).encode()).hexdigest()[:10]
             _lev = show_df('Activity Log', 'activity_log', _vis, use_container_width=True, hide_index=True,
-                           on_select="rerun", selection_mode="single-row", key="log_tbl")
+                           on_select="rerun", selection_mode="single-row", key=f"log_tbl_{_sig}")
             _ai_copy(_vis, "Activity Log", f"ปี {yr_pick} · เดือน {mo_pick} · ประเภท {ty_pick}")
             try:
                 _lsel = list(_lev.selection.rows)
