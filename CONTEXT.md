@@ -281,7 +281,7 @@ streamlit run dashboard.py
 
 ## Planned Next
 
-0. **⚠️ ค้าง (2 พ.ย. 2026) — commit `76affff` (ลบจาก Log + แท็บ Insight) ยังไม่ push** · /scrutinize = CONDITIONAL: ต้องแก้ก่อน push (1) แถวที่ติ๊กใน Log ค้างเมื่อเปลี่ยนตัวกรอง/ข้อมูล → ผูก key กับตัวกรอง + จำ ref ที่ติ๊ก (2) เทสลบฝั่ง Trade (Long/Short/เลเวอเรจ) + ลบถอนเงิน · แก้ง่าย: ข้อความ "วันที่ผิดให้แก้ก่อนลบ", ซื้อเพิ่มเก่าไม่มี `account_id` → default ไม่ขยับเงิน, เตือนยอดติดลบ, ชื่อแท็บสั้นบนมือถือ · งานแรกหลัง push: เต็มจะลบซื้อเพิ่มที่ลงวันที่ 30/11 (ใส่เกิน)
+0. **หลัง deploy 2 พ.ย. 2026:** เต็มลองกดเมนูทั้ง 6 แท็บบนเบราว์เซอร์+มือถือ (navbar fragile zone — ยังไม่ได้เทสบนเบราว์เซอร์จริง) · ⚠️ `_sb_save` ลบก่อนใส่ใหม่และไม่เช็คผล — ถ้า insert ล้ม ข้อมูลหายทั้งตาราง (scrutinize 2 พ.ย. แยกเป็นงานใหม่)
 1. UI polish — chart sizing, label overlap, layout
 2. Import port ที่มีอยู่ทั้งหมดด้วย Import mode
 3. Performance caching ถ้า laggy เกินไป
