@@ -1,0 +1,1887 @@
+{
+ "generated_at": "2026-11-07T08:23+07:00",
+ "indexes": [
+  {
+   "ticker": "^GSPC",
+   "name": "S&P 500",
+   "date": "2026-11-06",
+   "close": 7376.86,
+   "chg_1d": 0.31,
+   "chg_1w": -2.68,
+   "chg_1m": -5.0,
+   "chg_3m": -4.85,
+   "change_unit": "%",
+   "high_1y": 7818.93,
+   "high_1y_date": "2026-10-06",
+   "low_1y": 6343.72,
+   "low_1y_date": "2026-03-30",
+   "avg_1y": 7223.36,
+   "from_1y_high_pct": -5.65,
+   "ma50": 7679.45,
+   "vs_ma50_pct": -3.94,
+   "ma100": 7618.7,
+   "vs_ma100_pct": -3.17,
+   "ma200": 7325.05,
+   "vs_ma200_pct": 0.71,
+   "rsi14": 35.1,
+   "rsi14_prev": 33.5,
+   "macd": -61.07,
+   "macd_signal": -26.6,
+   "swing_lows_6m": [
+    {
+     "date": "2026-07-08",
+     "level": 7421.82
+    },
+    {
+     "date": "2026-07-29",
+     "level": 7313.92
+    },
+    {
+     "date": "2026-08-24",
+     "level": 7638.17
+    },
+    {
+     "date": "2026-09-01",
+     "level": 7611.2
+    },
+    {
+     "date": "2026-09-16",
+     "level": 7507.77
+    },
+    {
+     "date": "2026-10-01",
+     "level": 7616.78
+    }
+   ],
+   "swing_highs_6m": [
+    {
+     "date": "2026-07-15",
+     "level": 7581.5
+    },
+    {
+     "date": "2026-08-05",
+     "level": 7793.68
+    },
+    {
+     "date": "2026-08-13",
+     "level": 7816.7
+    },
+    {
+     "date": "2026-08-28",
+     "level": 7771.48
+    },
+    {
+     "date": "2026-09-22",
+     "level": 7782.19
+    },
+    {
+     "date": "2026-10-06",
+     "level": 7844.52
+    }
+   ],
+   "daily_closes_10d": [
+    {
+     "date": "2026-10-26",
+     "close": 7676.77,
+     "chg_pct": 0.7
+    },
+    {
+     "date": "2026-10-27",
+     "close": 7722.6,
+     "chg_pct": 0.6
+    },
+    {
+     "date": "2026-10-28",
+     "close": 7743.98,
+     "chg_pct": 0.28
+    },
+    {
+     "date": "2026-10-29",
+     "close": 7720.39,
+     "chg_pct": -0.3
+    },
+    {
+     "date": "2026-10-30",
+     "close": 7580.07,
+     "chg_pct": -1.82
+    },
+    {
+     "date": "2026-11-02",
+     "close": 7541.4,
+     "chg_pct": -0.51
+    },
+    {
+     "date": "2026-11-03",
+     "close": 7568.92,
+     "chg_pct": 0.36
+    },
+    {
+     "date": "2026-11-04",
+     "close": 7688.62,
+     "chg_pct": 1.58
+    },
+    {
+     "date": "2026-11-05",
+     "close": 7353.73,
+     "chg_pct": -4.36
+    },
+    {
+     "date": "2026-11-06",
+     "close": 7376.86,
+     "chg_pct": 0.31
+    }
+   ],
+   "weekly_closes_13w": [
+    {
+     "week_end": "2026-08-14",
+     "close": 7785.76
+    },
+    {
+     "week_end": "2026-08-21",
+     "close": 7674.37
+    },
+    {
+     "week_end": "2026-08-28",
+     "close": 7711.76
+    },
+    {
+     "week_end": "2026-09-04",
+     "close": 7718.6
+    },
+    {
+     "week_end": "2026-09-11",
+     "close": 7656.98
+    },
+    {
+     "week_end": "2026-09-18",
+     "close": 7650.5
+    },
+    {
+     "week_end": "2026-09-25",
+     "close": 7743.41
+    },
+    {
+     "week_end": "2026-10-02",
+     "close": 7722.72
+    },
+    {
+     "week_end": "2026-10-09",
+     "close": 7811.54
+    },
+    {
+     "week_end": "2026-10-16",
+     "close": 7659.44
+    },
+    {
+     "week_end": "2026-10-23",
+     "close": 7623.68
+    },
+    {
+     "week_end": "2026-10-30",
+     "close": 7580.07
+    },
+    {
+     "week_end": "2026-11-06",
+     "close": 7376.86
+    }
+   ]
+  },
+  {
+   "ticker": "^NDX",
+   "name": "Nasdaq 100",
+   "date": "2026-11-06",
+   "close": 26989.992,
+   "chg_1d": 1.35,
+   "chg_1w": -4.91,
+   "chg_1m": -12.16,
+   "chg_3m": -8.88,
+   "change_unit": "%",
+   "high_1y": 31224.47,
+   "high_1y_date": "2026-10-06",
+   "low_1y": 22953.38,
+   "low_1y_date": "2026-03-30",
+   "avg_1y": 27432.74,
+   "from_1y_high_pct": -13.56,
+   "ma50": 29632.7,
+   "vs_ma50_pct": -8.92,
+   "ma100": 29453.84,
+   "vs_ma100_pct": -8.37,
+   "ma200": 27983.89,
+   "vs_ma200_pct": -3.55,
+   "rsi14": 31.4,
+   "rsi14_prev": 27.0,
+   "macd": -679.74,
+   "macd_signal": -408.87,
+   "swing_lows_6m": [
+    {
+     "date": "2026-06-26",
+     "level": 28890.74
+    },
+    {
+     "date": "2026-07-08",
+     "level": 28814.57
+    },
+    {
+     "date": "2026-07-29",
+     "level": 27176.03
+    },
+    {
+     "date": "2026-08-24",
+     "level": 28875.96
+    },
+    {
+     "date": "2026-09-01",
+     "level": 28953.26
+    },
+    {
+     "date": "2026-09-16",
+     "level": 28753.29
+    }
+   ],
+   "swing_highs_6m": [
+    {
+     "date": "2026-08-05",
+     "level": 29946.94
+    },
+    {
+     "date": "2026-08-17",
+     "level": 30195.72
+    },
+    {
+     "date": "2026-08-28",
+     "level": 29752.78
+    },
+    {
+     "date": "2026-09-08",
+     "level": 29655.73
+    },
+    {
+     "date": "2026-09-22",
+     "level": 30770.63
+    },
+    {
+     "date": "2026-10-06",
+     "level": 31361.37
+    }
+   ],
+   "daily_closes_10d": [
+    {
+     "date": "2026-10-26",
+     "close": 29273.4,
+     "chg_pct": 1.09
+    },
+    {
+     "date": "2026-10-27",
+     "close": 29651.44,
+     "chg_pct": 1.29
+    },
+    {
+     "date": "2026-10-28",
+     "close": 29813.16,
+     "chg_pct": 0.55
+    },
+    {
+     "date": "2026-10-29",
+     "close": 29402.51,
+     "chg_pct": -1.38
+    },
+    {
+     "date": "2026-10-30",
+     "close": 28384.85,
+     "chg_pct": -3.46
+    },
+    {
+     "date": "2026-11-02",
+     "close": 27989.82,
+     "chg_pct": -1.39
+    },
+    {
+     "date": "2026-11-03",
+     "close": 28180.26,
+     "chg_pct": 0.68
+    },
+    {
+     "date": "2026-11-04",
+     "close": 28437.17,
+     "chg_pct": 0.91
+    },
+    {
+     "date": "2026-11-05",
+     "close": 26629.81,
+     "chg_pct": -6.36
+    },
+    {
+     "date": "2026-11-06",
+     "close": 26989.99,
+     "chg_pct": 1.35
+    }
+   ],
+   "weekly_closes_13w": [
+    {
+     "week_end": "2026-08-14",
+     "close": 30046.14
+    },
+    {
+     "week_end": "2026-08-21",
+     "close": 29308.86
+    },
+    {
+     "week_end": "2026-08-28",
+     "close": 29433.43
+    },
+    {
+     "week_end": "2026-09-04",
+     "close": 29544.15
+    },
+    {
+     "week_end": "2026-09-11",
+     "close": 29368.44
+    },
+    {
+     "week_end": "2026-09-18",
+     "close": 29644.17
+    },
+    {
+     "week_end": "2026-09-25",
+     "close": 30608.13
+    },
+    {
+     "week_end": "2026-10-02",
+     "close": 30807.93
+    },
+    {
+     "week_end": "2026-10-09",
+     "close": 30883.15
+    },
+    {
+     "week_end": "2026-10-16",
+     "close": 29187.55
+    },
+    {
+     "week_end": "2026-10-23",
+     "close": 28957.53
+    },
+    {
+     "week_end": "2026-10-30",
+     "close": 28384.85
+    },
+    {
+     "week_end": "2026-11-06",
+     "close": 26989.99
+    }
+   ]
+  },
+  {
+   "ticker": "^SOX",
+   "name": "Semiconductors (SOX)",
+   "date": "2026-11-06",
+   "close": 9390.25,
+   "chg_1d": 4.21,
+   "chg_1w": -12.15,
+   "chg_1m": -25.61,
+   "chg_3m": -21.71,
+   "change_unit": "%",
+   "high_1y": 14634.72,
+   "high_1y_date": "2026-06-22",
+   "low_1y": 6352.07,
+   "low_1y_date": "2025-11-20",
+   "avg_1y": 10080.67,
+   "from_1y_high_pct": -35.84,
+   "ma50": 11694.66,
+   "vs_ma50_pct": -19.7,
+   "ma100": 12039.72,
+   "vs_ma100_pct": -22.01,
+   "ma200": 10831.11,
+   "vs_ma200_pct": -13.3,
+   "rsi14": 31.6,
+   "rsi14_prev": 26.1,
+   "macd": -608.8,
+   "macd_signal": -408.08,
+   "swing_lows_6m": [
+    {
+     "date": "2026-07-17",
+     "level": 11194.6
+    },
+    {
+     "date": "2026-07-29",
+     "level": 10445.44
+    },
+    {
+     "date": "2026-08-24",
+     "level": 11263.34
+    },
+    {
+     "date": "2026-09-03",
+     "level": 11056.38
+    },
+    {
+     "date": "2026-09-14",
+     "level": 11110.11
+    },
+    {
+     "date": "2026-10-22",
+     "level": 10666.41
+    }
+   ],
+   "swing_highs_6m": [
+    {
+     "date": "2026-06-22",
+     "level": 14655.29
+    },
+    {
+     "date": "2026-06-30",
+     "level": 14332.76
+    },
+    {
+     "date": "2026-08-17",
+     "level": 12770.71
+    },
+    {
+     "date": "2026-09-08",
+     "level": 12023.86
+    },
+    {
+     "date": "2026-10-06",
+     "level": 13349.96
+    },
+    {
+     "date": "2026-10-28",
+     "level": 11731.3
+    }
+   ],
+   "daily_closes_10d": [
+    {
+     "date": "2026-10-26",
+     "close": 11083.47,
+     "chg_pct": 2.82
+    },
+    {
+     "date": "2026-10-27",
+     "close": 11482.5,
+     "chg_pct": 3.6
+    },
+    {
+     "date": "2026-10-28",
+     "close": 11684.0,
+     "chg_pct": 1.75
+    },
+    {
+     "date": "2026-10-29",
+     "close": 11518.2,
+     "chg_pct": -1.42
+    },
+    {
+     "date": "2026-10-30",
+     "close": 10688.8,
+     "chg_pct": -7.2
+    },
+    {
+     "date": "2026-11-02",
+     "close": 10328.33,
+     "chg_pct": -3.37
+    },
+    {
+     "date": "2026-11-03",
+     "close": 10600.4,
+     "chg_pct": 2.63
+    },
+    {
+     "date": "2026-11-04",
+     "close": 10268.65,
+     "chg_pct": -3.13
+    },
+    {
+     "date": "2026-11-05",
+     "close": 9011.14,
+     "chg_pct": -12.25
+    },
+    {
+     "date": "2026-11-06",
+     "close": 9390.25,
+     "chg_pct": 4.21
+    }
+   ],
+   "weekly_closes_13w": [
+    {
+     "week_end": "2026-08-14",
+     "close": 12417.05
+    },
+    {
+     "week_end": "2026-08-21",
+     "close": 11740.37
+    },
+    {
+     "week_end": "2026-08-28",
+     "close": 11469.66
+    },
+    {
+     "week_end": "2026-09-04",
+     "close": 11735.26
+    },
+    {
+     "week_end": "2026-09-11",
+     "close": 11824.0
+    },
+    {
+     "week_end": "2026-09-18",
+     "close": 11921.69
+    },
+    {
+     "week_end": "2026-09-25",
+     "close": 12668.93
+    },
+    {
+     "week_end": "2026-10-02",
+     "close": 13136.67
+    },
+    {
+     "week_end": "2026-10-09",
+     "close": 12572.42
+    },
+    {
+     "week_end": "2026-10-16",
+     "close": 11137.29
+    },
+    {
+     "week_end": "2026-10-23",
+     "close": 10779.46
+    },
+    {
+     "week_end": "2026-10-30",
+     "close": 10688.8
+    },
+    {
+     "week_end": "2026-11-06",
+     "close": 9390.25
+    }
+   ]
+  },
+  {
+   "ticker": "^RUT",
+   "name": "Russell 2000",
+   "date": "2026-11-06",
+   "close": 2754.105,
+   "chg_1d": 0.89,
+   "chg_1w": -2.05,
+   "chg_1m": -1.43,
+   "chg_3m": -8.73,
+   "change_unit": "%",
+   "high_1y": 3068.42,
+   "high_1y_date": "2026-08-14",
+   "low_1y": 2305.11,
+   "low_1y_date": "2025-11-20",
+   "avg_1y": 2747.75,
+   "from_1y_high_pct": -10.24,
+   "ma50": 2837.89,
+   "vs_ma50_pct": -2.95,
+   "ma100": 2914.45,
+   "vs_ma100_pct": -5.5,
+   "ma200": 2807.88,
+   "vs_ma200_pct": -1.92,
+   "rsi14": 43.0,
+   "rsi14_prev": 39.4,
+   "macd": -11.78,
+   "macd_signal": -12.66,
+   "swing_lows_6m": [
+    {
+     "date": "2026-07-08",
+     "level": 2927.12
+    },
+    {
+     "date": "2026-07-31",
+     "level": 2902.47
+    },
+    {
+     "date": "2026-08-20",
+     "level": 2989.23
+    },
+    {
+     "date": "2026-09-01",
+     "level": 2916.84
+    },
+    {
+     "date": "2026-09-16",
+     "level": 2832.37
+    },
+    {
+     "date": "2026-10-16",
+     "level": 2716.23
+    }
+   ],
+   "swing_highs_6m": [
+    {
+     "date": "2026-06-04",
+     "level": 2943.97
+    },
+    {
+     "date": "2026-07-01",
+     "level": 3046.59
+    },
+    {
+     "date": "2026-08-14",
+     "level": 3069.71
+    },
+    {
+     "date": "2026-09-22",
+     "level": 2905.87
+    },
+    {
+     "date": "2026-10-06",
+     "level": 2864.83
+    }
+   ],
+   "daily_closes_10d": [
+    {
+     "date": "2026-10-26",
+     "close": 2786.42,
+     "chg_pct": 0.38
+    },
+    {
+     "date": "2026-10-27",
+     "close": 2818.87,
+     "chg_pct": 1.16
+    },
+    {
+     "date": "2026-10-28",
+     "close": 2830.51,
+     "chg_pct": 0.41
+    },
+    {
+     "date": "2026-10-29",
+     "close": 2859.22,
+     "chg_pct": 1.01
+    },
+    {
+     "date": "2026-10-30",
+     "close": 2811.84,
+     "chg_pct": -1.66
+    },
+    {
+     "date": "2026-11-02",
+     "close": 2805.88,
+     "chg_pct": -0.21
+    },
+    {
+     "date": "2026-11-03",
+     "close": 2812.45,
+     "chg_pct": 0.23
+    },
+    {
+     "date": "2026-11-04",
+     "close": 2856.95,
+     "chg_pct": 1.58
+    },
+    {
+     "date": "2026-11-05",
+     "close": 2729.89,
+     "chg_pct": -4.45
+    },
+    {
+     "date": "2026-11-06",
+     "close": 2754.11,
+     "chg_pct": 0.89
+    }
+   ],
+   "weekly_closes_13w": [
+    {
+     "week_end": "2026-08-14",
+     "close": 3068.42
+    },
+    {
+     "week_end": "2026-08-21",
+     "close": 3017.87
+    },
+    {
+     "week_end": "2026-08-28",
+     "close": 2972.37
+    },
+    {
+     "week_end": "2026-09-04",
+     "close": 2975.65
+    },
+    {
+     "week_end": "2026-09-11",
+     "close": 2903.94
+    },
+    {
+     "week_end": "2026-09-18",
+     "close": 2860.4
+    },
+    {
+     "week_end": "2026-09-25",
+     "close": 2837.55
+    },
+    {
+     "week_end": "2026-10-02",
+     "close": 2832.9
+    },
+    {
+     "week_end": "2026-10-09",
+     "close": 2806.98
+    },
+    {
+     "week_end": "2026-10-16",
+     "close": 2721.37
+    },
+    {
+     "week_end": "2026-10-23",
+     "close": 2775.9
+    },
+    {
+     "week_end": "2026-10-30",
+     "close": 2811.84
+    },
+    {
+     "week_end": "2026-11-06",
+     "close": 2754.11
+    }
+   ]
+  },
+  {
+   "ticker": "RSP",
+   "name": "S&P 500 Equal Weight ETF",
+   "date": "2026-11-05",
+   "close": 216.87,
+   "chg_1d": -2.89,
+   "chg_1w": -1.44,
+   "chg_1m": 2.98,
+   "chg_3m": -1.46,
+   "change_unit": "%",
+   "high_1y": 223.33,
+   "high_1y_date": "2026-11-04",
+   "low_1y": 182.18,
+   "low_1y_date": "2025-11-20",
+   "avg_1y": 204.85,
+   "from_1y_high_pct": -2.89,
+   "ma50": 214.89,
+   "vs_ma50_pct": 0.92,
+   "ma100": 215.36,
+   "vs_ma100_pct": 0.7,
+   "ma200": 208.21,
+   "vs_ma200_pct": 4.16,
+   "rsi14": 50.9,
+   "rsi14_prev": 68.8,
+   "macd": 1.67,
+   "macd_signal": 1.34,
+   "swing_lows_6m": [
+    {
+     "date": "2026-06-23",
+     "level": 207.64
+    },
+    {
+     "date": "2026-07-08",
+     "level": 211.44
+    },
+    {
+     "date": "2026-07-23",
+     "level": 211.27
+    },
+    {
+     "date": "2026-08-18",
+     "level": 219.71
+    },
+    {
+     "date": "2026-09-16",
+     "level": 210.96
+    },
+    {
+     "date": "2026-10-01",
+     "level": 207.16
+    }
+   ],
+   "swing_highs_6m": [
+    {
+     "date": "2026-06-04",
+     "level": 210.95
+    },
+    {
+     "date": "2026-06-16",
+     "level": 214.3
+    },
+    {
+     "date": "2026-07-07",
+     "level": 216.37
+    },
+    {
+     "date": "2026-07-17",
+     "level": 215.95
+    },
+    {
+     "date": "2026-08-19",
+     "level": 223.44
+    }
+   ],
+   "daily_closes_10d": [
+    {
+     "date": "2026-10-23",
+     "close": 216.54,
+     "chg_pct": -0.77
+    },
+    {
+     "date": "2026-10-26",
+     "close": 217.29,
+     "chg_pct": 0.35
+    },
+    {
+     "date": "2026-10-27",
+     "close": 217.52,
+     "chg_pct": 0.11
+    },
+    {
+     "date": "2026-10-28",
+     "close": 217.43,
+     "chg_pct": -0.04
+    },
+    {
+     "date": "2026-10-29",
+     "close": 220.04,
+     "chg_pct": 1.2
+    },
+    {
+     "date": "2026-10-30",
+     "close": 218.31,
+     "chg_pct": -0.79
+    },
+    {
+     "date": "2026-11-02",
+     "close": 219.98,
+     "chg_pct": 0.76
+    },
+    {
+     "date": "2026-11-03",
+     "close": 219.26,
+     "chg_pct": -0.33
+    },
+    {
+     "date": "2026-11-04",
+     "close": 223.33,
+     "chg_pct": 1.86
+    },
+    {
+     "date": "2026-11-05",
+     "close": 216.87,
+     "chg_pct": -2.89
+    }
+   ],
+   "weekly_closes_13w": [
+    {
+     "week_end": "2026-08-14",
+     "close": 222.77
+    },
+    {
+     "week_end": "2026-08-21",
+     "close": 221.67
+    },
+    {
+     "week_end": "2026-08-28",
+     "close": 220.69
+    },
+    {
+     "week_end": "2026-09-04",
+     "close": 219.0
+    },
+    {
+     "week_end": "2026-09-11",
+     "close": 214.87
+    },
+    {
+     "week_end": "2026-09-18",
+     "close": 212.29
+    },
+    {
+     "week_end": "2026-09-25",
+     "close": 211.11
+    },
+    {
+     "week_end": "2026-10-02",
+     "close": 209.73
+    },
+    {
+     "week_end": "2026-10-09",
+     "close": 213.04
+    },
+    {
+     "week_end": "2026-10-16",
+     "close": 214.09
+    },
+    {
+     "week_end": "2026-10-23",
+     "close": 216.54
+    },
+    {
+     "week_end": "2026-10-30",
+     "close": 218.31
+    },
+    {
+     "week_end": "2026-11-06",
+     "close": 216.87
+    }
+   ]
+  },
+  {
+   "ticker": "SPY",
+   "name": "S&P 500 ETF",
+   "date": "2026-11-05",
+   "close": 733.0,
+   "chg_1d": -4.41,
+   "chg_1w": -4.73,
+   "chg_1m": -5.69,
+   "chg_3m": -5.21,
+   "change_unit": "%",
+   "high_1y": 779.09,
+   "high_1y_date": "2026-10-06",
+   "low_1y": 631.97,
+   "low_1y_date": "2026-03-30",
+   "avg_1y": 720.04,
+   "from_1y_high_pct": -5.92,
+   "ma50": 766.4,
+   "vs_ma50_pct": -4.36,
+   "ma100": 759.68,
+   "vs_ma100_pct": -3.51,
+   "ma200": 730.15,
+   "vs_ma200_pct": 0.39,
+   "rsi14": 33.5,
+   "rsi14_prev": 50.7,
+   "macd": -4.53,
+   "macd_signal": -1.8,
+   "swing_lows_6m": [
+    {
+     "date": "2026-07-08",
+     "level": 739.51
+    },
+    {
+     "date": "2026-07-29",
+     "level": 729.1
+    },
+    {
+     "date": "2026-08-20",
+     "level": 762.04
+    },
+    {
+     "date": "2026-09-01",
+     "level": 759.48
+    },
+    {
+     "date": "2026-09-16",
+     "level": 749.6
+    },
+    {
+     "date": "2026-10-01",
+     "level": 758.79
+    }
+   ],
+   "swing_highs_6m": [
+    {
+     "date": "2026-07-15",
+     "level": 755.58
+    },
+    {
+     "date": "2026-08-05",
+     "level": 776.85
+    },
+    {
+     "date": "2026-08-13",
+     "level": 779.37
+    },
+    {
+     "date": "2026-08-28",
+     "level": 775.3
+    },
+    {
+     "date": "2026-09-22",
+     "level": 775.14
+    },
+    {
+     "date": "2026-10-06",
+     "level": 781.62
+    }
+   ],
+   "daily_closes_10d": [
+    {
+     "date": "2026-10-23",
+     "close": 759.97,
+     "chg_pct": -0.52
+    },
+    {
+     "date": "2026-10-26",
+     "close": 765.37,
+     "chg_pct": 0.71
+    },
+    {
+     "date": "2026-10-27",
+     "close": 769.66,
+     "chg_pct": 0.56
+    },
+    {
+     "date": "2026-10-28",
+     "close": 772.31,
+     "chg_pct": 0.34
+    },
+    {
+     "date": "2026-10-29",
+     "close": 769.36,
+     "chg_pct": -0.38
+    },
+    {
+     "date": "2026-10-30",
+     "close": 755.72,
+     "chg_pct": -1.77
+    },
+    {
+     "date": "2026-11-02",
+     "close": 752.1,
+     "chg_pct": -0.48
+    },
+    {
+     "date": "2026-11-03",
+     "close": 754.35,
+     "chg_pct": 0.3
+    },
+    {
+     "date": "2026-11-04",
+     "close": 766.81,
+     "chg_pct": 1.65
+    },
+    {
+     "date": "2026-11-05",
+     "close": 733.0,
+     "chg_pct": -4.41
+    }
+   ],
+   "weekly_closes_13w": [
+    {
+     "week_end": "2026-08-14",
+     "close": 776.34
+    },
+    {
+     "week_end": "2026-08-21",
+     "close": 765.72
+    },
+    {
+     "week_end": "2026-08-28",
+     "close": 769.35
+    },
+    {
+     "week_end": "2026-09-04",
+     "close": 770.19
+    },
+    {
+     "week_end": "2026-09-11",
+     "close": 764.29
+    },
+    {
+     "week_end": "2026-09-18",
+     "close": 761.69
+    },
+    {
+     "week_end": "2026-09-25",
+     "close": 771.35
+    },
+    {
+     "week_end": "2026-10-02",
+     "close": 769.64
+    },
+    {
+     "week_end": "2026-10-09",
+     "close": 778.57
+    },
+    {
+     "week_end": "2026-10-16",
+     "close": 763.25
+    },
+    {
+     "week_end": "2026-10-23",
+     "close": 759.97
+    },
+    {
+     "week_end": "2026-10-30",
+     "close": 755.72
+    },
+    {
+     "week_end": "2026-11-06",
+     "close": 733.0
+    }
+   ]
+  }
+ ],
+ "missing": [
+  "GOOGL"
+ ],
+ "sectors": [
+  {
+   "ticker": "XLK",
+   "name": "Information Technology",
+   "date": "2026-11-05",
+   "close": 162.38,
+   "chg_1d": -8.0,
+   "chg_1w": -13.97,
+   "chg_1m": -19.37,
+   "chg_3m": -13.61,
+   "change_unit": "%",
+   "high_1y": 202.0,
+   "high_1y_date": "2026-10-06",
+   "low_1y": 127.5,
+   "low_1y_date": "2026-03-30",
+   "avg_1y": 164.77,
+   "from_1y_high_pct": -19.61
+  },
+  {
+   "ticker": "XLC",
+   "name": "Communication Services",
+   "date": "2026-11-05",
+   "close": 104.34,
+   "chg_1d": -0.59,
+   "chg_1w": 3.09,
+   "chg_1m": -6.22,
+   "chg_3m": -6.21,
+   "change_unit": "%",
+   "high_1y": 120.08,
+   "high_1y_date": "2026-01-30",
+   "low_1y": 99.9,
+   "low_1y_date": "2026-10-30",
+   "avg_1y": 113.22,
+   "from_1y_high_pct": -13.11
+  },
+  {
+   "ticker": "XLY",
+   "name": "Consumer Discretionary",
+   "date": "2026-11-05",
+   "close": 117.64,
+   "chg_1d": -3.83,
+   "chg_1w": 1.24,
+   "chg_1m": 5.64,
+   "chg_3m": -1.85,
+   "change_unit": "%",
+   "high_1y": 124.52,
+   "high_1y_date": "2026-01-12",
+   "low_1y": 105.66,
+   "low_1y_date": "2026-03-30",
+   "avg_1y": 116.31,
+   "from_1y_high_pct": -5.53
+  },
+  {
+   "ticker": "XLP",
+   "name": "Consumer Staples",
+   "date": "2026-11-05",
+   "close": 91.25,
+   "chg_1d": -0.75,
+   "chg_1w": 3.48,
+   "chg_1m": 11.69,
+   "chg_3m": 7.2,
+   "change_unit": "%",
+   "high_1y": 91.94,
+   "high_1y_date": "2026-11-04",
+   "low_1y": 75.6,
+   "low_1y_date": "2025-11-06",
+   "avg_1y": 83.36,
+   "from_1y_high_pct": -0.75
+  },
+  {
+   "ticker": "XLE",
+   "name": "Energy",
+   "date": "2026-11-05",
+   "close": 61.63,
+   "chg_1d": -2.98,
+   "chg_1w": -10.3,
+   "chg_1m": -2.73,
+   "chg_3m": 7.18,
+   "change_unit": "%",
+   "high_1y": 70.02,
+   "high_1y_date": "2026-10-30",
+   "low_1y": 43.71,
+   "low_1y_date": "2025-11-05",
+   "avg_1y": 56.26,
+   "from_1y_high_pct": -11.98
+  },
+  {
+   "ticker": "XLF",
+   "name": "Financials",
+   "date": "2026-11-05",
+   "close": 57.5,
+   "chg_1d": -2.87,
+   "chg_1w": 0.98,
+   "chg_1m": 6.98,
+   "chg_3m": -0.17,
+   "change_unit": "%",
+   "high_1y": 59.2,
+   "high_1y_date": "2026-11-04",
+   "low_1y": 47.81,
+   "low_1y_date": "2026-03-27",
+   "avg_1y": 53.82,
+   "from_1y_high_pct": -2.87
+  },
+  {
+   "ticker": "XLV",
+   "name": "Health Care",
+   "date": "2026-11-05",
+   "close": 184.91,
+   "chg_1d": -2.5,
+   "chg_1w": 0.47,
+   "chg_1m": 9.54,
+   "chg_3m": 11.61,
+   "change_unit": "%",
+   "high_1y": 189.66,
+   "high_1y_date": "2026-11-04",
+   "low_1y": 142.84,
+   "low_1y_date": "2026-04-29",
+   "avg_1y": 158.23,
+   "from_1y_high_pct": -2.5
+  },
+  {
+   "ticker": "XLI",
+   "name": "Industrials",
+   "date": "2026-11-05",
+   "close": 162.47,
+   "chg_1d": -4.12,
+   "chg_1w": -4.5,
+   "chg_1m": -3.2,
+   "chg_3m": -12.26,
+   "change_unit": "%",
+   "high_1y": 186.51,
+   "high_1y_date": "2026-08-14",
+   "low_1y": 147.83,
+   "low_1y_date": "2025-11-20",
+   "avg_1y": 169.8,
+   "from_1y_high_pct": -12.89
+  },
+  {
+   "ticker": "XLB",
+   "name": "Materials",
+   "date": "2026-11-05",
+   "close": 52.33,
+   "chg_1d": -2.91,
+   "chg_1w": -0.38,
+   "chg_1m": 6.84,
+   "chg_3m": -1.0,
+   "change_unit": "%",
+   "high_1y": 53.9,
+   "high_1y_date": "2026-11-04",
+   "low_1y": 42.23,
+   "low_1y_date": "2025-11-20",
+   "avg_1y": 49.93,
+   "from_1y_high_pct": -2.91
+  },
+  {
+   "ticker": "XLRE",
+   "name": "Real Estate",
+   "date": "2026-11-05",
+   "close": 44.3,
+   "chg_1d": -1.82,
+   "chg_1w": 2.88,
+   "chg_1m": 9.19,
+   "chg_3m": -1.51,
+   "change_unit": "%",
+   "high_1y": 46.01,
+   "high_1y_date": "2026-07-28",
+   "low_1y": 40.01,
+   "low_1y_date": "2026-03-27",
+   "avg_1y": 42.87,
+   "from_1y_high_pct": -3.72
+  },
+  {
+   "ticker": "XLU",
+   "name": "Utilities",
+   "date": "2026-11-05",
+   "close": 43.3,
+   "chg_1d": -0.71,
+   "chg_1w": 0.37,
+   "chg_1m": 5.22,
+   "chg_3m": -0.71,
+   "change_unit": "%",
+   "high_1y": 47.73,
+   "high_1y_date": "2026-02-27",
+   "low_1y": 39.25,
+   "low_1y_date": "2026-09-28",
+   "avg_1y": 44.14,
+   "from_1y_high_pct": -9.28
+  }
+ ],
+ "macro": [
+  {
+   "ticker": "^IRX",
+   "name": "US 13W yield %",
+   "date": "2026-11-06",
+   "close": 4.0,
+   "chg_1d": 0.013,
+   "chg_1w": 0.027,
+   "chg_1m": -0.043,
+   "chg_3m": 0.282,
+   "change_unit": "points",
+   "high_1y": 4.09,
+   "high_1y_date": "2026-10-15",
+   "low_1y": 3.51,
+   "low_1y_date": "2026-01-08",
+   "avg_1y": 3.7
+  },
+  {
+   "ticker": "^FVX",
+   "name": "US 5Y yield %",
+   "date": "2026-11-06",
+   "close": 4.648,
+   "chg_1d": 0.04,
+   "chg_1w": -0.073,
+   "chg_1m": -0.343,
+   "chg_3m": 0.243,
+   "change_unit": "points",
+   "high_1y": 5.09,
+   "high_1y_date": "2026-09-30",
+   "low_1y": 3.51,
+   "low_1y_date": "2026-02-27",
+   "avg_1y": 4.15
+  },
+  {
+   "ticker": "^TNX",
+   "name": "US 10Y yield %",
+   "date": "2026-11-06",
+   "close": 4.859,
+   "chg_1d": 0.022,
+   "chg_1w": -0.07,
+   "chg_1m": -0.372,
+   "chg_3m": 0.16,
+   "change_unit": "points",
+   "high_1y": 5.31,
+   "high_1y_date": "2026-10-05",
+   "low_1y": 3.96,
+   "low_1y_date": "2026-02-27",
+   "avg_1y": 4.48
+  },
+  {
+   "ticker": "^TYX",
+   "name": "US 30Y yield %",
+   "date": "2026-11-06",
+   "close": 5.26,
+   "chg_1d": 0.009,
+   "chg_1w": -0.049,
+   "chg_1m": -0.346,
+   "chg_3m": 0.017,
+   "change_unit": "points",
+   "high_1y": 5.66,
+   "high_1y_date": "2026-10-05",
+   "low_1y": 4.63,
+   "low_1y_date": "2026-02-27",
+   "avg_1y": 5.02
+  },
+  {
+   "ticker": "^VIX",
+   "name": "VIX",
+   "date": "2026-11-06",
+   "close": 25.64,
+   "chg_1d": -2.54,
+   "chg_1w": 6.22,
+   "chg_1m": 10.23,
+   "chg_3m": 10.36,
+   "change_unit": "points",
+   "high_1y": 31.05,
+   "high_1y_date": "2026-03-27",
+   "low_1y": 13.47,
+   "low_1y_date": "2025-12-24",
+   "avg_1y": 18.1
+  },
+  {
+   "ticker": "^MOVE",
+   "name": "MOVE (bond vol)",
+   "date": "2026-11-06",
+   "close": 92.772,
+   "chg_1d": -5.148,
+   "chg_1w": -7.428,
+   "chg_1m": -9.788,
+   "chg_3m": 20.742,
+   "change_unit": "points",
+   "high_1y": 115.02,
+   "high_1y_date": "2026-03-26",
+   "low_1y": 55.77,
+   "low_1y_date": "2026-01-26",
+   "avg_1y": 76.4
+  },
+  {
+   "ticker": "DX-Y.NYB",
+   "name": "Dollar index",
+   "date": "2026-11-06",
+   "close": 102.279,
+   "chg_1d": 0.72,
+   "chg_1w": 0.39,
+   "chg_1m": 0.14,
+   "chg_3m": 2.47,
+   "change_unit": "%",
+   "high_1y": 102.58,
+   "high_1y_date": "2026-10-12",
+   "low_1y": 96.22,
+   "low_1y_date": "2026-01-27",
+   "avg_1y": 99.55,
+   "from_1y_high_pct": -0.29
+  },
+  {
+   "ticker": "BZ=F",
+   "name": "Brent",
+   "date": "2026-11-06",
+   "close": 97.76,
+   "chg_1d": -0.54,
+   "chg_1w": -16.9,
+   "chg_1m": -6.25,
+   "chg_3m": 11.45,
+   "change_unit": "%",
+   "high_1y": 118.35,
+   "high_1y_date": "2026-03-31",
+   "low_1y": 58.92,
+   "low_1y_date": "2025-12-16",
+   "avg_1y": 87.01,
+   "from_1y_high_pct": -17.4
+  },
+  {
+   "ticker": "CL=F",
+   "name": "WTI",
+   "date": "2026-11-06",
+   "close": 90.34,
+   "chg_1d": -0.2,
+   "chg_1w": -13.23,
+   "chg_1m": -1.26,
+   "chg_3m": 10.0,
+   "change_unit": "%",
+   "high_1y": 112.95,
+   "high_1y_date": "2026-04-07",
+   "low_1y": 55.27,
+   "low_1y_date": "2025-12-16",
+   "avg_1y": 81.27,
+   "from_1y_high_pct": -20.02
+  },
+  {
+   "ticker": "GC=F",
+   "name": "Gold",
+   "date": "2026-11-06",
+   "close": 4079.5,
+   "chg_1d": -0.83,
+   "chg_1w": 4.63,
+   "chg_1m": -1.86,
+   "chg_3m": -7.7,
+   "change_unit": "%",
+   "high_1y": 5318.4,
+   "high_1y_date": "2026-01-29",
+   "low_1y": 3898.9,
+   "low_1y_date": "2026-10-30",
+   "avg_1y": 4467.37,
+   "from_1y_high_pct": -23.29
+  },
+  {
+   "ticker": "BTC-USD",
+   "name": "Bitcoin",
+   "date": "2026-11-07",
+   "close": 75793.977,
+   "chg_1d": -0.2,
+   "chg_1w": -3.14,
+   "chg_1m": -7.0,
+   "chg_3m": -4.87,
+   "change_unit": "%",
+   "high_1y": 86602.91,
+   "high_1y_date": "2026-09-21",
+   "low_1y": 58558.86,
+   "low_1y_date": "2026-06-30",
+   "avg_1y": 72614.64,
+   "from_1y_high_pct": -12.48
+  },
+  {
+   "ticker": "THB=X",
+   "name": "USD/THB",
+   "date": "2026-11-06",
+   "close": 33.432,
+   "chg_1d": -0.5,
+   "chg_1w": -0.84,
+   "chg_1m": -0.45,
+   "chg_3m": 1.37,
+   "change_unit": "%",
+   "high_1y": 33.83,
+   "high_1y_date": "2026-07-24",
+   "low_1y": 30.91,
+   "low_1y_date": "2026-01-28",
+   "avg_1y": 32.51,
+   "from_1y_high_pct": -1.18
+  }
+ ],
+ "megacaps": [
+  {
+   "ticker": "AAPL",
+   "name": "AAPL",
+   "date": "2026-11-05",
+   "close": 344.17,
+   "chg_1d": -1.53,
+   "chg_1w": -1.36,
+   "chg_1m": 2.23,
+   "chg_3m": 9.84,
+   "change_unit": "%",
+   "high_1y": 349.51,
+   "high_1y_date": "2026-11-04",
+   "low_1y": 246.63,
+   "low_1y_date": "2026-03-30",
+   "avg_1y": 292.61,
+   "from_1y_high_pct": -1.53
+  },
+  {
+   "ticker": "MSFT",
+   "name": "MSFT",
+   "date": "2026-11-05",
+   "close": 535.93,
+   "chg_1d": -3.58,
+   "chg_1w": 1.09,
+   "chg_1m": 1.16,
+   "chg_3m": 7.19,
+   "change_unit": "%",
+   "high_1y": 555.8,
+   "high_1y_date": "2026-11-04",
+   "low_1y": 352.83,
+   "low_1y_date": "2026-06-25",
+   "avg_1y": 448.53,
+   "from_1y_high_pct": -3.58
+  },
+  {
+   "ticker": "NVDA",
+   "name": "NVDA",
+   "date": "2026-11-05",
+   "close": 181.6,
+   "chg_1d": -9.26,
+   "chg_1w": -15.01,
+   "chg_1m": -23.53,
+   "chg_3m": -18.91,
+   "change_unit": "%",
+   "high_1y": 239.24,
+   "high_1y_date": "2026-10-06",
+   "low_1y": 165.17,
+   "low_1y_date": "2026-03-30",
+   "avg_1y": 200.48,
+   "from_1y_high_pct": -24.09
+  },
+  {
+   "ticker": "AMZN",
+   "name": "AMZN",
+   "date": "2026-11-05",
+   "close": 260.21,
+   "chg_1d": -2.19,
+   "chg_1w": 6.74,
+   "chg_1m": 0.11,
+   "chg_3m": -5.2,
+   "change_unit": "%",
+   "high_1y": 284.02,
+   "high_1y_date": "2026-08-03",
+   "low_1y": 198.79,
+   "low_1y_date": "2026-02-13",
+   "avg_1y": 241.64,
+   "from_1y_high_pct": -8.38
+  },
+  {
+   "ticker": "META",
+   "name": "META",
+   "date": "2026-11-05",
+   "close": 605.08,
+   "chg_1d": -3.96,
+   "chg_1w": -3.11,
+   "chg_1m": -16.11,
+   "chg_3m": 2.19,
+   "change_unit": "%",
+   "high_1y": 777.59,
+   "high_1y_date": "2026-09-24",
+   "low_1y": 525.72,
+   "low_1y_date": "2026-03-27",
+   "avg_1y": 633.37,
+   "from_1y_high_pct": -22.19
+  },
+  {
+   "ticker": "TSLA",
+   "name": "TSLA",
+   "date": "2026-11-05",
+   "close": 343.69,
+   "chg_1d": -10.77,
+   "chg_1w": -14.78,
+   "chg_1m": -9.03,
+   "chg_3m": 4.6,
+   "change_unit": "%",
+   "high_1y": 489.88,
+   "high_1y_date": "2025-12-16",
+   "low_1y": 298.32,
+   "low_1y_date": "2026-07-29",
+   "avg_1y": 396.3,
+   "from_1y_high_pct": -29.84
+  },
+  {
+   "ticker": "AVGO",
+   "name": "AVGO",
+   "date": "2026-11-05",
+   "close": 291.53,
+   "chg_1d": -10.43,
+   "chg_1w": -15.5,
+   "chg_1m": -22.57,
+   "chg_3m": -31.85,
+   "change_unit": "%",
+   "high_1y": 481.57,
+   "high_1y_date": "2026-06-02",
+   "low_1y": 291.53,
+   "low_1y_date": "2026-11-05",
+   "avg_1y": 365.2,
+   "from_1y_high_pct": -39.46
+  }
+ ],
+ "equal_vs_cap_weight": {
+  "rsp_spy_ratio": 0.2959,
+  "ratio_chg_1d_pct": 1.59,
+  "ratio_chg_1m_pct": 9.19,
+  "ratio_chg_3m_pct": 3.95
+ },
+ "sector_spread_1d_pct": 7.41,
+ "curve_10y_minus_3m": 0.859,
+ "breadth": {
+  "members_counted": 0,
+  "advancers": 0,
+  "decliners": 0,
+  "pct_above_ma50": null,
+  "pct_above_ma200": null,
+  "pct_above_ma50_1y_low": 19.4,
+  "pct_above_ma50_1y_low_date": "2026-03-30",
+  "pct_above_ma50_1w_ago": 60.0
+ },
+ "economy": [
+  {
+   "id": "CPIAUCSL",
+   "name": "CPI inflation YoY %",
+   "readings": [
+    {
+     "date": "2026-06-01",
+     "value": 3.46
+    },
+    {
+     "date": "2026-07-01",
+     "value": 3.3
+    },
+    {
+     "date": "2026-08-01",
+     "value": 3.35
+    },
+    {
+     "date": "2026-09-01",
+     "value": 3.72
+    }
+   ]
+  },
+  {
+   "id": "CPILFESL",
+   "name": "Core CPI inflation YoY % (ex food & energy)",
+   "readings": [
+    {
+     "date": "2026-06-01",
+     "value": 2.57
+    },
+    {
+     "date": "2026-07-01",
+     "value": 2.47
+    },
+    {
+     "date": "2026-08-01",
+     "value": 2.45
+    },
+    {
+     "date": "2026-09-01",
+     "value": 2.57
+    }
+   ]
+  },
+  {
+   "id": "PCEPILFE",
+   "name": "Core PCE inflation YoY % (Fed's gauge)",
+   "readings": [
+    {
+     "date": "2026-06-01",
+     "value": 3.04
+    },
+    {
+     "date": "2026-07-01",
+     "value": 3.0
+    },
+    {
+     "date": "2026-08-01",
+     "value": 3.03
+    },
+    {
+     "date": "2026-09-01",
+     "value": 3.12
+    }
+   ]
+  },
+  {
+   "id": "UNRATE",
+   "name": "Unemployment rate %",
+   "readings": [
+    {
+     "date": "2026-07-01",
+     "value": 4.1
+    },
+    {
+     "date": "2026-08-01",
+     "value": 4.1
+    },
+    {
+     "date": "2026-09-01",
+     "value": 4.2
+    },
+    {
+     "date": "2026-10-01",
+     "value": 4.1
+    }
+   ]
+  },
+  {
+   "id": "PAYEMS",
+   "name": "Nonfarm payrolls change (thousands)",
+   "readings": [
+    {
+     "date": "2026-07-01",
+     "value": -10.0
+    },
+    {
+     "date": "2026-08-01",
+     "value": 186.0
+    },
+    {
+     "date": "2026-09-01",
+     "value": 60.0
+    },
+    {
+     "date": "2026-10-01",
+     "value": 165.0
+    }
+   ]
+  },
+  {
+   "id": "ICSA",
+   "name": "Initial jobless claims (weekly)",
+   "readings": [
+    {
+     "date": "2026-10-10",
+     "value": 200000.0
+    },
+    {
+     "date": "2026-10-17",
+     "value": 195000.0
+    },
+    {
+     "date": "2026-10-24",
+     "value": 195000.0
+    },
+    {
+     "date": "2026-10-31",
+     "value": 189000.0
+    }
+   ]
+  },
+  {
+   "id": "FEDFUNDS",
+   "name": "Fed funds effective rate %",
+   "readings": [
+    {
+     "date": "2026-07-01",
+     "value": 3.63
+    },
+    {
+     "date": "2026-08-01",
+     "value": 3.63
+    },
+    {
+     "date": "2026-09-01",
+     "value": 3.75
+    },
+    {
+     "date": "2026-10-01",
+     "value": 3.88
+    }
+   ]
+  },
+  {
+   "id": "T10Y2Y",
+   "name": "10Y minus 2Y yield spread (curve)",
+   "readings": [
+    {
+     "date": "2026-11-03",
+     "value": 0.34
+    },
+    {
+     "date": "2026-11-04",
+     "value": 0.32
+    },
+    {
+     "date": "2026-11-05",
+     "value": 0.38
+    },
+    {
+     "date": "2026-11-06",
+     "value": 0.35
+    }
+   ]
+  },
+  {
+   "id": "T10YIE",
+   "name": "10Y breakeven inflation % (market's inflation expectation)",
+   "readings": [
+    {
+     "date": "2026-11-03",
+     "value": 2.3
+    },
+    {
+     "date": "2026-11-04",
+     "value": 2.26
+    },
+    {
+     "date": "2026-11-05",
+     "value": 2.24
+    },
+    {
+     "date": "2026-11-06",
+     "value": 2.23
+    }
+   ]
+  },
+  {
+   "id": "BAMLH0A0HYM2",
+   "name": "US high-yield credit spread % (junk bond stress)",
+   "readings": [
+    {
+     "date": "2026-11-02",
+     "value": 3.43
+    },
+    {
+     "date": "2026-11-03",
+     "value": 3.4
+    },
+    {
+     "date": "2026-11-04",
+     "value": 3.32
+    },
+    {
+     "date": "2026-11-05",
+     "value": 3.48
+    }
+   ]
+  },
+  {
+   "id": "NFCI",
+   "name": "Chicago Fed financial conditions (negative = loose)",
+   "readings": [
+    {
+     "date": "2026-10-09",
+     "value": -0.49
+    },
+    {
+     "date": "2026-10-16",
+     "value": -0.48
+    },
+    {
+     "date": "2026-10-23",
+     "value": -0.47
+    },
+    {
+     "date": "2026-10-30",
+     "value": -0.46
+    }
+   ]
+  }
+ ],
+ "flags": [
+  "RSP/SPY เปลี่ยน 9.19% ใน 1 เดือน → หุ้นทั่วไปชนะหุ้นใหญ่",
+  "SOX -25.61% vs Apple 2.23% ใน 1 เดือน → เงินใช้ Apple หลบความผันผวนของ AI",
+  "ช่องว่าง sector ดีสุด-แย่สุด 7.41 จุด% ในวันเดียว → rotation แรง ไม่ใช่ทั้งตลาดเคลื่อนไปด้วยกัน"
+ ]
+}
